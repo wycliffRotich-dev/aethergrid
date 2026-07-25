@@ -1,5 +1,4 @@
 import { ActivityFeed } from "../components/dashboard/ActivityFeed";
-import { ClusterChart } from "../components/dashboard/ClusterChart";
 import { ClusterHealth } from "../components/dashboard/ClusterHealth";
 import { ResourceUsage } from "../components/dashboard/ResourceUsage";
 import { StatCard } from "../components/dashboard/StatCard";
@@ -7,6 +6,7 @@ import { RecentJobs } from "../components/jobs/RecentJobs";
 import { NodeTable } from "../components/nodes/NodeTable";
 import { RegisterNodeForm } from "../components/nodes/RegisterNodeForm";
 import { SubmitJobForm } from "../components/jobs/SubmitJobForm";
+import { useClusterStats } from "../hooks/useClusterStats";
 import { useJobs } from "../hooks/useJobs";
 import { useNodes } from "../hooks/useNodes";
 
@@ -23,12 +23,22 @@ export default function DashboardPage() {
     refresh: refreshJobs,
   } = useJobs();
 
+  const {
+    health,
+    capacity,
+    utilization,
+    loading: clusterStatsLoading,
+    error: clusterStatsError,
+    refresh: refreshClusterStats,
+  } = useClusterStats();
+
   function refreshAll() {
     refresh();
     refreshJobs();
+    refreshClusterStats();
   }
 
-  if (loading) {
+  if (loading || clusterStatsLoading) {
     return (
       <main className="flex-1 bg-slate-950 p-8 text-white">
         Loading cluster...
@@ -40,6 +50,22 @@ export default function DashboardPage() {
     return (
       <main className="flex-1 bg-slate-950 p-8 text-red-400">
         {error}
+      </main>
+    );
+  }
+
+  if (clusterStatsError) {
+    return (
+      <main className="flex-1 bg-slate-950 p-8 text-red-400">
+        {clusterStatsError}
+      </main>
+    );
+  }
+
+  if (health === null || capacity === null || utilization === null) {
+    return (
+      <main className="flex-1 bg-slate-950 p-8 text-white">
+        Loading cluster...
       </main>
     );
   }
@@ -66,7 +92,10 @@ export default function DashboardPage() {
       </h1>
 
       <ClusterHealth
-        nodes={nodes.length}
+        health={health}
+        capacity={capacity}
+        utilization={utilization}
+        jobCount={jobs.length}
       />
 
       <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
@@ -102,10 +131,6 @@ export default function DashboardPage() {
       </div>
 
       <ResourceUsage
-        nodes={nodes}
-      />
-
-      <ClusterChart
         nodes={nodes}
       />
 

@@ -36,3 +36,21 @@ export interface JobSummaryResponse {
 export interface ListJobsResponse {
   jobs: JobSummaryResponse[];
 }
+
+export interface ClusterHealthResponse {
+  total_nodes: number;
+  alive_nodes: number;
+  offline_nodes: number;
+}
+
+export interface ClusterCapacityResponse {
+  cpu_cores: number;
+  memory_mib: number;
+  vram_mib: number;
+}
+
+export interface ClusterUtilizationResponse {
+  cpu_cores: number;
+  memory_mib: number;
+  vram_mib: number;
+}
