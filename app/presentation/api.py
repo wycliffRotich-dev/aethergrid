@@ -8,6 +8,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.presentation.dependencies import get_cluster_tick_service
+from app.presentation.routers.cluster import (
+    router as cluster_router,
+)
 from app.presentation.routers.jobs import (
     router as jobs_router,
 )
@@ -90,6 +93,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(
+    cluster_router,
+)
 app.include_router(
     jobs_router,
 )

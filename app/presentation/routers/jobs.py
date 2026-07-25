@@ -15,6 +15,9 @@ from app.application.services.get_job_service import (
 from app.application.services.list_jobs_service import (
     ListJobsService,
 )
+from app.application.services.list_queued_jobs_service import (
+    ListQueuedJobsService,
+)
 from app.domain.exceptions.job_not_found_error import (
     JobNotFoundError,
 )
@@ -27,6 +30,7 @@ from app.presentation.dependencies import (
     get_get_job_history_service,
     get_get_job_service,
     get_list_jobs_service,
+    get_list_queued_jobs_service,
 )
 from app.presentation.schemas.create_job_request import (
     CreateJobRequest,
@@ -91,6 +95,40 @@ def list_jobs(
 ) -> ListJobsResponse:
     """
     Return the most recently submitted jobs.
+    """
+    jobs = service.execute()
+
+    return ListJobsResponse(
+        jobs=[
+            JobSummaryResponse(
+                id=str(job.id),
+                status=job.status.name,
+                cpu_cores=job.resources.cpu_cores,
+                memory_mib=job.resources.memory_mib,
+                vram_mib=job.resources.vram_mib,
+                exit_code=job.exit_code,
+                submitted_at=job.submitted_at,
+                started_at=job.started_at,
+                completed_at=job.completed_at,
+            )
+            for job in jobs
+        ]
+    )
+
+
+@router.get(
+    "/queued",
+    response_model=ListJobsResponse,
+)
+def list_queued_jobs(
+    service: Annotated[
+        ListQueuedJobsService,
+        Depends(get_list_queued_jobs_service),
+    ],
+) -> ListJobsResponse:
+    """
+    Return every job currently sitting in the queue,
+    waiting to be scheduled onto a node.
     """
     jobs = service.execute()
 
