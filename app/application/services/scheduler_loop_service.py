@@ -4,19 +4,19 @@ from app.application.services.assign_worker_service import (
     AssignWorkerService,
 )
 from app.domain.enums.job_status import JobStatus
-from app.domain.repositories.job_repository import JobRepository
-from app.domain.repositories.node_repository import NodeRepository
+from app.domain.repositories.job_repository import (
+    JobRepository,
+)
+from app.domain.repositories.node_repository import (
+    NodeRepository,
+)
 from app.domain.services.scheduler import Scheduler
 
 
 class SchedulerLoopService:
     """
-    Application service responsible for
-    scheduling queued jobs onto healthy nodes.
-
-    After node allocation, an available worker
-    may be assigned automatically when the
-    worker scheduling capability is provided.
+    Application service responsible for scheduling queued jobs
+    onto healthy nodes and assigning workers.
     """
 
     def __init__(
@@ -26,12 +26,10 @@ class SchedulerLoopService:
         scheduler: Scheduler,
         assign_worker_service: AssignWorkerService | None = None,
     ) -> None:
-
         self._job_repository = job_repository
         self._node_repository = node_repository
         self._scheduler = scheduler
         self._assign_worker_service = assign_worker_service
-
 
     def execute(
         self,
@@ -39,7 +37,6 @@ class SchedulerLoopService:
         """
         Schedule queued jobs in priority order.
         """
-
         nodes = self._node_repository.list_available()
 
         queued_jobs = sorted(
@@ -53,7 +50,6 @@ class SchedulerLoopService:
         )
 
         for job in queued_jobs:
-
             node = self._scheduler.select_node(
                 job,
                 nodes,
