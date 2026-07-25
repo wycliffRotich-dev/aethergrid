@@ -5,6 +5,27 @@ import os
 from app.application.services.acquire_lease_service import (
     AcquireLeaseService,
 )
+from app.application.services.list_workers_service import (
+    ListWorkersService,
+)
+from app.application.services.worker_heartbeat_service import (
+    WorkerHeartbeatService,
+)
+from app.application.services.list_queued_jobs_service import (
+    ListQueuedJobsService,
+)
+from app.application.services.list_offline_nodes_service import (
+    ListOfflineNodesService,
+)
+from app.application.services.cluster_utilization_service import (
+    ClusterUtilizationService,
+)
+from app.application.services.cluster_capacity_service import (
+    ClusterCapacityService,
+)
+from app.application.services.cluster_health_service import (
+    ClusterHealthService,
+)
 from app.application.services.assign_worker_service import (
     AssignWorkerService,
 )
@@ -245,7 +266,14 @@ def get_get_job_service() -> GetJobService:
         job_repository=_job_repository,
     )
 
+def get_worker_heartbeat_service() -> WorkerHeartbeatService:
+    """
+    Return WorkerHeartbeatService.
+    """
 
+    return WorkerHeartbeatService(
+        worker_repository=_worker_repository,
+    )
 def get_get_job_history_service() -> GetJobHistoryService:
     """
     Return GetJobHistoryService.
@@ -255,6 +283,14 @@ def get_get_job_history_service() -> GetJobHistoryService:
         event_repository=_event_repository,
     )
 
+def get_list_queued_jobs_service() -> ListQueuedJobsService:
+    """
+    Return ListQueuedJobsService.
+    """
+
+    return ListQueuedJobsService(
+        job_repository=_job_repository,
+    )
 
 def get_list_jobs_service() -> ListJobsService:
     """
@@ -264,7 +300,14 @@ def get_list_jobs_service() -> ListJobsService:
     return ListJobsService(
         job_repository=_job_repository,
     )
+def get_list_workers_service() -> ListWorkersService:
+    """
+    Return ListWorkersService.
+    """
 
+    return ListWorkersService(
+        worker_repository=_worker_repository,
+    )
 
 def get_record_job_events_service() -> RecordJobEventsService:
     """
@@ -272,7 +315,14 @@ def get_record_job_events_service() -> RecordJobEventsService:
     """
 
     return _record_job_events_service
+def get_list_offline_nodes_service() -> ListOfflineNodesService:
+    """
+    Return ListOfflineNodesService.
+    """
 
+    return ListOfflineNodesService(
+        node_repository=_node_repository,
+    )
 
 def get_create_node_service() -> CreateNodeService:
     """
@@ -292,7 +342,14 @@ def get_get_node_service() -> GetNodeService:
     return GetNodeService(
         node_repository=_node_repository,
     )
+def get_cluster_utilization_service() -> ClusterUtilizationService:
+    """
+    Return ClusterUtilizationService.
+    """
 
+    return ClusterUtilizationService(
+        node_repository=_node_repository,
+    )
 
 def get_heartbeat_node_service() -> HeartbeatNodeService:
     """
@@ -312,8 +369,22 @@ def get_list_nodes_service() -> ListNodesService:
     return ListNodesService(
         node_repository=_node_repository,
     )
+def get_cluster_health_service() -> ClusterHealthService:
+    """
+    Return ClusterHealthService.
+    """
 
+    return ClusterHealthService(
+        node_repository=_node_repository,
+    )
+def get_cluster_capacity_service() -> ClusterCapacityService:
+    """
+    Return ClusterCapacityService.
+    """
 
+    return ClusterCapacityService(
+        node_repository=_node_repository,
+    )
 def get_create_worker_service() -> CreateWorkerService:
     """
     Return CreateWorkerService.

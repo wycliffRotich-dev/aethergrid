@@ -14,6 +14,9 @@ from app.application.services.heartbeat_node_service import (
 from app.application.services.list_nodes_service import (
     ListNodesService,
 )
+from app.application.services.list_offline_nodes_service import (
+    ListOfflineNodesService,
+)
 from app.domain.exceptions.node_not_found_error import (
     NodeNotFoundError,
 )
@@ -26,6 +29,7 @@ from app.presentation.dependencies import (
     get_get_node_service,
     get_heartbeat_node_service,
     get_list_nodes_service,
+    get_list_offline_nodes_service,
 )
 from app.presentation.schemas.create_node_request import (
     CreateNodeRequest,
@@ -87,6 +91,38 @@ def list_nodes(
 ) -> ListNodesResponse:
     """
     Return all registered compute nodes.
+    """
+    nodes = service.execute()
+
+    return ListNodesResponse(
+        nodes=[
+            NodeResponse(
+                id=str(node.id),
+                cpu_cores=node.capacity.cpu_cores,
+                memory_mib=node.capacity.memory_mib,
+                vram_mib=node.capacity.vram_mib,
+                available_cpu_cores=node.available.cpu_cores,
+                available_memory_mib=node.available.memory_mib,
+                available_vram_mib=node.available.vram_mib,
+            )
+            for node in nodes
+        ]
+    )
+
+
+@router.get(
+    "/offline",
+    response_model=ListNodesResponse,
+)
+def list_offline_nodes(
+    service: Annotated[
+        ListOfflineNodesService,
+        Depends(get_list_offline_nodes_service),
+    ],
+) -> ListNodesResponse:
+    """
+    Return all compute nodes that have missed their
+    heartbeat and are considered offline.
     """
     nodes = service.execute()
 
