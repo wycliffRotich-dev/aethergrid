@@ -3,13 +3,7 @@ from __future__ import annotations
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
-from app.application.services.scheduler_service import (
-    SchedulerService,
-)
 from app.domain.entities.job import Job
-from app.domain.exceptions.no_available_node_error import (
-    NoAvailableNodeError,
-)
 from app.domain.repositories.job_repository import (
     JobRepository,
 )
@@ -21,17 +15,29 @@ from app.domain.value_objects.resource_requirements import (
 
 class CreateJobService:
     """
-    Creates a job and immediately attempts scheduling.
+    Creates and persists a new job in the QUEUED state.
+
+    Scheduling is intentionally not attempted here. The
+    background cluster tick (see SchedulerLoopService) is
+    the single source of truth for moving queued jobs onto
+    nodes and assigning idle workers to them. Previously,
+    this service also called SchedulerService synchronously
+    at creation time, which allocated a node and marked the
+    job SCHEDULED but never assigned a worker to it, since
+    only SchedulerLoopService performs worker assignment.
+    A job scheduled this way would reach SCHEDULED and then
+    never be revisited, leaving it permanently unassigned.
+    Removing the synchronous scheduling call here ensures
+    every job is scheduled and assigned through the single
+    code path that correctly does both.
     """
 
     def __init__(
         self,
         job_repository: JobRepository,
-        scheduler_service: SchedulerService,
         record_job_events_service: RecordJobEventsService,
     ) -> None:
         self._job_repository = job_repository
-        self._scheduler_service = scheduler_service
         self._record_job_events_service = record_job_events_service
 
     def execute(
@@ -55,22 +61,4 @@ class CreateJobService:
             event_type="JobCreated",
         )
 
-        try:
-            self._scheduler_service.execute(
-                job,
-            )
-        except NoAvailableNodeError:
-            # No node currently has enough capacity.
-            # Leave the job queued.
-            pass
-
-        stored_job = self._job_repository.get_by_id(
-            job.id,
-        )
-
-        if stored_job is None:
-            raise RuntimeError(
-                "Job disappeared after being saved."
-            )
-
-        return stored_job
+        return job

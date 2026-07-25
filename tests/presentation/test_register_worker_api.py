@@ -31,4 +31,4 @@ def test_register_worker_returns_201() -> None:
     body = response.json()
 
     assert isinstance(body["id"], str)
-    assert body["status"] == "STARTING"
+    assert body["status"] == "IDLE"

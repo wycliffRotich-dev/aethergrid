@@ -8,6 +8,9 @@ from app.application.services.create_node_service import (
 from app.application.services.get_node_service import (
     GetNodeService,
 )
+from app.application.services.heartbeat_node_service import (
+    HeartbeatNodeService,
+)
 from app.application.services.list_nodes_service import (
     ListNodesService,
 )
@@ -21,6 +24,7 @@ from app.domain.value_objects.resource_requirements import (
 from app.presentation.dependencies import (
     get_create_node_service,
     get_get_node_service,
+    get_heartbeat_node_service,
     get_list_nodes_service,
 )
 from app.presentation.schemas.create_node_request import (
@@ -125,6 +129,42 @@ def get_node(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Node not found.",
         ) from err
+
+    return GetNodeResponse(
+        id=str(node.id),
+        cpu_cores=node.capacity.cpu_cores,
+        memory_mib=node.capacity.memory_mib,
+        vram_mib=node.capacity.vram_mib,
+        available_cpu_cores=node.available.cpu_cores,
+        available_memory_mib=node.available.memory_mib,
+        available_vram_mib=node.available.vram_mib,
+    )
+
+
+@router.post(
+    "/{node_id}/heartbeat",
+    response_model=GetNodeResponse,
+)
+def heartbeat_node(
+    node_id: str,
+    service: Annotated[
+        HeartbeatNodeService,
+        Depends(get_heartbeat_node_service),
+    ],
+) -> GetNodeResponse:
+    """
+    Record a heartbeat for a compute node, keeping
+    it alive so it remains eligible for scheduling.
+    """
+    node = service.execute(
+        NodeId.from_string(node_id),
+    )
+
+    if node is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Node not found.",
+        )
 
     return GetNodeResponse(
         id=str(node.id),

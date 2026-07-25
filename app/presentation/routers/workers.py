@@ -8,6 +8,9 @@ from app.application.services.create_worker_service import (
 from app.application.services.get_node_service import (
     GetNodeService,
 )
+from app.application.services.register_worker_service import (
+    RegisterWorkerService,
+)
 from app.domain.exceptions.node_not_found_error import (
     NodeNotFoundError,
 )
@@ -15,6 +18,7 @@ from app.domain.value_objects.node_id import NodeId
 from app.presentation.dependencies import (
     get_create_worker_service,
     get_get_node_service,
+    get_register_worker_service,
 )
 from app.presentation.schemas.create_worker_request import (
     CreateWorkerRequest,
@@ -48,6 +52,12 @@ def create_worker(
             get_create_worker_service,
         ),
     ],
+    register_worker_service: Annotated[
+        RegisterWorkerService,
+        Depends(
+            get_register_worker_service,
+        ),
+    ],
 ) -> CreateWorkerResponse:
     """
     Register a worker for an existing node.
@@ -67,6 +77,10 @@ def create_worker(
 
     worker = create_worker_service.execute(
         node,
+    )
+
+    worker = register_worker_service.execute(
+        worker,
     )
 
     return CreateWorkerResponse(
