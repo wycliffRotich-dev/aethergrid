@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
+from app.domain.exceptions.insufficient_node_capacity_error import (
+    InsufficientNodeCapacityError,
+)
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
@@ -98,7 +101,10 @@ class Node:
         if not self.can_host(
             requirements,
         ):
-            raise ValueError("Node does not have enough available resources.")
+            raise InsufficientNodeCapacityError(
+                f"Node {self.id} does not have enough available "
+                "resources to satisfy the requested allocation."
+            )
         self.available = ResourceRequirements(
             cpu_cores=(self.available.cpu_cores - requirements.cpu_cores),
             memory_mib=(self.available.memory_mib - requirements.memory_mib),
