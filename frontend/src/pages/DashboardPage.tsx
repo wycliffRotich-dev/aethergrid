@@ -15,6 +15,10 @@ import {
   HIGH_USAGE_THRESHOLD_PERCENT,
 } from "../lib/clusterMetrics";
 
+function formatGaugeValue(value: number): string {
+  return value.toFixed(1);
+}
+
 export default function DashboardPage() {
   const {
     nodes,
@@ -150,18 +154,21 @@ export default function DashboardPage() {
               label="CPU"
               value={utilizationPercentages.cpuPercent}
               warningThreshold={HIGH_USAGE_THRESHOLD_PERCENT}
+              formatValue={formatGaugeValue}
             />
 
             <Gauge
               label="Memory"
               value={utilizationPercentages.memoryPercent}
               warningThreshold={HIGH_USAGE_THRESHOLD_PERCENT}
+              formatValue={formatGaugeValue}
             />
 
             <Gauge
               label="VRAM"
               value={utilizationPercentages.vramPercent}
               warningThreshold={HIGH_USAGE_THRESHOLD_PERCENT}
+              formatValue={formatGaugeValue}
             />
           </div>
         </SectionCard>
