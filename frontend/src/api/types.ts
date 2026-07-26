@@ -6,6 +6,7 @@ export interface NodeResponse {
   available_cpu_cores: number;
   available_memory_mib: number;
   available_vram_mib: number;
+  is_alive: boolean;
 }
 
 export interface ListNodesResponse {

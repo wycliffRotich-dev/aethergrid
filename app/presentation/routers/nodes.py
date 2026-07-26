@@ -90,7 +90,12 @@ def list_nodes(
     ],
 ) -> ListNodesResponse:
     """
-    Return all registered compute nodes.
+    Return all registered compute nodes, regardless of
+    whether they are currently alive. Health is exposed
+    per-node via is_alive rather than by omitting nodes
+    that have missed a heartbeat, so a caller can always
+    tell the difference between "no nodes registered" and
+    "a registered node has gone offline".
     """
     nodes = service.execute()
 
@@ -104,6 +109,7 @@ def list_nodes(
                 available_cpu_cores=node.available.cpu_cores,
                 available_memory_mib=node.available.memory_mib,
                 available_vram_mib=node.available.vram_mib,
+                is_alive=node.is_alive(),
             )
             for node in nodes
         ]
@@ -136,6 +142,7 @@ def list_offline_nodes(
                 available_cpu_cores=node.available.cpu_cores,
                 available_memory_mib=node.available.memory_mib,
                 available_vram_mib=node.available.vram_mib,
+                is_alive=node.is_alive(),
             )
             for node in nodes
         ]
@@ -174,6 +181,7 @@ def get_node(
         available_cpu_cores=node.available.cpu_cores,
         available_memory_mib=node.available.memory_mib,
         available_vram_mib=node.available.vram_mib,
+        is_alive=node.is_alive(),
     )
 
 
@@ -210,4 +218,5 @@ def heartbeat_node(
         available_cpu_cores=node.available.cpu_cores,
         available_memory_mib=node.available.memory_mib,
         available_vram_mib=node.available.vram_mib,
+        is_alive=node.is_alive(),
     )
