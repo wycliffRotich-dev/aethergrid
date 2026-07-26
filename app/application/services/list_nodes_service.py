@@ -8,9 +8,8 @@ from app.domain.repositories.node_repository import (
 
 class ListNodesService:
     """
-    Application service responsible for listing
-    registered compute nodes that are currently
-    alive.
+    Application service responsible for listing every
+    registered compute node.
     """
 
     def __init__(
@@ -23,11 +22,16 @@ class ListNodesService:
         self,
     ) -> list[Node]:
         """
-        Retrieve all compute nodes that have sent
-        a heartbeat within the configured timeout.
+        Retrieve every registered compute node, regardless
+        of whether it is currently alive.
+
+        Previously this filtered to only alive nodes, which
+        meant a node that missed its heartbeat vanished from
+        this list entirely rather than appearing as offline.
+        That produced a dashboard where ClusterHealthService
+        correctly reported "1 node, offline" while this list
+        simultaneously reported zero nodes registered.
+        Callers that specifically need only offline nodes
+        should use ListOfflineNodesService instead.
         """
-        return [
-            node
-            for node in self._node_repository.list()
-            if node.is_alive()
-        ]
+        return list(self._node_repository.list())

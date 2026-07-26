@@ -13,9 +13,16 @@ from app.infrastructure.repositories.in_memory_node_repository import (
 )
 
 
-def test_list_nodes_returns_only_alive_nodes() -> None:
+def test_list_nodes_returns_alive_and_offline_nodes() -> None:
     """
-    Only alive nodes should be returned.
+    Every registered node should be returned regardless of
+    whether it is currently alive. An offline node must still
+    appear here so callers (and the dashboard) can tell the
+    difference between "not registered" and "registered but
+    unhealthy" -- filtering offline nodes out of this list was
+    the bug that made the node table report zero nodes while
+    the cluster health summary correctly reported one node,
+    offline, at the same time.
     """
 
     alive = Node(
@@ -52,4 +59,4 @@ def test_list_nodes_returns_only_alive_nodes() -> None:
     nodes = service.execute()
 
     assert alive in nodes
-    assert offline not in nodes
+    assert offline in nodes
