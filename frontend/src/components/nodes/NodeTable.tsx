@@ -57,7 +57,7 @@ export function NodeTable({ nodes }: Props) {
                 </td>
 
                 <td>
-                  <StatusBadge status="Healthy" />
+                  <StatusBadge status={node.is_alive ? "Healthy" : "Offline"} />
                 </td>
 
                 <td>{node.cpu_cores}</td>
