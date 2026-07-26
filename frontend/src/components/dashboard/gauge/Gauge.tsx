@@ -18,6 +18,7 @@ type Props = {
   majorTickCount?: number;
   minorTicksPerInterval?: number;
   formatValue?: (value: number) => string;
+  warningThreshold?: number;
 };
 
 const VIEWBOX_SIZE = 220;
@@ -25,6 +26,7 @@ const CENTER = 112;
 
 const TRACK_RADIUS = 78;
 const TRACK_STROKE_WIDTH = 12;
+const FILL_ARC_STROKE_WIDTH = 12;
 
 const MAJOR_TICK_OUTER_RADIUS = 94;
 const MAJOR_TICK_INNER_RADIUS = 80;
@@ -51,8 +53,11 @@ export function Gauge({
   majorTickCount = 6,
   minorTicksPerInterval = 3,
   formatValue = defaultFormatValue,
+  warningThreshold,
 }: Props) {
   const clampedValue = clampValue(value, min, max);
+  const isWarning =
+    warningThreshold !== undefined && clampedValue >= warningThreshold;
 
   const ticks = generateTicks(
     min,
@@ -80,6 +85,18 @@ export function Gauge({
     GAUGE_END_ANGLE_DEG,
   );
 
+  const fillArcPath = describeArcPath(
+    CENTER,
+    CENTER,
+    TRACK_RADIUS,
+    GAUGE_START_ANGLE_DEG,
+    needleAngle,
+  );
+
+  const accentColorClass = isWarning ? "stroke-yellow-400" : "stroke-slate-500";
+  const accentFillColorClass = isWarning ? "fill-yellow-400" : "fill-slate-200";
+  const valueColorClass = isWarning ? "fill-yellow-400" : "fill-white";
+
   return (
     <div className="aspect-square w-full">
       <svg
@@ -92,6 +109,13 @@ export function Gauge({
           d={trackPath}
           className="fill-none stroke-slate-800"
           strokeWidth={TRACK_STROKE_WIDTH}
+          strokeLinecap="butt"
+        />
+
+        <path
+          d={fillArcPath}
+          className={`fill-none ${accentColorClass}`}
+          strokeWidth={FILL_ARC_STROKE_WIDTH}
           strokeLinecap="butt"
         />
 
@@ -150,7 +174,7 @@ export function Gauge({
           y1={CENTER}
           x2={needleTip.x}
           y2={needleTip.y}
-          className="stroke-slate-200"
+          className={accentColorClass}
           strokeWidth={3}
           strokeLinecap="round"
         />
@@ -158,7 +182,7 @@ export function Gauge({
           cx={CENTER}
           cy={CENTER}
           r={NEEDLE_HUB_RADIUS}
-          className="fill-slate-200"
+          className={accentFillColorClass}
         />
 
         <text
@@ -174,7 +198,7 @@ export function Gauge({
           x={CENTER}
           y={CENTER + VALUE_OFFSET_Y}
           textAnchor="middle"
-          className="fill-white font-mono font-semibold"
+          className={`font-mono font-semibold ${valueColorClass}`}
           style={{ fontSize: 28 }}
         >
           {formatValue(clampedValue)}

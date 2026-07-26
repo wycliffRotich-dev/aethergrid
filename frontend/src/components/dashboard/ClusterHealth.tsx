@@ -3,6 +3,7 @@ import type {
   ClusterHealthResponse,
   ClusterUtilizationResponse,
 } from "../../api/types";
+import { HIGH_USAGE_THRESHOLD_PERCENT } from "../../lib/clusterMetrics";
 
 type Props = {
   health: ClusterHealthResponse;
@@ -12,8 +13,6 @@ type Props = {
 };
 
 type TrafficState = "red" | "yellow" | "green";
-
-const HIGH_USAGE_THRESHOLD_PERCENT = 80;
 
 interface TrafficColorPair {
   lit: string;
