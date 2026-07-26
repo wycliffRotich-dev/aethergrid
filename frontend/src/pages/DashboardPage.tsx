@@ -1,6 +1,7 @@
 import { ActivityFeed } from "../components/dashboard/ActivityFeed";
 import { ClusterHealth } from "../components/dashboard/ClusterHealth";
-import { ResourceUsage } from "../components/dashboard/ResourceUsage";
+import { Gauge } from "../components/dashboard/gauge/Gauge";
+import { SectionCard } from "../components/dashboard/SectionCard";
 import { StatCard } from "../components/dashboard/StatCard";
 import { RecentJobs } from "../components/jobs/RecentJobs";
 import { NodeTable } from "../components/nodes/NodeTable";
@@ -9,6 +10,10 @@ import { SubmitJobForm } from "../components/jobs/SubmitJobForm";
 import { useClusterStats } from "../hooks/useClusterStats";
 import { useJobs } from "../hooks/useJobs";
 import { useNodes } from "../hooks/useNodes";
+import {
+  computeUtilizationPercentages,
+  HIGH_USAGE_THRESHOLD_PERCENT,
+} from "../lib/clusterMetrics";
 
 export default function DashboardPage() {
   const {
@@ -85,6 +90,11 @@ export default function DashboardPage() {
     0,
   );
 
+  const utilizationPercentages = computeUtilizationPercentages(
+    capacity,
+    utilization,
+  );
+
   return (
     <main className="flex-1 bg-slate-950 p-8">
       <h1 className="mb-8 text-3xl font-bold text-white">
@@ -130,9 +140,32 @@ export default function DashboardPage() {
         />
       </div>
 
-      <ResourceUsage
-        nodes={nodes}
-      />
+      <div className="mt-8">
+        <SectionCard
+          title="Resource Utilization"
+          subtitle="Aggregate CPU, memory, and VRAM usage across the cluster"
+        >
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+            <Gauge
+              label="CPU"
+              value={utilizationPercentages.cpuPercent}
+              warningThreshold={HIGH_USAGE_THRESHOLD_PERCENT}
+            />
+
+            <Gauge
+              label="Memory"
+              value={utilizationPercentages.memoryPercent}
+              warningThreshold={HIGH_USAGE_THRESHOLD_PERCENT}
+            />
+
+            <Gauge
+              label="VRAM"
+              value={utilizationPercentages.vramPercent}
+              warningThreshold={HIGH_USAGE_THRESHOLD_PERCENT}
+            />
+          </div>
+        </SectionCard>
+      </div>
 
       <NodeTable
         nodes={nodes}
