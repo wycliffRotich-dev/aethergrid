@@ -13,6 +13,7 @@ class NodeResponse(BaseModel):
     available_cpu_cores: int
     available_memory_mib: int
     available_vram_mib: int
+    is_alive: bool
 
 
 class ListNodesResponse(BaseModel):
