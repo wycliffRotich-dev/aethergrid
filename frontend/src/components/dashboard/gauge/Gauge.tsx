@@ -37,6 +37,14 @@ const TICK_LABEL_RADIUS = 100;
 const NEEDLE_LENGTH = 70;
 const NEEDLE_HUB_RADIUS = 8;
 
+// The needle is drawn pointing straight up (screen-space angle -90deg
+// in our polar convention) and rotated into position with a CSS
+// transform. Our angle convention treats 0deg as pointing right, so
+// rotating a shape drawn at -90deg to a target angle theta requires
+// a rotation of (theta - (-90)) = theta + 90 degrees.
+const NEEDLE_DRAWN_ANGLE_DEG = -90;
+const NEEDLE_TRANSITION_MS = 700;
+
 const CAPTION_OFFSET_Y = 40;
 const VALUE_OFFSET_Y = 66;
 
@@ -75,7 +83,7 @@ export function Gauge({
     GAUGE_START_ANGLE_DEG,
     GAUGE_END_ANGLE_DEG,
   );
-  const needleTip = polarToCartesian(CENTER, CENTER, NEEDLE_LENGTH, needleAngle);
+  const needleRotationDeg = needleAngle - NEEDLE_DRAWN_ANGLE_DEG;
 
   const trackPath = describeArcPath(
     CENTER,
@@ -114,7 +122,7 @@ export function Gauge({
 
         <path
           d={fillArcPath}
-          className={`fill-none ${accentColorClass}`}
+          className={`fill-none transition-all duration-700 ease-out ${accentColorClass}`}
           strokeWidth={FILL_ARC_STROKE_WIDTH}
           strokeLinecap="butt"
         />
@@ -169,20 +177,30 @@ export function Gauge({
             );
           })}
 
-        <line
-          x1={CENTER}
-          y1={CENTER}
-          x2={needleTip.x}
-          y2={needleTip.y}
-          className={accentColorClass}
-          strokeWidth={3}
-          strokeLinecap="round"
-        />
+        <g
+          className="transition-transform ease-out"
+          style={{
+            transformOrigin: `${CENTER}px ${CENTER}px`,
+            transform: `rotate(${needleRotationDeg}deg)`,
+            transitionDuration: `${NEEDLE_TRANSITION_MS}ms`,
+          }}
+        >
+          <line
+            x1={CENTER}
+            y1={CENTER}
+            x2={CENTER}
+            y2={CENTER - NEEDLE_LENGTH}
+            className={accentColorClass}
+            strokeWidth={3}
+            strokeLinecap="round"
+          />
+        </g>
+
         <circle
           cx={CENTER}
           cy={CENTER}
           r={NEEDLE_HUB_RADIUS}
-          className={accentFillColorClass}
+          className={`transition-colors duration-700 ease-out ${accentFillColorClass}`}
         />
 
         <text
@@ -198,7 +216,7 @@ export function Gauge({
           x={CENTER}
           y={CENTER + VALUE_OFFSET_Y}
           textAnchor="middle"
-          className={`font-mono font-semibold ${valueColorClass}`}
+          className={`font-mono font-semibold transition-colors duration-700 ease-out ${valueColorClass}`}
           style={{ fontSize: 28 }}
         >
           {formatValue(clampedValue)}
