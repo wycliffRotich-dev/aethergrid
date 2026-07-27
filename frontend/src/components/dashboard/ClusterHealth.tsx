@@ -69,7 +69,7 @@ export function ClusterHealth({
 
   const cpuUsagePercent =
     totalCpu > 0
-      ? Math.round((utilization.cpu_cores / totalCpu) * 100)
+      ? Math.round((utilization.cpu_cores / totalCpu) * 1000) / 10
       : 0;
 
   const hasOfflineNodes =
@@ -82,47 +82,42 @@ export function ClusterHealth({
       : "green";
 
   const headline = hasOfflineNodes
-    ? "Your cluster needs a look"
+    ? "Cluster degraded"
     : health.total_nodes === 0
-      ? "Your cluster is just getting started"
+      ? "No nodes registered"
       : trafficState === "yellow"
-        ? "Your cluster is running near capacity"
-        : "Your cluster is running smoothly";
+        ? "Cluster near capacity"
+        : "Cluster nominal";
 
   const nodeSentence =
     health.total_nodes === 0
-      ? "You haven't registered any compute nodes yet."
+      ? "No compute nodes registered."
       : health.total_nodes === 1
-        ? `You have 1 compute node, and it's ${
+        ? `1 node registered, ${
             health.alive_nodes === 1 ? "healthy" : "offline"
           }.`
-        : `You have ${health.total_nodes} compute nodes, ${health.alive_nodes} of them healthy.`;
+        : `${health.total_nodes} nodes registered, ${health.alive_nodes} healthy.`;
 
   const usageSentence =
     totalCpu === 0
-      ? "No capacity to report yet."
+      ? "No capacity registered."
       : cpuUsagePercent >= HIGH_USAGE_THRESHOLD_PERCENT
-        ? `${cpuUsagePercent}% of your capacity is in use — you're close to the limit.`
-        : cpuUsagePercent < 50
-          ? `Only ${cpuUsagePercent}% of your capacity is being used — plenty of room to grow.`
-          : `${cpuUsagePercent}% of your capacity is currently in use.`;
+        ? `CPU utilization: ${cpuUsagePercent}%, approaching capacity.`
+        : `CPU utilization: ${cpuUsagePercent}%.`;
 
   const jobSentence =
     jobCount === 0
-      ? "No jobs are running right now."
+      ? "No jobs running."
       : jobCount === 1
-        ? "1 job is currently running."
-        : `${jobCount} jobs are currently running.`;
+        ? "1 job running."
+        : `${jobCount} jobs running.`;
 
   return (
     <section className="mb-8 rounded-2xl border border-slate-800 bg-slate-900 p-6">
       <div className="flex items-center gap-3">
         <TrafficLight state={trafficState} />
         <div>
-          <p
-            className="text-lg text-white"
-            style={{ fontFamily: "Georgia, \"Times New Roman\", serif" }}
-          >
+          <p className="text-lg font-semibold text-white">
             {headline}
           </p>
           <p className="mt-0.5 text-sm text-slate-500">
