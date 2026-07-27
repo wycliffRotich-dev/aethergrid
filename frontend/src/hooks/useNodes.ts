@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 import { fetchNodes } from "../api/dashboard";
 import type { NodeResponse } from "../api/types";
@@ -27,9 +27,8 @@ export function useNodes() {
     }
   }, []);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  // Initial fetch
+  refresh();
 
   return {
     nodes,

@@ -30,7 +30,7 @@ function formatDuration(seconds: number): string {
 }
 
 function useTicker(enabled: boolean): number {
-  const [, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     if (!enabled) return;
@@ -40,7 +40,7 @@ function useTicker(enabled: boolean): number {
     return () => clearInterval(interval);
   }, [enabled]);
 
-  return Date.now();
+  return tick;
 }
 
 function JobDuration({ job }: { job: JobSummaryResponse }) {
