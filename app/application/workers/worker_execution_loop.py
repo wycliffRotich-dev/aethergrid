@@ -78,6 +78,10 @@ class WorkerExecutionLoop:
 
         job = worker.running_job
 
+        # Skip if job is already running or in a terminal state
+        if job.is_running() or job.is_completed() or job.is_failed() or job.is_cancelled():
+            return
+
         self._renew_lease_service.execute(
             worker_id,
         )

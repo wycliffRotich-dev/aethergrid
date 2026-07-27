@@ -11,8 +11,8 @@ body,
 }
 
 body {
-  background: #020617;
-  color: #f8fafc;
+  background: #18181b;
+  color: #fafafa;
   font-family:
     Inter,
     system-ui,
@@ -20,4 +20,10 @@ body {
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+* {
+  box-sizing: border-box;
 }

@@ -166,11 +166,17 @@ def get_job(
     Retrieve an existing job.
     """
     try:
-        job = service.execute(
-            JobId(
-                value=UUID(job_id),
-            ),
+        job_id_value = JobId(
+            value=UUID(job_id),
         )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Malformed job id.",
+        ) from exc
+
+    try:
+        job = service.execute(job_id_value)
     except JobNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

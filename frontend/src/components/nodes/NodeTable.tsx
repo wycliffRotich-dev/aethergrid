@@ -1,5 +1,4 @@
 import type { NodeResponse } from "../../api/types";
-import { StatusBadge } from "../common/StatusBadge";
 
 type Props = {
   nodes: NodeResponse[];
@@ -7,77 +6,51 @@ type Props = {
 
 export function NodeTable({ nodes }: Props) {
   return (
-    <section className="mt-10 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-lg">
-      <div className="flex items-center justify-between border-b border-slate-800 px-6 py-5">
-        <div>
-          <h2 className="text-xl font-semibold text-white">
-            Cluster Nodes
-          </h2>
-
-          <p className="mt-1 text-sm text-slate-400">
-            Registered compute resources
-          </p>
-        </div>
-
-        <div className="rounded-lg bg-slate-800 px-4 py-2 text-sm text-slate-300">
-          {nodes.length} Nodes
-        </div>
+    <section className="border border-neutral-700 rounded-lg overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-700">
+        <h2 className="text-sm font-semibold text-white">
+          Nodes
+        </h2>
+        <span className="text-xs text-neutral-500">
+          {nodes.length}
+        </span>
       </div>
 
-      <table className="w-full">
-        <thead className="bg-slate-800/60 text-left text-xs uppercase tracking-wider text-slate-400">
-          <tr>
-            <th className="px-6 py-4">Node ID</th>
-            <th>Health</th>
-            <th>Total CPU</th>
-            <th>Available CPU</th>
-            <th>Memory</th>
-            <th>VRAM</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {nodes.length === 0 ? (
-            <tr>
-              <td
-                colSpan={6}
-                className="py-12 text-center text-slate-500"
-              >
-                No compute nodes have been registered.
-              </td>
-            </tr>
-          ) : (
-            nodes.map((node) => (
-              <tr
-                key={node.id}
-                className="border-t border-slate-800 transition-colors hover:bg-slate-800/40"
-              >
-                <td className="px-6 py-4 font-mono text-sm text-white">
-                  {node.id}
-                </td>
-
-                <td>
-                  <StatusBadge status={node.is_alive ? "Healthy" : "Offline"} />
-                </td>
-
-                <td>{node.cpu_cores}</td>
-
-                <td className="text-emerald-400">
-                  {node.available_cpu_cores}
-                </td>
-
-                <td>
-                  {node.memory_mib.toLocaleString()} MiB
-                </td>
-
-                <td>
-                  {node.vram_mib.toLocaleString()} MiB
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+      {nodes.length === 0 ? (
+        <div className="px-4 py-8 text-center text-sm text-neutral-500">
+          No nodes registered.
+        </div>
+      ) : (
+        <div className="divide-y divide-neutral-700">
+          {nodes.map((node) => (
+            <div key={node.id} className="px-4 py-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-mono text-xs text-neutral-300">
+                  {node.id.slice(0, 8)}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-neutral-500" />
+                  <span className="text-xs text-neutral-500">online</span>
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-xs text-neutral-400">
+                <div>
+                  <span className="text-neutral-600">CPU</span>
+                  <span className="ml-2 text-neutral-300">{node.cpu_cores}</span>
+                </div>
+                <div>
+                  <span className="text-neutral-600">Mem</span>
+                  <span className="ml-2 text-neutral-300">{node.memory_mib.toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-neutral-600">VRAM</span>
+                  <span className="ml-2 text-neutral-300">{node.vram_mib.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

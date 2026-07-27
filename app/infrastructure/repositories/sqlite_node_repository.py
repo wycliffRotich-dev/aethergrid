@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
 from app.domain.entities.node import Node
@@ -142,6 +142,16 @@ class SqliteNodeRepository(NodeRepository):
         self,
         row: sqlite3.Row,
     ) -> Node:
+        labels_raw = row["labels"]
+        labels = json.loads(labels_raw) if labels_raw else {}
+
+        last_seen_at_raw = row["last_seen_at"]
+        last_seen_at = (
+            datetime.fromisoformat(last_seen_at_raw)
+            if last_seen_at_raw
+            else datetime.now(UTC)
+        )
+
         node = Node(
             id=NodeId(value=UUID(row["id"])),
             capacity=ResourceRequirements(
@@ -149,10 +159,8 @@ class SqliteNodeRepository(NodeRepository):
                 memory_mib=row["capacity_memory_mib"],
                 vram_mib=row["capacity_vram_mib"],
             ),
-            labels=json.loads(row["labels"]),
-            last_seen_at=datetime.fromisoformat(
-                row["last_seen_at"],
-            ),
+            labels=labels,
+            last_seen_at=last_seen_at,
             draining=bool(row["draining"]),
         )
 

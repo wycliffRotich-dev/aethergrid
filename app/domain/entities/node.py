@@ -16,7 +16,7 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-HEARTBEAT_TIMEOUT = timedelta(minutes=1)
+HEARTBEAT_TIMEOUT = timedelta(minutes=10)
 
 
 @dataclass(slots=True)
