@@ -5,7 +5,14 @@ export default {
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        muted: {
+          purple: "#6B5B7A",
+          "purple-hover": "#7A6B8A",
+        },
+      },
+    },
   },
   plugins: [],
 };
