@@ -28,7 +28,7 @@ export function useNodes() {
   }, []);
 
   useEffect(() => {
-    void refresh();
+    refresh();
   }, [refresh]);
 
   return {

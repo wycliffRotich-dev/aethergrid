@@ -48,7 +48,7 @@ export function useClusterStats() {
   }, []);
 
   useEffect(() => {
-    void refresh();
+    refresh();
   }, [refresh]);
 
   return {

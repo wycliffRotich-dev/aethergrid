@@ -14,15 +14,15 @@ export function SectionCard({
   children,
 }: Props) {
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900">
-      <div className="flex items-start justify-between border-b border-slate-800 px-6 py-5">
+    <section className="rounded-2xl border border-neutral-700 bg-neutral-800">
+      <div className="flex items-start justify-between border-b border-neutral-700 px-6 py-5">
         <div>
-          <h2 className="text-xl font-semibold text-white">
+          <h2 className="text-xl font-semibold text-neutral-100">
             {title}
           </h2>
 
           {subtitle && (
-            <p className="mt-1 text-sm text-slate-400">
+            <p className="mt-1 text-sm text-neutral-400">
               {subtitle}
             </p>
           )}

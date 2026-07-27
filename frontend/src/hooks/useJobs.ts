@@ -28,7 +28,7 @@ export function useJobs() {
   }, []);
 
   useEffect(() => {
-    void refresh();
+    refresh();
   }, [refresh]);
 
   return {

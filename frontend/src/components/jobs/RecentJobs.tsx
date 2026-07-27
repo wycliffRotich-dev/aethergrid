@@ -9,41 +9,13 @@ const STATUS_STYLES: Record<
   JobStatus,
   { dot: string; text: string; label: string }
 > = {
-  SUBMITTED: {
-    dot: "bg-slate-500",
-    text: "text-slate-400",
-    label: "submitted",
-  },
-  QUEUED: {
-    dot: "bg-slate-400",
-    text: "text-slate-300",
-    label: "queued",
-  },
-  SCHEDULED: {
-    dot: "bg-amber-500",
-    text: "text-amber-400",
-    label: "scheduled",
-  },
-  RUNNING: {
-    dot: "bg-amber-400 animate-pulse",
-    text: "text-amber-300",
-    label: "running",
-  },
-  COMPLETED: {
-    dot: "bg-emerald-500",
-    text: "text-emerald-400",
-    label: "completed",
-  },
-  FAILED: {
-    dot: "bg-rose-500",
-    text: "text-rose-400",
-    label: "failed",
-  },
-  CANCELLED: {
-    dot: "bg-slate-600",
-    text: "text-slate-500",
-    label: "cancelled",
-  },
+  SUBMITTED: { dot: "bg-neutral-500", text: "text-neutral-400", label: "submitted" },
+  QUEUED: { dot: "bg-amber-500", text: "text-amber-400", label: "queued" },
+  SCHEDULED: { dot: "bg-white", text: "text-white", label: "scheduled" },
+  RUNNING: { dot: "bg-green-500 animate-pulse", text: "text-green-400", label: "running" },
+  COMPLETED: { dot: "bg-green-500", text: "text-green-400", label: "completed" },
+  FAILED: { dot: "bg-red-500", text: "text-red-400", label: "failed" },
+  CANCELLED: { dot: "bg-neutral-500", text: "text-neutral-400", label: "cancelled" },
 };
 
 function shortId(id: string): string {
@@ -51,32 +23,24 @@ function shortId(id: string): string {
 }
 
 function formatDuration(seconds: number): string {
-  if (seconds < 60) {
-    return `${Math.floor(seconds)}s`;
-  }
-
+  if (seconds < 60) return `${Math.floor(seconds)}s`;
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = Math.floor(seconds % 60);
-
   return `${minutes}m ${remainingSeconds}s`;
 }
 
 function useTicker(enabled: boolean): number {
-  const [, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
-    if (!enabled) {
-      return;
-    }
-
+    if (!enabled) return;
     const interval = setInterval(() => {
       setTick((current) => current + 1);
     }, 1000);
-
     return () => clearInterval(interval);
   }, [enabled]);
 
-  return Date.now();
+  return tick;
 }
 
 function JobDuration({ job }: { job: JobSummaryResponse }) {
@@ -84,122 +48,63 @@ function JobDuration({ job }: { job: JobSummaryResponse }) {
   const now = useTicker(isRunning);
 
   if (job.started_at === null) {
-    return <span className="text-slate-600">--</span>;
+    return <span className="text-neutral-600">--</span>;
   }
 
   const start = new Date(job.started_at).getTime();
-  const end = job.completed_at
-    ? new Date(job.completed_at).getTime()
-    : now;
-
+  const end = job.completed_at ? new Date(job.completed_at).getTime() : now;
   const seconds = (end - start) / 1000;
 
   return (
-    <span className="font-mono text-slate-300">
+    <span className="font-mono text-neutral-300">
       {formatDuration(Math.max(seconds, 0))}
-    </span>
-  );
-}
-
-function ExitCode({ job }: { job: JobSummaryResponse }) {
-  if (job.exit_code === null) {
-    return <span className="text-slate-600">--</span>;
-  }
-
-  const isSuccess = job.exit_code === 0;
-
-  return (
-    <span
-      className={`font-mono ${
-        isSuccess ? "text-emerald-400" : "text-rose-400"
-      }`}
-    >
-      [exit {job.exit_code}]
     </span>
   );
 }
 
 export function RecentJobs({ jobs }: Props) {
   return (
-    <section className="mt-8 rounded-xl border border-slate-800 bg-slate-950">
-      <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
-        <h2 className="text-lg font-semibold tracking-tight text-white">
-          Recent Jobs
+    <section className="border border-neutral-700 rounded-lg overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-700">
+        <h2 className="text-sm font-semibold text-white">
+          Jobs
         </h2>
-
-        <span className="font-mono text-xs text-slate-500">
-          {jobs.length} shown
+        <span className="text-xs text-neutral-500">
+          {jobs.length}
         </span>
       </div>
 
       {jobs.length === 0 ? (
-        <div className="px-6 py-16 text-center">
-          <p className="text-slate-400">
-            No jobs have run on this cluster yet.
-          </p>
-          <p className="mt-1 text-sm text-slate-600">
-            Submit a job above to see it appear here.
-          </p>
+        <div className="px-4 py-8 text-center text-sm text-neutral-500">
+          No jobs.
         </div>
       ) : (
-        <table className="w-full text-sm">
-          <thead className="border-b border-slate-800 text-left text-xs uppercase tracking-wider text-slate-500">
-            <tr>
-              <th className="px-6 py-3 font-medium">Job</th>
-              <th className="px-3 py-3 font-medium">Status</th>
-              <th className="px-3 py-3 font-medium">Resources</th>
-              <th className="px-3 py-3 font-medium">Duration</th>
-              <th className="px-6 py-3 font-medium">Result</th>
-            </tr>
-          </thead>
-
-          <tbody className="divide-y divide-slate-800/60">
-            {jobs.map((job) => {
-              const style = STATUS_STYLES[job.status];
-
-              return (
-                <tr
-                  key={job.id}
-                  className="transition-colors hover:bg-slate-900/60"
-                >
-                  <td className="px-6 py-3">
-                    <span className="font-mono text-slate-300">
-                      {shortId(job.id)}
+        <div className="divide-y divide-neutral-700">
+          {jobs.map((job) => {
+            const style = STATUS_STYLES[job.status];
+            return (
+              <div key={job.id} className="px-4 py-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-mono text-xs text-neutral-300">
+                    {shortId(job.id)}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+                    <span className={`text-xs ${style.text}`}>
+                      {style.label}
                     </span>
-                  </td>
-
-                  <td className="px-3 py-3">
-                    <span className="inline-flex items-center gap-2">
-                      <span
-                        className={`h-1.5 w-1.5 rounded-full ${style.dot}`}
-                      />
-                      <span className={style.text}>
-                        {style.label}
-                      </span>
-                    </span>
-                  </td>
-
-                  <td className="px-3 py-3 font-mono text-slate-400">
-                    {job.cpu_cores}c
-                    {" / "}
-                    {job.memory_mib}mb
-                    {job.vram_mib > 0 && (
-                      <>{" / "}{job.vram_mib}vram</>
-                    )}
-                  </td>
-
-                  <td className="px-3 py-3">
-                    <JobDuration job={job} />
-                  </td>
-
-                  <td className="px-6 py-3">
-                    <ExitCode job={job} />
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-neutral-500">
+                  <span className="font-mono">
+                    {job.cpu_cores}c / {job.memory_mib}m
+                  </span>
+                  <JobDuration job={job} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
     </section>
   );

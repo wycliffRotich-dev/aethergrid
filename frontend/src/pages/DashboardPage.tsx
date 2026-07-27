@@ -66,32 +66,24 @@ export default function DashboardPage() {
 
   if ((loading || clusterStatsLoading) && !hasLoadedOnce) {
     return (
-      <main className="flex-1 bg-slate-950 p-8 text-white">
-        Loading cluster...
+      <main className="flex-1 p-4 text-neutral-300">
+        Loading...
       </main>
     );
   }
 
-  if (error) {
+  if (error || clusterStatsError) {
     return (
-      <main className="flex-1 bg-slate-950 p-8 text-red-400">
-        {error}
-      </main>
-    );
-  }
-
-  if (clusterStatsError) {
-    return (
-      <main className="flex-1 bg-slate-950 p-8 text-red-400">
-        {clusterStatsError}
+      <main className="flex-1 p-4 text-red-400">
+        {error || clusterStatsError}
       </main>
     );
   }
 
   if (health === null || capacity === null || utilization === null) {
     return (
-      <main className="flex-1 bg-slate-950 p-8 text-white">
-        Loading cluster...
+      <main className="flex-1 p-4 text-neutral-300">
+        Loading...
       </main>
     );
   }
@@ -117,8 +109,8 @@ export default function DashboardPage() {
   );
 
   return (
-    <main className="flex-1 bg-slate-950 p-8">
-      <h1 className="mb-8 text-3xl font-bold text-white">
+    <main className="space-y-6">
+      <h1 className="text-2xl font-bold text-neutral-100">
         Dashboard
       </h1>
 
@@ -129,76 +121,58 @@ export default function DashboardPage() {
         jobCount={jobs.length}
       />
 
-      <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Registered Nodes"
           value={nodes.length}
         />
-
         <StatCard
           title="CPU Cores"
           value={totalCpu}
         />
-
         <StatCard
           title="Memory (MiB)"
           value={totalMemory.toLocaleString()}
         />
-
         <StatCard
           title="VRAM (MiB)"
           value={totalVram.toLocaleString()}
         />
       </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        <RegisterNodeForm
-          onCreated={refreshAll}
-        />
-
-        <SubmitJobForm
-          onSubmitted={refreshAll}
-        />
+      <div className="grid md:grid-cols-2 gap-4">
+        <RegisterNodeForm onCreated={refresh} />
+        <SubmitJobForm onSubmitted={refreshAll} />
       </div>
 
-      <div className="mt-8">
-        <SectionCard
-          title="Resource Utilization"
-          subtitle="Aggregate CPU, memory, and VRAM usage across the cluster"
-        >
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-            <Gauge
-              label="CPU"
-              value={utilizationPercentages.cpuPercent}
-              warningThreshold={HIGH_USAGE_THRESHOLD_PERCENT}
-              formatValue={formatGaugeValue}
-            />
+      <SectionCard
+        title="Resource Utilization"
+        subtitle="Aggregate CPU, memory, and VRAM usage across the cluster"
+      >
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+          <Gauge
+            label="CPU"
+            value={utilizationPercentages.cpuPercent}
+            warningThreshold={HIGH_USAGE_THRESHOLD_PERCENT}
+            formatValue={formatGaugeValue}
+          />
+          <Gauge
+            label="Memory"
+            value={utilizationPercentages.memoryPercent}
+            warningThreshold={HIGH_USAGE_THRESHOLD_PERCENT}
+            formatValue={formatGaugeValue}
+          />
+          <Gauge
+            label="VRAM"
+            value={utilizationPercentages.vramPercent}
+            warningThreshold={HIGH_USAGE_THRESHOLD_PERCENT}
+            formatValue={formatGaugeValue}
+          />
+        </div>
+      </SectionCard>
 
-            <Gauge
-              label="Memory"
-              value={utilizationPercentages.memoryPercent}
-              warningThreshold={HIGH_USAGE_THRESHOLD_PERCENT}
-              formatValue={formatGaugeValue}
-            />
-
-            <Gauge
-              label="VRAM"
-              value={utilizationPercentages.vramPercent}
-              warningThreshold={HIGH_USAGE_THRESHOLD_PERCENT}
-              formatValue={formatGaugeValue}
-            />
-          </div>
-        </SectionCard>
-      </div>
-
-      <NodeTable
-        nodes={nodes}
-      />
-
-      <RecentJobs
-        jobs={jobs}
-      />
-
+      <NodeTable nodes={nodes} />
+      <RecentJobs jobs={jobs} />
       <ActivityFeed />
     </main>
   );

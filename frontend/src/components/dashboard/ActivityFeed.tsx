@@ -28,13 +28,13 @@ export function ActivityFeed() {
         {events.map((event) => (
           <div
             key={event.id}
-            className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950 px-4 py-3"
+            className="flex items-center justify-between rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-3"
           >
-            <span className="text-sm text-white">
+            <span className="text-sm text-neutral-100">
               {event.title}
             </span>
 
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-neutral-500">
               {event.time}
             </span>
           </div>
