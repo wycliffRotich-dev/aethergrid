@@ -112,9 +112,9 @@ export function Gauge({
     needleAngle,
   );
 
-  const accentColorClass = isWarning ? "stroke-yellow-400" : "stroke-slate-500";
-  const accentFillColorClass = isWarning ? "fill-yellow-400" : "fill-slate-200";
-  const hubInnerFillClass = isWarning ? "fill-yellow-300" : "fill-slate-100";
+  const accentColorClass = isWarning ? "stroke-yellow-400" : "stroke-neutral-500";
+  const accentFillColorClass = isWarning ? "fill-yellow-400" : "fill-neutral-200";
+  const hubInnerFillClass = isWarning ? "fill-yellow-300" : "fill-neutral-100";
   const valueColorClass = isWarning ? "fill-yellow-400" : "fill-white";
 
   // Kite-shaped needle: tip, right shoulder, tail, left shoulder,
@@ -155,7 +155,7 @@ export function Gauge({
 
         <path
           d={trackPath}
-          className="fill-none stroke-slate-800"
+          className="fill-none stroke-neutral-800"
           strokeWidth={TRACK_STROKE_WIDTH}
           strokeLinecap="butt"
         />
@@ -185,7 +185,7 @@ export function Gauge({
               y1={innerPoint.y}
               x2={outerPoint.x}
               y2={outerPoint.y}
-              className={tick.isMajor ? "stroke-slate-500" : "stroke-slate-700"}
+              className={tick.isMajor ? "stroke-neutral-500" : "stroke-neutral-700"}
               strokeWidth={tick.isMajor ? 2 : 1}
               strokeLinecap="round"
             />
@@ -209,7 +209,7 @@ export function Gauge({
                 y={labelPoint.y}
                 textAnchor={getTickTextAnchor(tick.angleDeg)}
                 dominantBaseline="middle"
-                className="fill-slate-600 font-mono"
+                className="fill-neutral-600 font-mono"
                 style={{ fontSize: 10 }}
               >
                 {defaultFormatValue(tick.value)}
@@ -247,7 +247,7 @@ export function Gauge({
           cx={CENTER}
           cy={CENTER}
           r={NEEDLE_HUB_OUTER_RADIUS}
-          className="fill-slate-950 stroke-slate-600"
+          className="fill-neutral-950 stroke-neutral-600"
           strokeWidth={1}
         />
         <circle
@@ -261,7 +261,7 @@ export function Gauge({
           x={CENTER}
           y={CENTER + CAPTION_OFFSET_Y}
           textAnchor="middle"
-          className="fill-slate-400 font-sans uppercase"
+          className="fill-neutral-400 font-sans uppercase"
           style={{ fontSize: 11, letterSpacing: "0.08em" }}
         >
           {label}

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   fetchClusterCapacity,
@@ -47,8 +47,9 @@ export function useClusterStats() {
     }
   }, []);
 
-  // Initial fetch
-  refresh();
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   return {
     health,

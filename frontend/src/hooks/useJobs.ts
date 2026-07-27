@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { listJobs } from "../api/jobs";
 import type { JobSummaryResponse } from "../api/types";
@@ -27,8 +27,9 @@ export function useJobs() {
     }
   }, []);
 
-  // Initial fetch
-  refresh();
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   return {
     jobs,
