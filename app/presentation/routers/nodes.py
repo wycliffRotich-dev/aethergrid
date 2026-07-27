@@ -72,7 +72,7 @@ def create_node(
         vram_mib=request.vram_mib,
     )
 
-    node = service.execute(capacity)
+    node = service.execute(capacity, name=request.name)
 
     return CreateNodeResponse(
         id=str(node.id),

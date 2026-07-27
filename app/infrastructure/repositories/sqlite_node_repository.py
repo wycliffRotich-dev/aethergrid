@@ -17,6 +17,7 @@ from app.domain.value_objects.resource_requirements import (
 _CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS nodes (
     id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
     capacity_cpu_cores INTEGER NOT NULL,
     capacity_memory_mib INTEGER NOT NULL,
     capacity_vram_mib INTEGER NOT NULL,
@@ -57,6 +58,7 @@ class SqliteNodeRepository(NodeRepository):
             """
             INSERT INTO nodes (
                 id,
+                name,
                 capacity_cpu_cores,
                 capacity_memory_mib,
                 capacity_vram_mib,
@@ -66,8 +68,9 @@ class SqliteNodeRepository(NodeRepository):
                 labels,
                 last_seen_at,
                 draining
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
                 capacity_cpu_cores = excluded.capacity_cpu_cores,
                 capacity_memory_mib = excluded.capacity_memory_mib,
                 capacity_vram_mib = excluded.capacity_vram_mib,
@@ -80,6 +83,7 @@ class SqliteNodeRepository(NodeRepository):
             """,
             (
                 str(node.id),
+                node.name,
                 node.capacity.cpu_cores,
                 node.capacity.memory_mib,
                 node.capacity.vram_mib,
@@ -149,6 +153,7 @@ class SqliteNodeRepository(NodeRepository):
                 memory_mib=row["capacity_memory_mib"],
                 vram_mib=row["capacity_vram_mib"],
             ),
+            name=row["name"],
             labels=json.loads(row["labels"]),
             last_seen_at=datetime.fromisoformat(
                 row["last_seen_at"],

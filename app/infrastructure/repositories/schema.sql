@@ -4,6 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS nodes (
     id                    UUID PRIMARY KEY,
+    name                  TEXT NOT NULL,
     capacity_cpu_cores    INTEGER NOT NULL,
     capacity_memory_mib   INTEGER NOT NULL,
     capacity_vram_mib     INTEGER NOT NULL,
