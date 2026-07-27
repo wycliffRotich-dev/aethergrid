@@ -25,16 +25,31 @@ class CreateNodeService:
     def execute(
         self,
         capacity: ResourceRequirements,
+        name: str | None = None,
     ) -> Node:
         """
         Create and persist a new compute node.
 
+        If name is not supplied, Node generates its own
+        human-friendly fallback name. A real node agent is
+        expected to supply its own hostname here; the
+        fallback exists for nodes registered without one,
+        such as through manual registration.
+
         Returns:
             The newly created node.
         """
-        node = Node(
-            id=NodeId.new(),
-            capacity=capacity,
+        node = (
+            Node(
+                id=NodeId.new(),
+                capacity=capacity,
+                name=name,
+            )
+            if name
+            else Node(
+                id=NodeId.new(),
+                capacity=capacity,
+            )
         )
 
         self._node_repository.save(node)

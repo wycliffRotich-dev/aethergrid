@@ -31,17 +31,18 @@ class PostgresNodeRepository(NodeRepository):
             conn.execute(
                 """
                 INSERT INTO nodes (
-                    id, capacity_cpu_cores, capacity_memory_mib,
+                    id, name, capacity_cpu_cores, capacity_memory_mib,
                     capacity_vram_mib, available_cpu_cores,
                     available_memory_mib, available_vram_mib,
                     labels, last_seen_at, draining
                 ) VALUES (
-                    %(id)s, %(capacity_cpu_cores)s, %(capacity_memory_mib)s,
+                    %(id)s, %(name)s, %(capacity_cpu_cores)s, %(capacity_memory_mib)s,
                     %(capacity_vram_mib)s, %(available_cpu_cores)s,
                     %(available_memory_mib)s, %(available_vram_mib)s,
                     %(labels)s, %(last_seen_at)s, %(draining)s
                 )
                 ON CONFLICT (id) DO UPDATE SET
+                    name = EXCLUDED.name,
                     capacity_cpu_cores = EXCLUDED.capacity_cpu_cores,
                     capacity_memory_mib = EXCLUDED.capacity_memory_mib,
                     capacity_vram_mib = EXCLUDED.capacity_vram_mib,
@@ -54,6 +55,7 @@ class PostgresNodeRepository(NodeRepository):
                 """,
                 {
                     "id": str(node.id),
+                    "name": node.name,
                     "capacity_cpu_cores": node.capacity.cpu_cores,
                     "capacity_memory_mib": node.capacity.memory_mib,
                     "capacity_vram_mib": node.capacity.vram_mib,
@@ -119,6 +121,7 @@ class PostgresNodeRepository(NodeRepository):
             id=NodeId.from_string(str(row["id"])),
             capacity=capacity,
             available=available,
+            name=row["name"],
             labels=row["labels"] or {},
             last_seen_at=row["last_seen_at"],
             draining=row["draining"],

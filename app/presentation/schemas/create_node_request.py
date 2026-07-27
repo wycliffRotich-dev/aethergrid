@@ -9,3 +9,4 @@ class CreateNodeRequest(BaseModel):
     cpu_cores: int
     memory_mib: int
     vram_mib: int
+    name: str | None = None

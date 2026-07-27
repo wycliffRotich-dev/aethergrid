@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
@@ -18,6 +19,39 @@ def utc_now() -> datetime:
 
 HEARTBEAT_TIMEOUT = timedelta(minutes=1)
 
+_NAME_ADJECTIVES = (
+    "swift", "quiet", "bold", "steady", "bright", "calm",
+    "sharp", "brisk", "keen", "solid", "clever", "eager",
+    "loyal", "quick", "sturdy", "vivid", "wise", "agile",
+    "gentle", "fierce",
+)
+
+_NAME_NOUNS = (
+    "falcon", "otter", "badger", "heron", "lynx", "wren",
+    "marten", "kestrel", "osprey", "raven", "sparrow", "vole",
+    "ferret", "grouse", "harrier", "plover", "shrike", "stoat",
+    "tern", "weasel",
+)
+
+
+def generate_node_name() -> str:
+    """
+    Produce a human-friendly display name for a node that
+    was not given one explicitly, adjective-noun plus a
+    short hex suffix for uniqueness, e.g. "swift-falcon-3f2a".
+
+    This is a fallback, not the primary path: a real node
+    agent registering itself is expected to supply its own
+    hostname as the name. This generator only covers nodes
+    registered without one, such as through the dashboard's
+    manual registration form during testing.
+    """
+    adjective = random.choice(_NAME_ADJECTIVES)
+    noun = random.choice(_NAME_NOUNS)
+    suffix = f"{random.randint(0, 0xFFFF):04x}"
+
+    return f"{adjective}-{noun}-{suffix}"
+
 
 @dataclass(slots=True)
 class Node:
@@ -27,6 +61,9 @@ class Node:
 
     id: NodeId
     capacity: ResourceRequirements
+    name: str = field(
+        default_factory=generate_node_name,
+    )
     labels: dict[str, str] = field(
         default_factory=dict,
     )
