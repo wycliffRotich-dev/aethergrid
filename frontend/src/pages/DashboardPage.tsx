@@ -153,7 +153,7 @@ export default function DashboardPage() {
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <RegisterNodeForm
-          onCreated={refresh}
+          onCreated={refreshAll}
         />
 
         <SubmitJobForm
