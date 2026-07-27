@@ -1,3 +1,4 @@
+import { useId } from "react";
 import {
   GAUGE_END_ANGLE_DEG,
   GAUGE_START_ANGLE_DEG,
@@ -34,14 +35,22 @@ const MINOR_TICK_OUTER_RADIUS = 90;
 const MINOR_TICK_INNER_RADIUS = 82;
 const TICK_LABEL_RADIUS = 100;
 
-const NEEDLE_LENGTH = 70;
-const NEEDLE_HUB_RADIUS = 8;
+// The needle is a tapered kite, not a uniform line: a sharp tip,
+// shoulders near the pivot where it is widest, and a short tail
+// (counterweight) on the opposite side of the pivot, the same
+// silhouette a real analog instrument needle has.
+const NEEDLE_TIP_LENGTH = 70;
+const NEEDLE_TAIL_LENGTH = 14;
+const NEEDLE_SHOULDER_OFFSET = 12;
+const NEEDLE_HALF_WIDTH = 5;
 
-// The needle is drawn pointing straight up (screen-space angle -90deg
-// in our polar convention) and rotated into position with a CSS
-// transform. Our angle convention treats 0deg as pointing right, so
-// rotating a shape drawn at -90deg to a target angle theta requires
-// a rotation of (theta - (-90)) = theta + 90 degrees.
+const NEEDLE_HUB_OUTER_RADIUS = 9;
+const NEEDLE_HUB_INNER_RADIUS = 4;
+
+// Drawn pointing straight up (-90deg in our polar convention) and
+// rotated into position with a CSS transform, so the browser
+// animates the rotation natively rather than us redrawing endpoint
+// coordinates every value change.
 const NEEDLE_DRAWN_ANGLE_DEG = -90;
 const NEEDLE_TRANSITION_MS = 700;
 
@@ -63,6 +72,8 @@ export function Gauge({
   formatValue = defaultFormatValue,
   warningThreshold,
 }: Props) {
+  const shadowFilterId = useId();
+
   const clampedValue = clampValue(value, min, max);
   const isWarning =
     warningThreshold !== undefined && clampedValue >= warningThreshold;
@@ -103,7 +114,18 @@ export function Gauge({
 
   const accentColorClass = isWarning ? "stroke-yellow-400" : "stroke-slate-500";
   const accentFillColorClass = isWarning ? "fill-yellow-400" : "fill-slate-200";
+  const hubInnerFillClass = isWarning ? "fill-yellow-300" : "fill-slate-100";
   const valueColorClass = isWarning ? "fill-yellow-400" : "fill-white";
+
+  // Kite-shaped needle: tip, right shoulder, tail, left shoulder,
+  // drawn in unrotated local space (needle pointing up) and rotated
+  // by the wrapping <g> below, same as the rest of the geometry.
+  const needlePoints = [
+    `${CENTER},${CENTER - NEEDLE_TIP_LENGTH}`,
+    `${CENTER + NEEDLE_HALF_WIDTH},${CENTER - NEEDLE_SHOULDER_OFFSET}`,
+    `${CENTER},${CENTER + NEEDLE_TAIL_LENGTH}`,
+    `${CENTER - NEEDLE_HALF_WIDTH},${CENTER - NEEDLE_SHOULDER_OFFSET}`,
+  ].join(" ");
 
   return (
     <div className="aspect-square w-full">
@@ -113,6 +135,24 @@ export function Gauge({
         role="img"
         aria-label={`${label}: ${formatValue(clampedValue)}${unit}`}
       >
+        <defs>
+          <filter
+            id={shadowFilterId}
+            x="-50%"
+            y="-50%"
+            width="200%"
+            height="200%"
+          >
+            <feDropShadow
+              dx="0"
+              dy="1.5"
+              stdDeviation="1.5"
+              floodColor="#000000"
+              floodOpacity="0.5"
+            />
+          </filter>
+        </defs>
+
         <path
           d={trackPath}
           className="fill-none stroke-slate-800"
@@ -184,14 +224,21 @@ export function Gauge({
             transform: `rotate(${needleRotationDeg}deg)`,
             transitionDuration: `${NEEDLE_TRANSITION_MS}ms`,
           }}
+          filter={`url(#${shadowFilterId})`}
         >
+          <polygon
+            points={needlePoints}
+            className={accentFillColorClass}
+          />
+
           <line
             x1={CENTER}
-            y1={CENTER}
+            y1={CENTER - NEEDLE_SHOULDER_OFFSET}
             x2={CENTER}
-            y2={CENTER - NEEDLE_LENGTH}
-            className={accentColorClass}
-            strokeWidth={3}
+            y2={CENTER - NEEDLE_TIP_LENGTH + 4}
+            stroke="white"
+            strokeOpacity={0.35}
+            strokeWidth={1}
             strokeLinecap="round"
           />
         </g>
@@ -199,8 +246,15 @@ export function Gauge({
         <circle
           cx={CENTER}
           cy={CENTER}
-          r={NEEDLE_HUB_RADIUS}
-          className={`transition-colors duration-700 ease-out ${accentFillColorClass}`}
+          r={NEEDLE_HUB_OUTER_RADIUS}
+          className="fill-slate-950 stroke-slate-600"
+          strokeWidth={1}
+        />
+        <circle
+          cx={CENTER}
+          cy={CENTER}
+          r={NEEDLE_HUB_INNER_RADIUS}
+          className={`transition-colors duration-700 ease-out ${hubInnerFillClass}`}
         />
 
         <text

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { ActivityFeed } from "../components/dashboard/ActivityFeed";
 import { ClusterHealth } from "../components/dashboard/ClusterHealth";
 import { Gauge } from "../components/dashboard/gauge/Gauge";
@@ -41,13 +42,29 @@ export default function DashboardPage() {
     refresh: refreshClusterStats,
   } = useClusterStats();
 
+  // The full-page "Loading cluster..." screen should only appear
+  // before the dashboard has ever successfully loaded. Every hook's
+  // refresh() flips its loading flag back to true on every
+  // subsequent call too, including the ones triggered by submitting
+  // a form. Without this guard, registering a node or submitting a
+  // job would tear down and rebuild the entire page, which is what
+  // caused the scroll position to jump back to the top on every
+  // action.
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+
+  useEffect(() => {
+    if (!loading && !clusterStatsLoading && !hasLoadedOnce) {
+      setHasLoadedOnce(true);
+    }
+  }, [loading, clusterStatsLoading, hasLoadedOnce]);
+
   function refreshAll() {
     refresh();
     refreshJobs();
     refreshClusterStats();
   }
 
-  if (loading || clusterStatsLoading) {
+  if ((loading || clusterStatsLoading) && !hasLoadedOnce) {
     return (
       <main className="flex-1 bg-slate-950 p-8 text-white">
         Loading cluster...
@@ -136,7 +153,7 @@ export default function DashboardPage() {
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <RegisterNodeForm
-          onCreated={refresh}
+          onCreated={refreshAll}
         />
 
         <SubmitJobForm
