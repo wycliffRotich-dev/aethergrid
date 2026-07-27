@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import { LayoutDashboard, Server, ClipboardList } from "lucide-react";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -6,44 +7,9 @@ interface SidebarProps {
 }
 
 const navItems: { path: string; label: string; icon: React.ReactNode }[] = [
-  { 
-    path: "/", 
-    label: "Dashboard",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <rect width="7" height="9" x="3" y="3" rx="1"/>
-        <rect width="7" height="5" x="14" y="3" rx="1"/>
-        <rect width="7" height="9" x="14" y="12" rx="1"/>
-        <rect width="7" height="5" x="3" y="16" rx="1"/>
-      </svg>
-    ),
-  },
-  { 
-    path: "/nodes", 
-    label: "Nodes",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <rect width="20" height="8" x="2" y="2" rx="2" ry="2"/>
-        <rect width="20" height="8" x="2" y="14" rx="2" ry="2"/>
-        <line x1="6" x2="6.01" y1="6" y2="6"/>
-        <line x1="6" x2="6.01" y1="18" y2="18"/>
-      </svg>
-    ),
-  },
-  { 
-    path: "/jobs", 
-    label: "Jobs",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
-        <path d="M15 2H9a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1z"/>
-        <path d="M12 11h4"/>
-        <path d="M12 16h4"/>
-        <path d="M8 11h.01"/>
-        <path d="M8 16h.01"/>
-      </svg>
-    ),
-  },
+  { path: "/", label: "Dashboard", icon: <LayoutDashboard size={20} color="#9ca3af" /> },
+  { path: "/nodes", label: "Nodes", icon: <Server size={20} color="#9ca3af" /> },
+  { path: "/jobs", label: "Jobs", icon: <ClipboardList size={20} color="#9ca3af" /> },
 ];
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
@@ -80,11 +46,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               }
             `}
           >
-            {({ isActive }) => (
-              <span className={isActive ? 'text-white' : 'text-neutral-500'}>
-                {item.icon}
-              </span>
-            )}
+            <span className="flex-shrink-0">
+              {item.icon}
+            </span>
             {item.label}
           </NavLink>
         ))}
