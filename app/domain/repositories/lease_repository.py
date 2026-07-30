@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from datetime import timedelta
+from uuid import UUID
 
 from app.domain.entities.lease import Lease
 from app.domain.value_objects.job_id import JobId
@@ -22,7 +24,33 @@ class LeaseRepository(ABC):
         lease: Lease,
     ) -> None:
         """
-        Persist a lease.
+        Persist a lease, creating it if it doesn't already
+        exist.
+
+        This is the acquire-time path -- AcquireLeaseService
+        calls this for a lease that has never existed before.
+        It is deliberately permissive: it doesn't check
+        whether the row is already there. Renewing an
+        existing lease should go through renew() instead,
+        which fails loudly rather than silently recreating a
+        lease someone else already reclaimed.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def renew(
+        self,
+        lease_id: UUID,
+        duration: timedelta,
+    ) -> None:
+        """
+        Extend an existing lease's expiry in place.
+
+        Raises LeaseNotFoundError if no lease with this id
+        currently exists. This must never fall back to
+        creating a new row -- a renewal racing reconciliation's
+        delete of the same lease needs to fail, not resurrect
+        a lease that's already been handed to someone else.
         """
         raise NotImplementedError
 
