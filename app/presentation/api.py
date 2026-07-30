@@ -7,7 +7,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.presentation.dependencies import get_cluster_tick_service
+from app.presentation.dependencies import (
+    get_cluster_tick_service,
+    get_reconciliation_loop,
+)
 from app.presentation.routers.cluster import (
     router as cluster_router,
 )
@@ -29,14 +32,18 @@ TICK_INTERVAL_SECONDS = 1.0
 async def _run_cluster_loop() -> None:
     """
     Repeatedly drive the cluster forward: schedule queued
-    jobs, assign idle workers, and execute assigned work.
+    jobs, assign idle workers, and execute assigned work,
+    then reconcile any state left inconsistent by dead
+    workers, expired leases, or offline nodes.
 
     Runs as a background asyncio task for the lifetime of
     the application. A tick's own internal errors are
     already isolated per-worker by ClusterTickService; this
     outer try/except exists only as a last line of defense
     so a truly unexpected exception can't silently kill the
-    loop without a trace.
+    loop without a trace. Reconciliation is isolated the
+    same way, in its own try/except, so a failure there
+    can't prevent the next cluster tick from running either.
 
     Note: ClusterTickService.execute() runs synchronously,
     including any real subprocess execution via
@@ -48,6 +55,7 @@ async def _run_cluster_loop() -> None:
     block the event loop.
     """
     cluster_tick_service = get_cluster_tick_service()
+    reconciliation_loop = get_reconciliation_loop()
 
     while True:
         try:
@@ -55,6 +63,13 @@ async def _run_cluster_loop() -> None:
         except Exception:
             logger.exception(
                 "Unexpected error running cluster tick.",
+            )
+
+        try:
+            reconciliation_loop.execute()
+        except Exception:
+            logger.exception(
+                "Unexpected error running reconciliation.",
             )
 
         await asyncio.sleep(TICK_INTERVAL_SECONDS)
