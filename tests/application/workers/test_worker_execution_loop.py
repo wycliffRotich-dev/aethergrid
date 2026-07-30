@@ -28,6 +28,9 @@ from app.infrastructure.repositories.in_memory_job_repository import (
 from app.infrastructure.repositories.in_memory_lease_repository import (
     InMemoryLeaseRepository,
 )
+from app.infrastructure.repositories.in_memory_node_repository import (
+    InMemoryNodeRepository,
+)
 from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
@@ -35,7 +38,7 @@ from app.infrastructure.repositories.in_memory_worker_repository import (
 
 def _make_worker_and_job(
     command: list[str] | None = None,
-) -> tuple[Worker, Job]:
+) -> tuple[Worker, Job, Node]:
     node = Node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
@@ -62,22 +65,28 @@ def _make_worker_and_job(
         command=command,
     )
 
-    # Respect the state machine
+    # Respect the state machine, and actually allocate the node's
+    # resources the way AssignWorkerService does in production --
+    # without this, node.available never shrinks, and a test could
+    # pass even if release() were never called at all.
     job.queue()
     job.assign_to(node.id)
+    node.allocate(job.resources)
 
     worker.accept(job)
 
-    return worker, job
+    return worker, job, node
 
 
 def _build_loop(
     worker: Worker,
     job: Job,
+    node: Node,
 ) -> tuple[
     WorkerExecutionLoop,
     InMemoryWorkerRepository,
     InMemoryJobRepository,
+    InMemoryNodeRepository,
     InMemoryLeaseRepository,
 ]:
     lease = Lease.create(
@@ -90,6 +99,7 @@ def _build_loop(
 
     worker_repository = InMemoryWorkerRepository([worker])
     job_repository = InMemoryJobRepository([job])
+    node_repository = InMemoryNodeRepository([node])
 
     renew_lease_service = RenewLeaseService(
         lease_repository=lease_repository,
@@ -105,12 +115,13 @@ def _build_loop(
     loop = WorkerExecutionLoop(
         worker_repository=worker_repository,
         job_repository=job_repository,
+        node_repository=node_repository,
         renew_lease_service=renew_lease_service,
         release_lease_service=release_lease_service,
         job_execution_service=job_execution_service,
     )
 
-    return loop, worker_repository, job_repository, lease_repository
+    return loop, worker_repository, job_repository, node_repository, lease_repository
 
 
 def test_run_once_with_no_command_completes_successfully() -> None:
@@ -119,16 +130,17 @@ def test_run_once_with_no_command_completes_successfully() -> None:
     as an immediate no-op success, matching
     JobExecutionService's own behavior for command=None.
     """
-    worker, job = _make_worker_and_job()
+    worker, job, node = _make_worker_and_job()
 
-    loop, worker_repository, job_repository, lease_repository = (
-        _build_loop(worker, job)
+    loop, worker_repository, job_repository, node_repository, lease_repository = (
+        _build_loop(worker, job, node)
     )
 
     loop.execute(worker.id)
 
     saved_worker = worker_repository.get_by_id(worker.id)
     saved_job = job_repository.get_by_id(job.id)
+    saved_node = node_repository.get_by_id(node.id)
 
     assert saved_worker is not None
     assert saved_worker.is_idle()
@@ -140,6 +152,12 @@ def test_run_once_with_no_command_completes_successfully() -> None:
 
     assert lease_repository.get_by_worker_id(worker.id) is None
 
+    # The actual regression this loop exists to prevent: a completed
+    # job must give its allocated resources back to the node, not
+    # leak them forever.
+    assert saved_node is not None
+    assert saved_node.available == saved_node.capacity
+
 
 def test_run_once_executes_real_successful_command() -> None:
     """
@@ -147,18 +165,19 @@ def test_run_once_executes_real_successful_command() -> None:
     the job's command actually runs, and its real exit code
     flows through to the persisted job.
     """
-    worker, job = _make_worker_and_job(
+    worker, job, node = _make_worker_and_job(
         command=["python3", "-c", "pass"],
     )
 
-    loop, worker_repository, job_repository, lease_repository = (
-        _build_loop(worker, job)
+    loop, worker_repository, job_repository, node_repository, lease_repository = (
+        _build_loop(worker, job, node)
     )
 
     loop.execute(worker.id)
 
     saved_worker = worker_repository.get_by_id(worker.id)
     saved_job = job_repository.get_by_id(job.id)
+    saved_node = node_repository.get_by_id(node.id)
 
     assert saved_worker is not None
     assert saved_worker.is_idle()
@@ -169,6 +188,9 @@ def test_run_once_executes_real_successful_command() -> None:
 
     assert lease_repository.get_by_worker_id(worker.id) is None
 
+    assert saved_node is not None
+    assert saved_node.available == saved_node.capacity
+
 
 def test_run_once_marks_job_and_worker_failed_on_nonzero_exit() -> None:
     """
@@ -177,18 +199,19 @@ def test_run_once_marks_job_and_worker_failed_on_nonzero_exit() -> None:
     COMPLETED. This is the path that did not exist at all
     before this loop actually ran real commands.
     """
-    worker, job = _make_worker_and_job(
+    worker, job, node = _make_worker_and_job(
         command=["python3", "-c", "import sys; sys.exit(7)"],
     )
 
-    loop, worker_repository, job_repository, lease_repository = (
-        _build_loop(worker, job)
+    loop, worker_repository, job_repository, node_repository, lease_repository = (
+        _build_loop(worker, job, node)
     )
 
     loop.execute(worker.id)
 
     saved_worker = worker_repository.get_by_id(worker.id)
     saved_job = job_repository.get_by_id(job.id)
+    saved_node = node_repository.get_by_id(node.id)
 
     assert saved_worker is not None
     assert saved_worker.is_idle()
@@ -201,6 +224,11 @@ def test_run_once_marks_job_and_worker_failed_on_nonzero_exit() -> None:
     # failed -- outcome and lease lifecycle are independent.
     assert lease_repository.get_by_worker_id(worker.id) is None
 
+    # Node resources must be released on failure too -- a failed
+    # job is done using the node just as much as a completed one.
+    assert saved_node is not None
+    assert saved_node.available == saved_node.capacity
+
 
 def test_run_once_marks_job_failed_when_command_exceeds_timeout() -> None:
     """
@@ -211,19 +239,20 @@ def test_run_once_marks_job_failed_when_command_exceeds_timeout() -> None:
     """
     from datetime import timedelta
 
-    worker, job = _make_worker_and_job(
+    worker, job, node = _make_worker_and_job(
         command=["python3", "-c", "import time; time.sleep(30)"],
     )
     job.execution_timeout = timedelta(seconds=0.5)
 
-    loop, worker_repository, job_repository, lease_repository = (
-        _build_loop(worker, job)
+    loop, worker_repository, job_repository, node_repository, lease_repository = (
+        _build_loop(worker, job, node)
     )
 
     loop.execute(worker.id)
 
     saved_worker = worker_repository.get_by_id(worker.id)
     saved_job = job_repository.get_by_id(job.id)
+    saved_node = node_repository.get_by_id(node.id)
 
     assert saved_worker is not None
     assert saved_worker.is_idle()
@@ -232,6 +261,9 @@ def test_run_once_marks_job_failed_when_command_exceeds_timeout() -> None:
     assert saved_job.is_failed()
 
     assert lease_repository.get_by_worker_id(worker.id) is None
+
+    assert saved_node is not None
+    assert saved_node.available == saved_node.capacity
 
 
 def test_run_once_returns_early_when_worker_has_no_running_job() -> None:
@@ -253,11 +285,13 @@ def test_run_once_returns_early_when_worker_has_no_running_job() -> None:
 
     worker_repository = InMemoryWorkerRepository([worker])
     job_repository = InMemoryJobRepository()
+    node_repository = InMemoryNodeRepository([node])
     lease_repository = InMemoryLeaseRepository()
 
     loop = WorkerExecutionLoop(
         worker_repository=worker_repository,
         job_repository=job_repository,
+        node_repository=node_repository,
         renew_lease_service=RenewLeaseService(
             lease_repository=lease_repository,
         ),

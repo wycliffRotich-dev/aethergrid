@@ -16,6 +16,9 @@ from app.domain.exceptions.lease_not_found_error import LeaseNotFoundError
 from app.domain.repositories.job_repository import (
     JobRepository,
 )
+from app.domain.repositories.node_repository import (
+    NodeRepository,
+)
 from app.domain.repositories.worker_repository import (
     WorkerRepository,
 )
@@ -35,7 +38,8 @@ class WorkerExecutionLoop:
     A worker renews its lease, actually executes its assigned
     job as a real subprocess, records the real outcome
     (success, failure, or timeout) on both the job and the
-    worker, and finally releases the lease regardless of that
+    worker, releases the node's allocated resources back to
+    it, and finally releases the lease regardless of that
     outcome.
 
     Job execution can run far longer than a single lease
@@ -52,18 +56,32 @@ class WorkerExecutionLoop:
     worker.running_job as part of their own transition.
     Saving that captured reference afterward is what persists
     the job's final state and exit code.
+
+    Releasing node resources happens here rather than through
+    a dedicated CompleteJobService/FailJobService, since this
+    loop is the actual production path a job's outcome flows
+    through; those two services exist and are tested, but
+    nothing on the live path ever called them, which meant
+    every completed or failed job silently leaked its
+    allocated resources on the node forever. A missing node is
+    tolerated (job and worker state still persist) rather than
+    treated as fatal, since a node disappearing between
+    allocation and completion is an edge case reconciliation
+    doesn't otherwise handle either today.
     """
 
     def __init__(
         self,
         worker_repository: WorkerRepository,
         job_repository: JobRepository,
+        node_repository: NodeRepository,
         renew_lease_service: RenewLeaseService,
         release_lease_service: ReleaseLeaseService,
         job_execution_service: JobExecutionService,
     ) -> None:
         self._worker_repository = worker_repository
         self._job_repository = job_repository
+        self._node_repository = node_repository
         self._renew_lease_service = renew_lease_service
         self._release_lease_service = release_lease_service
         self._job_execution_service = job_execution_service
@@ -134,6 +152,20 @@ class WorkerExecutionLoop:
             worker.fail(
                 exit_code=result.exit_code,
             )
+
+        if job.assigned_node_id is not None:
+            node = self._node_repository.get_by_id(
+                job.assigned_node_id,
+            )
+
+            if node is not None:
+                node.release(
+                    job.resources,
+                )
+
+                self._node_repository.save(
+                    node,
+                )
 
         self._job_repository.save(
             job,

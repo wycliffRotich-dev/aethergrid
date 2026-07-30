@@ -234,11 +234,11 @@ _job_execution_service = JobExecutionService()
 _worker_execution_loop = WorkerExecutionLoop(
     worker_repository=_worker_repository,
     job_repository=_job_repository,
+    node_repository=_node_repository,
     renew_lease_service=_renew_lease_service,
     release_lease_service=_release_lease_service,
     job_execution_service=_job_execution_service,
 )
-
 
 _domain_scheduler = Scheduler()
 
