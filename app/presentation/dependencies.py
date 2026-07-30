@@ -111,6 +111,18 @@ from app.infrastructure.repositories.in_memory_worker_repository import (
 from app.infrastructure.repositories.sqlite_connection import (
     create_connection,
 )
+from app.application.reconciliation.reconciliation_loop import (
+    ReconciliationLoop,
+)
+from app.application.reconciliation.recover_expired_lease_service import (
+    RecoverExpiredLeaseService,
+)
+from app.application.reconciliation.recover_offline_node_service import (
+    RecoverOfflineNodeService,
+)
+from app.application.services.mark_dead_workers_service import (
+    MarkDeadWorkersService,
+)
 from app.infrastructure.repositories.sqlite_event_repository import (
     SqliteEventRepository,
 )
@@ -244,7 +256,33 @@ _cluster_tick_service = ClusterTickService(
     worker_execution_loop=_worker_execution_loop,
     worker_repository=_worker_repository,
 )
+_mark_dead_workers_service = MarkDeadWorkersService(
+    worker_repository=_worker_repository,
+)
+_recover_expired_lease_service = RecoverExpiredLeaseService(
+    worker_repository=_worker_repository,
+    job_repository=_job_repository,
+    lease_repository=_lease_repository,
+)
+_recover_offline_node_service = RecoverOfflineNodeService(
+    node_repository=_node_repository,
+    worker_repository=_worker_repository,
+    job_repository=_job_repository,
+)
+_reconciliation_loop = ReconciliationLoop(
+    mark_dead_workers_service=_mark_dead_workers_service,
+    recover_expired_lease_service=_recover_expired_lease_service,
+    recover_offline_node_service=_recover_offline_node_service,
+)
 
+
+def get_reconciliation_loop() -> ReconciliationLoop:
+    """
+    Return the ReconciliationLoop, the single entry point for
+    detecting and repairing state left inconsistent by dead
+    workers, expired leases, and offline nodes.
+    """
+    return _reconciliation_loop
 
 def get_create_job_service() -> CreateJobService:
     """
