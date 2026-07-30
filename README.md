@@ -18,22 +18,6 @@
 
 AetherGrid takes workloads, matches them against available compute nodes based on resource requirements and constraints, and manages the full lifecycle: queued, scheduled, running, completed, failed, retried. Jobs run through workers registered against nodes, and job execution ownership is enforced through time-bound leases rather than a simple assignment flag.
 
-### A distributed AI workload scheduler built to demonstrate Clean Architecture, Domain-Driven Design, and real infrastructural decoupling.
-
-[![Tests](https://img.shields.io/badge/tests-185%20passed-brightgreen)](#test-coverage)
-[![License](https://img.shields.io/badge/license-MIT-blue)](#license)
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](#tech-stack)
-[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](#tech-stack)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-336791?logo=postgresql&logoColor=white)](#tech-stack)
-[![React](https://img.shields.io/badge/React-TypeScript-61DAFB?logo=react&logoColor=black)](#tech-stack)
-[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](#tech-stack)
-
-AetherGrid takes workloads, matches them against available compute nodes based on resource requirements and constraints, and manages the full lifecycle: queued, scheduled, running, completed, failed, retried. Jobs run through workers registered against nodes, and job execution ownership is enforced through time-bound leases rather than a simple assignment flag.
-
-This isn't an attempt to replace Kubernetes or Ray. It's a deliberate implementation of **Clean Architecture** and **Domain-Driven Design** applied to a scheduling problem, where the architectural boundaries are enforced by tests, not just diagrams, and every non-obvious decision is written down as an ADR.
-
----
-
 ## Tech Stack
 
 | Layer | Technology |
