@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from datetime import timedelta
+from uuid import UUID
+
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-from app.domain.entities.lease import Lease
+from app.domain.entities.lease import Lease, utc_now
+from app.domain.exceptions.lease_not_found_error import LeaseNotFoundError
 from app.domain.repositories.lease_repository import (
     LeaseRepository,
 )
@@ -13,8 +17,6 @@ from app.domain.value_objects.worker_id import WorkerId
 
 class PostgresLeaseRepository(LeaseRepository):
     """
-    PostgreSQL-backed implementation of LeaseRepository.
-
     Uses raw psycopg (no ORM), consistent with
     PostgresNodeRepository, PostgresEventRepository, and
     PostgresWorkerRepository.
@@ -54,6 +56,26 @@ class PostgresLeaseRepository(LeaseRepository):
                     "expires_at": lease.expires_at,
                 },
             )
+
+    def renew(self, lease_id: UUID, duration: timedelta) -> None:
+        # deliberately a plain UPDATE, not an upsert -- if the row's
+        # gone (reconciliation reclaimed it while we were mid-renewal),
+        # rowcount comes back 0 and we raise instead of recreating it
+        with self._pool.connection() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE leases
+                SET expires_at = %(expires_at)s
+                WHERE id = %(id)s
+                """,
+                {
+                    "id": str(lease_id),
+                    "expires_at": utc_now() + duration,
+                },
+            )
+
+            if cursor.rowcount == 0:
+                raise LeaseNotFoundError(lease_id)
 
     def get_by_job_id(self, job_id: JobId) -> Lease | None:
         with self._pool.connection() as conn:

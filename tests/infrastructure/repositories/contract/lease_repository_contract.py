@@ -3,9 +3,10 @@ from __future__ import annotations
 import pytest
 
 from app.domain.entities.job import Job
-from app.domain.entities.lease import Lease
+from app.domain.entities.lease import DEFAULT_LEASE_DURATION, Lease
 from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
+from app.domain.exceptions.lease_not_found_error import LeaseNotFoundError
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
@@ -129,6 +130,67 @@ class LeaseRepositoryContract:
         assert (
             repository.get_by_worker_id(
                 lease.worker_id,
+            )
+            is None
+        )
+
+    def test_renew_extends_expiry_of_an_existing_lease(
+        self,
+        repository,
+    ) -> None:
+        lease = self._make_lease()
+
+        repository.save(lease)
+
+        original_expiry = lease.expires_at
+
+        repository.renew(
+            lease.id,
+            DEFAULT_LEASE_DURATION,
+        )
+
+        renewed = repository.get_by_job_id(
+            lease.job_id,
+        )
+
+        assert renewed is not None
+        assert renewed.expires_at > original_expiry
+
+    def test_renew_raises_when_lease_does_not_exist(
+        self,
+        repository,
+    ) -> None:
+        # deliberately never saved -- this is the reconciliation-
+        # already-reclaimed-it case, and it must not silently create
+        # a lease that looks like it was always there
+        lease = self._make_lease()
+
+        with pytest.raises(LeaseNotFoundError):
+            repository.renew(
+                lease.id,
+                DEFAULT_LEASE_DURATION,
+            )
+
+    def test_renew_does_not_resurrect_a_deleted_lease(
+        self,
+        repository,
+    ) -> None:
+        # the actual bug this whole contract addition exists to
+        # prevent: a renewal racing a delete must not recreate the row
+        lease = self._make_lease()
+
+        repository.save(lease)
+        repository.delete(lease.job_id)
+
+        with pytest.raises(LeaseNotFoundError):
+            repository.renew(
+                lease.id,
+                DEFAULT_LEASE_DURATION,
+            )
+
+        assert (
+            repository.get_by_job_id(
+                lease.job_id,
             )
             is None
         )

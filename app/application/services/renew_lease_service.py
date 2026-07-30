@@ -13,10 +13,12 @@ class RenewLeaseService:
     """
     Extend the lifetime of a worker's active lease.
 
-    Workers periodically renew their lease while
-    executing a job. If renewal stops, the lease
-    eventually expires and the scheduler can
-    recover the job.
+    Workers periodically renew their lease while executing a
+    job. If renewal stops -- or fails, because the lease was
+    already reclaimed by reconciliation -- the caller needs to
+    know about it, not have the renewal quietly no-op or,
+    worse, recreate a lease that's already been handed to
+    someone else.
     """
 
     def __init__(
@@ -32,6 +34,10 @@ class RenewLeaseService:
     ) -> None:
         """
         Renew the worker's active lease.
+
+        Raises LeaseNotFoundError (via the repository) if the
+        lease no longer exists -- this worker doesn't own the
+        job anymore.
         """
         lease = self._lease_repository.get_by_worker_id(
             worker_id,
@@ -42,10 +48,7 @@ class RenewLeaseService:
                 "Worker does not own an active lease."
             )
 
-        lease.renew(
+        self._lease_repository.renew(
+            lease.id,
             duration,
-        )
-
-        self._lease_repository.save(
-            lease,
         )
