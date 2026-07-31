@@ -3,6 +3,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.application.services.cancel_job_service import (
+    CancelJobService,
+)
 from app.application.services.create_job_service import (
     CreateJobService,
 )
@@ -18,6 +21,12 @@ from app.application.services.list_jobs_service import (
 from app.application.services.list_queued_jobs_service import (
     ListQueuedJobsService,
 )
+from app.application.services.retry_job_service import (
+    RetryJobService,
+)
+from app.domain.exceptions.invalid_job_transition import (
+    InvalidJobTransition,
+)
 from app.domain.exceptions.job_not_found_error import (
     JobNotFoundError,
 )
@@ -26,11 +35,13 @@ from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
 from app.presentation.dependencies import (
+    get_cancel_job_service,
     get_create_job_service,
     get_get_job_history_service,
     get_get_job_service,
     get_list_jobs_service,
     get_list_queued_jobs_service,
+    get_retry_job_service,
 )
 from app.presentation.schemas.create_job_request import (
     CreateJobRequest,
@@ -218,3 +229,100 @@ def get_job_history(
         }
         for event in events
     ]
+
+@router.post(
+    "/{job_id}/cancel",
+    response_model=GetJobResponse,
+    status_code=status.HTTP_200_OK,
+)
+def cancel_job(
+    job_id: str,
+    service: Annotated[
+        CancelJobService,
+        Depends(get_cancel_job_service),
+    ],
+) -> GetJobResponse:
+    """
+    Cancel a queued or scheduled job.
+
+    A job that has already started running, or has already
+    reached a terminal state, cannot be cancelled -- that's
+    a conflict with the job's current state, not a bad
+    request or a missing resource.
+    """
+    job_uuid = JobId(
+        value=UUID(job_id),
+    )
+
+    try:
+        job = service.execute(job_uuid)
+    except InvalidJobTransition as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found.",
+        )
+
+    return GetJobResponse(
+        id=str(job.id),
+        status=job.status.name,
+        cpu_cores=job.resources.cpu_cores,
+        memory_mib=job.resources.memory_mib,
+        vram_mib=job.resources.vram_mib,
+        exit_code=job.exit_code,
+        submitted_at=job.submitted_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+    )
+
+
+@router.post(
+    "/{job_id}/retry",
+    response_model=GetJobResponse,
+    status_code=status.HTTP_200_OK,
+)
+def retry_job(
+    job_id: str,
+    service: Annotated[
+        RetryJobService,
+        Depends(get_retry_job_service),
+    ],
+) -> GetJobResponse:
+    """
+    Retry a failed job if it still has retries remaining.
+
+    If the job isn't FAILED, or has exhausted its retry
+    budget, it's returned unchanged rather than treated as
+    an error -- asking to retry a job that doesn't need or
+    can't accept a retry isn't a client mistake worth
+    rejecting, it's a no-op worth reporting honestly.
+    """
+    job_uuid = JobId(
+        value=UUID(job_id),
+    )
+
+    job = service.execute(job_uuid)
+
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found.",
+        )
+
+    return GetJobResponse(
+        id=str(job.id),
+        status=job.status.name,
+        cpu_cores=job.resources.cpu_cores,
+        memory_mib=job.resources.memory_mib,
+        vram_mib=job.resources.vram_mib,
+        exit_code=job.exit_code,
+        submitted_at=job.submitted_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+    )
+
