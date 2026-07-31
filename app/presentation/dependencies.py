@@ -225,12 +225,11 @@ _release_lease_service = ReleaseLeaseService(
     worker_repository=_worker_repository,
 )
 
-
 _assign_worker_service = AssignWorkerService(
     worker_repository=_worker_repository,
     acquire_lease_service=_acquire_lease_service,
+    record_job_events_service=_record_job_events_service,
 )
-
 
 _register_worker_service = RegisterWorkerService(
     worker_repository=_worker_repository,
