@@ -257,8 +257,8 @@ _scheduler_loop_service = SchedulerLoopService(
     node_repository=_node_repository,
     scheduler=_domain_scheduler,
     assign_worker_service=_assign_worker_service,
+    record_job_events_service=_record_job_events_service,
 )
-
 
 _cluster_tick_service = ClusterTickService(
     scheduler_loop_service=_scheduler_loop_service,

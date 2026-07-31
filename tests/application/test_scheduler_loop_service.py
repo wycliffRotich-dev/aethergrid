@@ -1,6 +1,9 @@
 from app.application.services.assign_worker_service import (
     AssignWorkerService,
 )
+from app.application.services.record_job_events_service import (
+    RecordJobEventsService,
+)
 from app.application.services.scheduler_loop_service import (
     SchedulerLoopService,
 )
@@ -16,6 +19,9 @@ from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
 from app.domain.value_objects.worker_id import WorkerId
+from app.infrastructure.repositories.in_memory_event_repository import (
+    InMemoryEventRepository,
+)
 from app.infrastructure.repositories.in_memory_job_repository import (
     InMemoryJobRepository,
 )
@@ -121,3 +127,52 @@ def test_scheduler_loop_assigns_idle_worker_and_starts_job() -> None:
     assert stored_worker is not None
     assert stored_worker.status == WorkerStatus.BUSY
     assert stored_worker.running_job is job
+def test_scheduler_loop_records_job_scheduled_event() -> None:
+    """
+    Scheduling a job onto a node must record a JobScheduled
+    event, the same way CreateJobService already records
+    JobCreated -- the event history should reflect the job's
+    real lifecycle, not just its creation.
+    """
+    node = Node(
+        id=NodeId.new(),
+        capacity=ResourceRequirements(
+            cpu_cores=16,
+            memory_mib=32768,
+            vram_mib=16384,
+        ),
+    )
+
+    job = Job(
+        id=JobId.new(),
+        resources=ResourceRequirements(
+            cpu_cores=4,
+            memory_mib=4096,
+            vram_mib=2048,
+        ),
+    )
+    job.queue()
+
+    jobs = InMemoryJobRepository([job])
+    nodes = InMemoryNodeRepository([node])
+    events = InMemoryEventRepository()
+
+    record_job_events_service = RecordJobEventsService(
+        event_repository=events,
+    )
+
+    service = SchedulerLoopService(
+        jobs,
+        nodes,
+        Scheduler(),
+        record_job_events_service=record_job_events_service,
+    )
+
+    service.execute()
+
+    recorded = events.list()
+
+    assert len(recorded) == 1
+    assert recorded[0].event_type == "JobScheduled"
+    assert recorded[0].aggregate_id == str(job.id)
+    assert recorded[0].aggregate_type == "Job"

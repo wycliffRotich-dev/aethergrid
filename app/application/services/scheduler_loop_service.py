@@ -3,6 +3,9 @@ from __future__ import annotations
 from app.application.services.assign_worker_service import (
     AssignWorkerService,
 )
+from app.application.services.record_job_events_service import (
+    RecordJobEventsService,
+)
 from app.domain.enums.job_status import JobStatus
 from app.domain.repositories.job_repository import (
     JobRepository,
@@ -25,11 +28,13 @@ class SchedulerLoopService:
         node_repository: NodeRepository,
         scheduler: Scheduler,
         assign_worker_service: AssignWorkerService | None = None,
+        record_job_events_service: RecordJobEventsService | None = None,
     ) -> None:
         self._job_repository = job_repository
         self._node_repository = node_repository
         self._scheduler = scheduler
         self._assign_worker_service = assign_worker_service
+        self._record_job_events_service = record_job_events_service
 
     def execute(
         self,
@@ -73,6 +78,12 @@ class SchedulerLoopService:
             self._job_repository.save(
                 job,
             )
+
+            if self._record_job_events_service is not None:
+                self._record_job_events_service.record(
+                    aggregate_id=str(job.id),
+                    event_type="JobScheduled",
+                )
 
             if self._assign_worker_service is not None:
                 self._assign_worker_service.execute(

@@ -309,3 +309,34 @@ def test_run_once_returns_early_when_worker_has_no_running_job() -> None:
     saved_worker = worker_repository.get_by_id(worker.id)
     assert saved_worker is not None
     assert saved_worker.is_idle()
+def test_run_once_does_not_restart_a_job_already_running() -> None:
+    """
+    AssignWorkerService can start a job at assignment time, and
+    ClusterTickService drives every worker with a running_job
+    through this loop on every subsequent tick. Without a guard,
+    a job that's already RUNNING gets a second worker.start() call
+    and crashes on InvalidJobTransition, forever, since the crash
+    happens before the job can reach a terminal state and clear
+    running_job. This proves the loop tolerates a job that's
+    already running instead of trying to start it again.
+    """
+    worker, job, node = _make_worker_and_job()
+
+    # simulate AssignWorkerService having already started the job
+    worker.start()
+
+    loop, worker_repository, job_repository, node_repository, lease_repository = (
+        _build_loop(worker, job, node)
+    )
+
+    loop.execute(worker.id)
+
+    saved_worker = worker_repository.get_by_id(worker.id)
+    saved_job = job_repository.get_by_id(job.id)
+
+    assert saved_worker is not None
+    assert saved_worker.is_idle()
+
+    assert saved_job is not None
+    assert saved_job.is_completed()
+    assert saved_job.exit_code == 0
