@@ -107,7 +107,15 @@ class WorkerExecutionLoop:
 
         job = worker.running_job
 
-        worker.start()
+        # AssignWorkerService may have already started the job at
+        # assignment time -- this loop runs every tick for as long as
+        # a worker holds a running_job, so without this guard, a job
+        # that's already RUNNING gets a second worker.start() call on
+        # the very next tick and crashes on InvalidJobTransition,
+        # forever, since the crash happens before the job can ever
+        # reach a terminal state and clear running_job.
+        if not job.is_running():
+            worker.start()
 
         stop_renewing = threading.Event()
         lost_lease: list[LeaseNotFoundError] = []
