@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from app.domain.exceptions.node_not_found_error import (
+    NodeNotFoundError,
+)
+from app.domain.exceptions.node_still_alive_error import (
+    NodeStillAliveError,
+)
 from app.domain.repositories.node_repository import (
     NodeRepository,
 )
@@ -24,16 +30,24 @@ class RemoveOfflineNodeService:
     ) -> None:
         """
         Remove an offline compute node.
+
+        Raises:
+            NodeNotFoundError:
+                If the node does not exist.
+            NodeStillAliveError:
+                If the node is still sending heartbeats.
         """
         node = self._node_repository.get_by_id(
             node_id,
         )
 
         if node is None:
-            return
+            raise NodeNotFoundError(node_id)
 
         if node.is_alive():
-            return
+            raise NodeStillAliveError(
+                f"Node {node_id} is still alive and cannot be removed."
+            )
 
         self._node_repository.delete(
             node_id,

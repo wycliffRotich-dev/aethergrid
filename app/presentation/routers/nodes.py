@@ -17,8 +17,14 @@ from app.application.services.list_nodes_service import (
 from app.application.services.list_offline_nodes_service import (
     ListOfflineNodesService,
 )
+from app.application.services.remove_offline_node_service import (
+    RemoveOfflineNodeService,
+)
 from app.domain.exceptions.node_not_found_error import (
     NodeNotFoundError,
+)
+from app.domain.exceptions.node_still_alive_error import (
+    NodeStillAliveError,
 )
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
@@ -30,6 +36,7 @@ from app.presentation.dependencies import (
     get_heartbeat_node_service,
     get_list_nodes_service,
     get_list_offline_nodes_service,
+    get_remove_offline_node_service,
 )
 from app.presentation.schemas.create_node_request import (
     CreateNodeRequest,
@@ -220,3 +227,36 @@ def heartbeat_node(
         available_vram_mib=node.available.vram_mib,
         is_alive=node.is_alive(),
     )
+@router.delete(
+    "/{node_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_offline_node(
+    node_id: str,
+    service: Annotated[
+        RemoveOfflineNodeService,
+        Depends(get_remove_offline_node_service),
+    ],
+) -> None:
+    """
+    Permanently remove a node that is confirmed offline.
+
+    A node that's still sending heartbeats cannot be
+    removed this way -- that's a conflict with the node's
+    current state. Deregistering a live node has to go
+    through draining it first, not a direct delete.
+    """
+    try:
+        service.execute(
+            NodeId.from_string(node_id),
+        )
+    except NodeNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except NodeStillAliveError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc

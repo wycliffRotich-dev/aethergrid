@@ -17,6 +17,9 @@ from app.application.services.acquire_lease_service import (
 from app.application.services.assign_worker_service import (
     AssignWorkerService,
 )
+from app.application.services.cancel_job_service import (
+    CancelJobService,
+)
 from app.application.services.cluster_capacity_service import (
     ClusterCapacityService,
 )
@@ -80,8 +83,14 @@ from app.application.services.register_worker_service import (
 from app.application.services.release_lease_service import (
     ReleaseLeaseService,
 )
+from app.application.services.remove_offline_node_service import (
+    RemoveOfflineNodeService,
+)
 from app.application.services.renew_lease_service import (
     RenewLeaseService,
+)
+from app.application.services.retry_job_service import (
+    RetryJobService,
 )
 from app.application.services.scheduler_loop_service import (
     SchedulerLoopService,
@@ -304,6 +313,23 @@ def get_get_job_service() -> GetJobService:
         job_repository=_job_repository,
     )
 
+def get_retry_job_service() -> RetryJobService:
+    """
+    Return RetryJobService.
+    """
+
+    return RetryJobService(
+        job_repository=_job_repository,
+    )
+
+def get_cancel_job_service() -> CancelJobService:
+    """
+    Return CancelJobService.
+    """
+
+    return CancelJobService(
+        job_repository=_job_repository,
+    )
 
 def get_worker_heartbeat_service() -> WorkerHeartbeatService:
     """
@@ -313,7 +339,6 @@ def get_worker_heartbeat_service() -> WorkerHeartbeatService:
     return WorkerHeartbeatService(
         worker_repository=_worker_repository,
     )
-
 
 def get_get_job_history_service() -> GetJobHistoryService:
     """
@@ -391,7 +416,14 @@ def get_get_node_service() -> GetNodeService:
     return GetNodeService(
         node_repository=_node_repository,
     )
+def get_remove_offline_node_service() -> RemoveOfflineNodeService:
+    """
+    Return RemoveOfflineNodeService.
+    """
 
+    return RemoveOfflineNodeService(
+        node_repository=_node_repository,
+    )
 
 def get_cluster_utilization_service() -> ClusterUtilizationService:
     """
