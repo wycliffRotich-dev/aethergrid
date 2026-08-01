@@ -246,6 +246,7 @@ _worker_execution_loop = WorkerExecutionLoop(
     renew_lease_service=_renew_lease_service,
     release_lease_service=_release_lease_service,
     job_execution_service=_job_execution_service,
+    record_job_events_service=_record_job_events_service,
 )
 
 _domain_scheduler = Scheduler()

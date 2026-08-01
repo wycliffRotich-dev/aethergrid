@@ -3,6 +3,9 @@ from __future__ import annotations
 from app.application.services.job_execution_service import (
     JobExecutionService,
 )
+from app.application.services.record_job_events_service import (
+    RecordJobEventsService,
+)
 from app.application.services.release_lease_service import (
     ReleaseLeaseService,
 )
@@ -22,6 +25,9 @@ from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
 from app.domain.value_objects.worker_id import WorkerId
+from app.infrastructure.repositories.in_memory_event_repository import (
+    InMemoryEventRepository,
+)
 from app.infrastructure.repositories.in_memory_job_repository import (
     InMemoryJobRepository,
 )
@@ -82,6 +88,7 @@ def _build_loop(
     worker: Worker,
     job: Job,
     node: Node,
+    record_job_events_service: RecordJobEventsService | None = None,
 ) -> tuple[
     WorkerExecutionLoop,
     InMemoryWorkerRepository,
@@ -89,6 +96,40 @@ def _build_loop(
     InMemoryNodeRepository,
     InMemoryLeaseRepository,
 ]:
+    lease = Lease.create(
+        worker_id=worker.id,
+        job_id=job.id,
+    )
+
+    lease_repository = InMemoryLeaseRepository()
+    lease_repository.save(lease)
+
+    worker_repository = InMemoryWorkerRepository([worker])
+    job_repository = InMemoryJobRepository([job])
+    node_repository = InMemoryNodeRepository([node])
+
+    renew_lease_service = RenewLeaseService(
+        lease_repository=lease_repository,
+    )
+
+    release_lease_service = ReleaseLeaseService(
+        lease_repository=lease_repository,
+        worker_repository=worker_repository,
+    )
+
+    job_execution_service = JobExecutionService()
+
+    loop = WorkerExecutionLoop(
+        worker_repository=worker_repository,
+        job_repository=job_repository,
+        node_repository=node_repository,
+        renew_lease_service=renew_lease_service,
+        release_lease_service=release_lease_service,
+        job_execution_service=job_execution_service,
+        record_job_events_service=record_job_events_service,
+    )
+
+    return loop, worker_repository, job_repository, node_repository, lease_repository
     lease = Lease.create(
         worker_id=worker.id,
         job_id=job.id,
@@ -340,3 +381,54 @@ def test_run_once_does_not_restart_a_job_already_running() -> None:
     assert saved_job is not None
     assert saved_job.is_completed()
     assert saved_job.exit_code == 0
+def test_run_once_records_job_completed_event_on_success() -> None:
+    """
+    A successful run must record a JobCompleted event.
+    """
+    worker, job, node = _make_worker_and_job()
+
+    events = InMemoryEventRepository()
+    record_job_events_service = RecordJobEventsService(
+        event_repository=events,
+    )
+
+    loop, worker_repository, job_repository, node_repository, lease_repository = (
+        _build_loop(worker, job, node, record_job_events_service)
+    )
+
+    loop.execute(worker.id)
+
+    recorded = events.list()
+
+    assert len(recorded) == 1
+    assert recorded[0].event_type == "JobCompleted"
+    assert recorded[0].aggregate_id == str(job.id)
+    assert recorded[0].aggregate_type == "Job"
+
+
+def test_run_once_records_job_failed_event_on_nonzero_exit() -> None:
+    """
+    A run that exits with a nonzero code must record a
+    JobFailed event, not JobCompleted.
+    """
+    worker, job, node = _make_worker_and_job(
+        command=["python3", "-c", "import sys; sys.exit(7)"],
+    )
+
+    events = InMemoryEventRepository()
+    record_job_events_service = RecordJobEventsService(
+        event_repository=events,
+    )
+
+    loop, worker_repository, job_repository, node_repository, lease_repository = (
+        _build_loop(worker, job, node, record_job_events_service)
+    )
+
+    loop.execute(worker.id)
+
+    recorded = events.list()
+
+    assert len(recorded) == 1
+    assert recorded[0].event_type == "JobFailed"
+    assert recorded[0].aggregate_id == str(job.id)
+    assert recorded[0].aggregate_type == "Job"
