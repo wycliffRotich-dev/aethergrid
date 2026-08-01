@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from app.application.services.record_job_events_service import (
+    RecordJobEventsService,
+)
 from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
 from app.domain.entities.worker import Worker
@@ -14,8 +17,10 @@ class AcquireLeaseService:
     def __init__(
         self,
         lease_repository: LeaseRepository,
+        record_job_events_service: RecordJobEventsService | None = None,
     ) -> None:
         self._lease_repository = lease_repository
+        self._record_job_events_service = record_job_events_service
 
     def execute(
         self,
@@ -44,5 +49,11 @@ class AcquireLeaseService:
         self._lease_repository.save(
             lease,
         )
+
+        if self._record_job_events_service is not None:
+            self._record_job_events_service.record(
+                aggregate_id=str(job.id),
+                event_type="LeaseAcquired",
+            )
 
         return lease
