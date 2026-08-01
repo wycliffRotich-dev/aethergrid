@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from app.application.services.record_job_events_service import (
+    RecordJobEventsService,
+)
 from app.domain.repositories.job_repository import (
     JobRepository,
 )
@@ -25,10 +28,12 @@ class RecoverExpiredLeaseService:
         worker_repository: WorkerRepository,
         job_repository: JobRepository,
         lease_repository: LeaseRepository,
+        record_job_events_service: RecordJobEventsService | None = None,
     ) -> None:
         self._worker_repository = worker_repository
         self._job_repository = job_repository
         self._lease_repository = lease_repository
+        self._record_job_events_service = record_job_events_service
 
     def execute(
         self,
@@ -75,6 +80,12 @@ class RecoverExpiredLeaseService:
                 self._job_repository.save(
                     job,
                 )
+
+                if self._record_job_events_service is not None:
+                    self._record_job_events_service.record(
+                        aggregate_id=str(job.id),
+                        event_type="JobReclaimed",
+                    )
 
             self._lease_repository.delete(
                 lease.job_id,
