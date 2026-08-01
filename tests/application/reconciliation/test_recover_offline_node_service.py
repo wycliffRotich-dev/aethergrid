@@ -3,6 +3,9 @@ from datetime import UTC, datetime, timedelta
 from app.application.reconciliation.recover_offline_node_service import (
     RecoverOfflineNodeService,
 )
+from app.application.services.record_job_events_service import (
+    RecordJobEventsService,
+)
 from app.domain.entities.job import Job
 from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
@@ -12,6 +15,9 @@ from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
 from app.domain.value_objects.worker_id import WorkerId
+from app.infrastructure.repositories.in_memory_event_repository import (
+    InMemoryEventRepository,
+)
 from app.infrastructure.repositories.in_memory_job_repository import (
     InMemoryJobRepository,
 )
@@ -141,3 +147,57 @@ def test_recover_offline_node_fails_job_once_retries_exhausted() -> None:
 
     assert recovered_job is not None
     assert recovered_job.is_failed()
+def test_recover_offline_node_records_job_reclaimed_event() -> None:
+    """
+    Reclaiming a job assigned to an offline node must
+    record a JobReclaimed event.
+    """
+    node = _make_offline_node()
+
+    worker = Worker(
+        id=WorkerId.new(),
+        node=node,
+    )
+
+    worker.ready()
+
+    job = Job(
+        id=JobId.new(),
+        resources=ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=512,
+            vram_mib=0,
+        ),
+        max_retries=1,
+    )
+
+    job.queue()
+    job.assign_to(node.id)
+
+    worker.accept(job)
+    worker.start()
+
+    node_repository = InMemoryNodeRepository([node])
+    worker_repository = InMemoryWorkerRepository([worker])
+    job_repository = InMemoryJobRepository([job])
+
+    events = InMemoryEventRepository()
+    record_job_events_service = RecordJobEventsService(
+        event_repository=events,
+    )
+
+    service = RecoverOfflineNodeService(
+        node_repository=node_repository,
+        worker_repository=worker_repository,
+        job_repository=job_repository,
+        record_job_events_service=record_job_events_service,
+    )
+
+    service.execute()
+
+    recorded = events.list()
+
+    assert len(recorded) == 1
+    assert recorded[0].event_type == "JobReclaimed"
+    assert recorded[0].aggregate_id == str(job.id)
+    assert recorded[0].aggregate_type == "Job"

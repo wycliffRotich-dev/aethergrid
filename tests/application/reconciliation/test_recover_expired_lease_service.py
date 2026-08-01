@@ -5,6 +5,9 @@ from datetime import timedelta
 from app.application.reconciliation.recover_expired_lease_service import (
     RecoverExpiredLeaseService,
 )
+from app.application.services.record_job_events_service import (
+    RecordJobEventsService,
+)
 from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
 from app.domain.entities.node import Node
@@ -15,6 +18,9 @@ from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
 from app.domain.value_objects.worker_id import WorkerId
+from app.infrastructure.repositories.in_memory_event_repository import (
+    InMemoryEventRepository,
+)
 from app.infrastructure.repositories.in_memory_job_repository import (
     InMemoryJobRepository,
 )
@@ -164,3 +170,60 @@ def test_recover_expired_lease_fails_job_once_retries_exhausted() -> None:
     assert (
         lease_repository.get_by_worker_id(worker.id) is None
     )
+def test_recover_expired_lease_records_job_reclaimed_event() -> None:
+    """
+    Reclaiming a job whose lease expired must record a
+    JobReclaimed event.
+    """
+    node = _make_node()
+
+    worker = Worker(
+        id=WorkerId.new(),
+        node=node,
+    )
+
+    worker.ready()
+
+    job = Job(
+        id=JobId.new(),
+        resources=ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=512,
+            vram_mib=0,
+        ),
+        max_retries=1,
+    )
+
+    job.queue()
+    job.assign_to(node.id)
+
+    worker.accept(job)
+    worker.start()
+
+    lease = _make_expired_lease(worker, job)
+
+    worker_repository = InMemoryWorkerRepository([worker])
+    job_repository = InMemoryJobRepository([job])
+    lease_repository = InMemoryLeaseRepository()
+    lease_repository.save(lease)
+
+    events = InMemoryEventRepository()
+    record_job_events_service = RecordJobEventsService(
+        event_repository=events,
+    )
+
+    service = RecoverExpiredLeaseService(
+        worker_repository=worker_repository,
+        job_repository=job_repository,
+        lease_repository=lease_repository,
+        record_job_events_service=record_job_events_service,
+    )
+
+    service.execute()
+
+    recorded = events.list()
+
+    assert len(recorded) == 1
+    assert recorded[0].event_type == "JobReclaimed"
+    assert recorded[0].aggregate_id == str(job.id)
+    assert recorded[0].aggregate_type == "Job"

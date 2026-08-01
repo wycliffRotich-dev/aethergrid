@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from app.application.services.record_job_events_service import (
+    RecordJobEventsService,
+)
 from app.domain.repositories.job_repository import (
     JobRepository,
 )
@@ -27,10 +30,12 @@ class RecoverOfflineNodeService:
         node_repository: NodeRepository,
         worker_repository: WorkerRepository,
         job_repository: JobRepository,
+        record_job_events_service: RecordJobEventsService | None = None,
     ) -> None:
         self._node_repository = node_repository
         self._worker_repository = worker_repository
         self._job_repository = job_repository
+        self._record_job_events_service = record_job_events_service
 
     def execute(
         self,
@@ -68,3 +73,9 @@ class RecoverOfflineNodeService:
             self._job_repository.save(
                 job,
             )
+
+            if self._record_job_events_service is not None:
+                self._record_job_events_service.record(
+                    aggregate_id=str(job.id),
+                    event_type="JobReclaimed",
+                )
