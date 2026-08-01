@@ -5,6 +5,9 @@ import threading
 from app.application.services.job_execution_service import (
     JobExecutionService,
 )
+from app.application.services.record_job_events_service import (
+    RecordJobEventsService,
+)
 from app.application.services.release_lease_service import (
     ReleaseLeaseService,
 )
@@ -78,6 +81,7 @@ class WorkerExecutionLoop:
         renew_lease_service: RenewLeaseService,
         release_lease_service: ReleaseLeaseService,
         job_execution_service: JobExecutionService,
+        record_job_events_service: RecordJobEventsService | None = None,
     ) -> None:
         self._worker_repository = worker_repository
         self._job_repository = job_repository
@@ -85,7 +89,7 @@ class WorkerExecutionLoop:
         self._renew_lease_service = renew_lease_service
         self._release_lease_service = release_lease_service
         self._job_execution_service = job_execution_service
-
+        self._record_job_events_service = record_job_events_service
     def execute(
         self,
         worker_id: WorkerId,
@@ -156,10 +160,22 @@ class WorkerExecutionLoop:
             worker.complete(
                 exit_code=result.exit_code,
             )
+
+            if self._record_job_events_service is not None:
+                self._record_job_events_service.record(
+                    aggregate_id=str(job.id),
+                    event_type="JobCompleted",
+                )
         else:
             worker.fail(
                 exit_code=result.exit_code,
             )
+
+            if self._record_job_events_service is not None:
+                self._record_job_events_service.record(
+                    aggregate_id=str(job.id),
+                    event_type="JobFailed",
+                )
 
         if job.assigned_node_id is not None:
             node = self._node_repository.get_by_id(
