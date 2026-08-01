@@ -212,8 +212,8 @@ _record_job_events_service = RecordJobEventsService(
 
 _acquire_lease_service = AcquireLeaseService(
     lease_repository=_lease_repository,
+    record_job_events_service=_record_job_events_service,
 )
-
 
 _renew_lease_service = RenewLeaseService(
     lease_repository=_lease_repository,
