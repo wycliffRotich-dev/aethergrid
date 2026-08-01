@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="#test-coverage"><img src="https://img.shields.io/badge/tests-185%20passed-brightgreen" alt="Tests"></a>
+  <a href="#test-coverage"><img src="https://img.shields.io/badge/tests-190%20passed-brightgreen" alt="Tests"></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
   <a href="#tech-stack"><img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python"></a>
   <a href="#tech-stack"><img src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI"></a>
@@ -50,7 +50,7 @@ AetherGrid was built around one rule: **the domain logic doesn't know or care wh
 - **Real subprocess execution with enforced timeouts**: jobs with a command run as real subprocesses, with a two-stage shutdown (graceful `SIGTERM`, then `SIGKILL` after a grace period) if a job overruns its execution timeout
 - **Node liveness tracking**: heartbeat-based health checks, automatic detection of offline nodes, and resource reclamation when work fails or nodes disappear
 - **Reconciliation with bounded retries**: jobs abandoned by a dead worker or an offline node are reclaimed back to the queue within their retry budget, and fail outright once that budget is exhausted, so a single unhealthy node can't cause a job to be reassigned and abandoned indefinitely
-- **Domain event recording**: real lifecycle transitions (`JobCreated`, `JobScheduled`, and growing) are persisted as immutable events, queryable per-job via `GET /jobs/{id}/history`
+- **Domain event recording**: every lifecycle transition a job goes through, `JobCreated`, `JobScheduled`, `WorkerAssigned`, `LeaseAcquired`, `LeaseReleased`, `JobCompleted`/`JobFailed`, and `JobReclaimed`, is persisted as an immutable event at the exact point it happens, queryable per-job via `GET /jobs/{id}/history`
 - **Live dashboard**: submit jobs, register nodes, and watch cluster health, resource usage, and recent job activity in real time
 
 ---
@@ -81,12 +81,12 @@ Exposing arbitrary caller-supplied commands over an endpoint with no authenticat
 
 ## Test Coverage
 
-185 tests across domain, application, infrastructure, and API layers:
+190 tests across domain, application, infrastructure, and API layers:
 
 - Full domain logic coverage: job lifecycle, retry policy, constraint matching, node and worker liveness, lease semantics
 - Contract tests proving every repository's in-memory, SQLite (where implemented), and PostgreSQL implementations behave identically, including foreign-key-enforced aggregates such as `Worker` and `Lease`, and specifically that lease renewal fails rather than resurrects a lease already reclaimed by reconciliation
 - Application service tests for every use case, including lease acquisition, renewal, release, reconciliation repair (both the requeue-with-retries-remaining path and the fail-outright-once-exhausted path), and real subprocess execution (including a test that genuinely kills a process that ignores `SIGTERM`, forcing `SIGKILL`)
-- Event recording tests proving the correct events fire, in the correct order, for both the scheduled and unschedulable paths
+- Event recording tests proving every lifecycle event fires at the correct point, in the correct order, across the full job lifecycle, scheduling, assignment, lease acquisition and release, completion, failure, and reconciliation reclaim
 - API-level tests against real FastAPI endpoints
 
 ```bash
@@ -117,8 +117,7 @@ CI runs the full test suite against a live Postgres service on every push. See `
 
 ## What's Next
 
-- Wiring the remaining lifecycle events (`WorkerAssigned`, `LeaseAcquired`, `LeaseReleased`, `JobCompleted`/`JobFailed`, `JobReclaimed`) so the dashboard's event history reflects a job's full story, not just its creation and scheduling
-- A live event feed on the dashboard, backed by a new `GET /events` endpoint
+- A live event feed on the dashboard, backed by a new `GET /events` endpoint, now that every job lifecycle event actually fires and has somewhere real to be fed from
 - Visibility into workers in the dashboard; worker registration and lifecycle currently have no frontend surface at all
 - Hardening the API for public deployment (rate limiting, structured logging, error tracking, authentication), which also unblocks safely exposing real job commands over the public API rather than keeping them internal-only
 - Live cloud deployment with CI/CD auto-deploy on merge
