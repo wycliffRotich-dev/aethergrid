@@ -55,3 +55,16 @@ export interface ClusterUtilizationResponse {
   memory_mib: number;
   vram_mib: number;
 }
+
+export interface EventResponse {
+  id: string;
+  aggregate_id: string;
+  aggregate_type: string;
+  event_type: string;
+  occurred_at: string;
+  payload: Record<string, string>;
+}
+
+export interface ListEventsResponse {
+  events: EventResponse[];
+}
