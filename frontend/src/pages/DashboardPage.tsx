@@ -8,9 +8,11 @@ import { RecentJobs } from "../components/jobs/RecentJobs";
 import { NodeTable } from "../components/nodes/NodeTable";
 import { RegisterNodeForm } from "../components/nodes/RegisterNodeForm";
 import { SubmitJobForm } from "../components/jobs/SubmitJobForm";
+import { WorkerTable } from "../components/workers/WorkerTable";
 import { useClusterStats } from "../hooks/useClusterStats";
 import { useJobs } from "../hooks/useJobs";
 import { useNodes } from "../hooks/useNodes";
+import { useWorkers } from "../hooks/useWorkers";
 import {
   computeUtilizationPercentages,
   HIGH_USAGE_THRESHOLD_PERCENT,
@@ -32,6 +34,11 @@ export default function DashboardPage() {
     jobs,
     refresh: refreshJobs,
   } = useJobs();
+
+  const {
+    workers,
+    refresh: refreshWorkers,
+  } = useWorkers();
 
   const {
     health,
@@ -61,6 +68,7 @@ export default function DashboardPage() {
   function refreshAll() {
     refresh();
     refreshJobs();
+    refreshWorkers();
     refreshClusterStats();
   }
 
@@ -197,6 +205,10 @@ export default function DashboardPage() {
 
       <RecentJobs
         jobs={jobs}
+      />
+
+      <WorkerTable
+        workers={workers}
       />
 
       <ActivityFeed />

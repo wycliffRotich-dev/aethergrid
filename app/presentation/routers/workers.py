@@ -128,6 +128,7 @@ def list_workers(
                     if worker.running_job is not None
                     else None
                 ),
+                last_seen_at=worker.last_seen_at,
             )
             for worker in workers
         ]
