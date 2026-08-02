@@ -1,5 +1,6 @@
 import type { JobStatus, JobSummaryResponse } from "../../api/types";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { cancelJob } from "../../api/jobs";
 
 type Props = {
@@ -187,9 +188,12 @@ export function RecentJobs({ jobs, onChanged }: Props) {
                   className="transition-colors hover:bg-slate-900/60"
                 >
                   <td className="px-6 py-3">
-                    <span className="font-mono text-slate-300">
+                    <Link
+                      to={`/jobs/${job.id}`}
+                      className="font-mono text-slate-300 hover:text-indigo-400 hover:underline"
+                    >
                       {shortId(job.id)}
-                    </span>
+                    </Link>
                   </td>
 
                   <td className="px-3 py-3">

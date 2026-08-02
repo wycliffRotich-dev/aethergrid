@@ -52,6 +52,10 @@ from app.presentation.schemas.create_job_response import (
 from app.presentation.schemas.get_job_response import (
     GetJobResponse,
 )
+from app.presentation.schemas.list_events_response import (
+    EventResponse,
+    ListEventsResponse,
+)
 from app.presentation.schemas.list_jobs_response import (
     JobSummaryResponse,
     ListJobsResponse,
@@ -203,6 +207,7 @@ def get_job(
 
 @router.get(
     "/{job_id}/history",
+    response_model=ListEventsResponse,
     status_code=status.HTTP_200_OK,
 )
 def get_job_history(
@@ -211,24 +216,30 @@ def get_job_history(
         GetJobHistoryService,
         Depends(get_get_job_history_service),
     ],
-) -> list[dict[str, str]]:
+) -> ListEventsResponse:
     """
-    Return every recorded event for a job.
+    Return every recorded event for a job, in the order
+    they occurred.
     """
 
     events = service.execute(
         aggregate_id=job_id,
     )
 
-    return [
-        {
-            "id": str(event.id),
-            "aggregate_type": event.aggregate_type,
-            "aggregate_id": event.aggregate_id,
-            "event_type": event.event_type,
-        }
-        for event in events
-    ]
+    return ListEventsResponse(
+        events=[
+            EventResponse(
+                id=str(event.id),
+                aggregate_id=event.aggregate_id,
+                aggregate_type=event.aggregate_type,
+                event_type=event.event_type,
+                occurred_at=event.occurred_at,
+                payload=event.payload,
+            )
+            for event in events
+        ]
+    )
+
 
 @router.post(
     "/{job_id}/cancel",
@@ -325,4 +336,3 @@ def retry_job(
         started_at=job.started_at,
         completed_at=job.completed_at,
     )
-
