@@ -13,3 +13,9 @@ export function removeOfflineNode(nodeId: string) {
     method: "DELETE",
   });
 }
+
+export function heartbeatNode(nodeId: string) {
+  return api<CreateNodeResponse>(`/nodes/${nodeId}/heartbeat`, {
+    method: "POST",
+  });
+}

@@ -4,8 +4,11 @@ import DashboardPage from "./pages/DashboardPage";
 import NodesPage from "./pages/NodesPage";
 import JobsPage from "./pages/JobsPage";
 import JobDetailPage from "./pages/JobDetailPage";
+import { useWorkerHeartbeatKeeper } from "./hooks/useWorkerHeartbeatKeeper";
 
 export default function App() {
+  useWorkerHeartbeatKeeper();
+
   return (
     <Shell>
       <Routes>
