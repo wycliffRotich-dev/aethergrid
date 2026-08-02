@@ -44,6 +44,17 @@ class RecoverExpiredLeaseService:
         Leases that have not yet expired are left untouched;
         their worker is still the legitimate owner of the job.
 
+        The lease row is deleted first, before the job or
+        worker are touched. This closes the window where a
+        worker's background renewal thread could successfully
+        renew a lease that reconciliation has already decided
+        to reclaim -- if delete ran last, a renewal landing
+        between job.reclaim() and delete() would succeed
+        against a lease that's effectively already gone,
+        letting a worker believe it still owns a job that's
+        about to be (or already has been) handed to someone
+        else.
+
         A job whose lease expired is reclaimed rather than
         unscheduled: it may be SCHEDULED (worker died before
         starting it) or, far more commonly, RUNNING (worker
@@ -55,28 +66,28 @@ class RecoverExpiredLeaseService:
         be reassigned and abandoned forever.
         """
         for lease in self._lease_repository.list():
-
             if not lease.is_expired():
                 continue
+
+            self._lease_repository.delete(
+                lease.job_id,
+            )
 
             worker = self._worker_repository.get_by_id(
                 lease.worker_id,
             )
-
             job = self._job_repository.get_by_id(
                 lease.job_id,
             )
 
             if worker is not None:
                 worker.recover()
-
                 self._worker_repository.save(
                     worker,
                 )
 
             if job is not None:
                 job.reclaim()
-
                 self._job_repository.save(
                     job,
                 )
@@ -86,7 +97,3 @@ class RecoverExpiredLeaseService:
                         aggregate_id=str(job.id),
                         event_type="JobReclaimed",
                     )
-
-            self._lease_repository.delete(
-                lease.job_id,
-            )
