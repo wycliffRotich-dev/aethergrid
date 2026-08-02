@@ -68,3 +68,21 @@ export interface EventResponse {
 export interface ListEventsResponse {
   events: EventResponse[];
 }
+export type WorkerStatus =
+  | "STARTING"
+  | "IDLE"
+  | "BUSY"
+  | "DRAINING"
+  | "OFFLINE";
+
+export interface WorkerResponse {
+  id: string;
+  status: WorkerStatus;
+  node_id: string;
+  running_job_id: string | null;
+  last_seen_at: string;
+}
+
+export interface ListWorkersResponse {
+  workers: WorkerResponse[];
+}

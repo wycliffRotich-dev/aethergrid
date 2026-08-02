@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -10,6 +12,7 @@ class WorkerSummaryResponse(BaseModel):
     status: str
     node_id: str
     running_job_id: str | None
+    last_seen_at: datetime
 
 
 class ListWorkersResponse(BaseModel):
