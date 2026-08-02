@@ -14,6 +14,9 @@ from app.presentation.dependencies import (
 from app.presentation.routers.cluster import (
     router as cluster_router,
 )
+from app.presentation.routers.events import (
+    router as events_router,
+)
 from app.presentation.routers.jobs import (
     router as jobs_router,
 )
@@ -120,7 +123,9 @@ app.include_router(
 app.include_router(
     workers_router,
 )
-
+app.include_router(
+    events_router,
+)
 
 @app.get("/")
 def root() -> dict[str, str]:
