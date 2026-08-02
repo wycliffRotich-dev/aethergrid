@@ -103,7 +103,9 @@ export default function DashboardPage() {
       </main>
     );
   }
-
+  const runningJobCount = jobs.filter(
+    (job) => job.status === "RUNNING",
+  ).length;
   const totalCpu = nodes.reduce(
     (sum, node) => sum + node.cpu_cores,
     0,
@@ -134,7 +136,7 @@ export default function DashboardPage() {
         health={health}
         capacity={capacity}
         utilization={utilization}
-        jobCount={jobs.length}
+        jobCount={runningJobCount}
       />
 
       <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
@@ -201,10 +203,12 @@ export default function DashboardPage() {
 
       <NodeTable
         nodes={nodes}
+        onChanged={refreshAll}
       />
 
       <RecentJobs
         jobs={jobs}
+        onChanged={refreshAll}
       />
 
       <WorkerTable

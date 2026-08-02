@@ -86,3 +86,21 @@ export interface WorkerResponse {
 export interface ListWorkersResponse {
   workers: WorkerResponse[];
 }
+export interface CreateNodeRequest {
+  cpu_cores: number;
+  memory_mib: number;
+  vram_mib: number;
+}
+
+export interface CreateNodeResponse {
+  id: string;
+}
+
+export interface CreateWorkerRequest {
+  node_id: string;
+}
+
+export interface CreateWorkerResponse {
+  id: string;
+  status: WorkerStatus;
+}

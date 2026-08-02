@@ -1,11 +1,29 @@
+import { useState } from "react";
 import type { NodeResponse } from "../../api/types";
+import { removeOfflineNode } from "../../api/nodes";
 import { StatusBadge } from "../common/StatusBadge";
 
 type Props = {
   nodes: NodeResponse[];
+  onChanged: () => void;
 };
 
-export function NodeTable({ nodes }: Props) {
+export function NodeTable({ nodes, onChanged }: Props) {
+  const [removingId, setRemovingId] = useState<string | null>(null);
+
+  async function handleRemove(nodeId: string) {
+    setRemovingId(nodeId);
+
+    try {
+      await removeOfflineNode(nodeId);
+      onChanged();
+    } catch (error) {
+      alert(error);
+    } finally {
+      setRemovingId(null);
+    }
+  }
+
   return (
     <section className="mt-10 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-lg">
       <div className="flex items-center justify-between border-b border-slate-800 px-6 py-5">
@@ -33,6 +51,7 @@ export function NodeTable({ nodes }: Props) {
             <th>Available CPU</th>
             <th>Memory</th>
             <th>VRAM</th>
+            <th></th>
           </tr>
         </thead>
 
@@ -40,7 +59,7 @@ export function NodeTable({ nodes }: Props) {
           {nodes.length === 0 ? (
             <tr>
               <td
-                colSpan={6}
+                colSpan={7}
                 className="py-12 text-center text-slate-500"
               >
                 No compute nodes have been registered.
@@ -72,6 +91,18 @@ export function NodeTable({ nodes }: Props) {
 
                 <td>
                   {node.vram_mib.toLocaleString()} MiB
+                </td>
+
+                <td className="px-6 py-4 text-right">
+                  {!node.is_alive && (
+                    <button
+                      onClick={() => handleRemove(node.id)}
+                      disabled={removingId === node.id}
+                      className="rounded border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      {removingId === node.id ? "Removing..." : "Remove"}
+                    </button>
+                  )}
                 </td>
               </tr>
             ))
