@@ -15,3 +15,9 @@ export function createWorker(worker: CreateWorkerRequest) {
     body: JSON.stringify(worker),
   });
 }
+
+export function heartbeatWorker(workerId: string) {
+  return api<CreateWorkerResponse>(`/workers/${workerId}/heartbeat`, {
+    method: "POST",
+  });
+}
