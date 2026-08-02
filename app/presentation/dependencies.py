@@ -56,6 +56,9 @@ from app.application.services.heartbeat_node_service import (
 from app.application.services.job_execution_service import (
     JobExecutionService,
 )
+from app.application.services.list_events_service import (
+    ListEventsService,
+)
 from app.application.services.list_jobs_service import (
     ListJobsService,
 )
@@ -389,7 +392,14 @@ def get_record_job_events_service() -> RecordJobEventsService:
 
     return _record_job_events_service
 
+def get_list_events_service() -> ListEventsService:
+    """
+    Return ListEventsService.
+    """
 
+    return ListEventsService(
+        event_repository=_event_repository,
+    )
 def get_list_offline_nodes_service() -> ListOfflineNodesService:
     """
     Return ListOfflineNodesService.
