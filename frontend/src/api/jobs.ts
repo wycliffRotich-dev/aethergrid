@@ -1,5 +1,5 @@
 import { api } from "./client";
-import type { ListJobsResponse } from "./types";
+import type { JobSummaryResponse, ListJobsResponse } from "./types";
 
 export type CreateJobRequest = {
   cpu_cores: number;
@@ -21,4 +21,10 @@ export function createJob(
 
 export function listJobs() {
   return api<ListJobsResponse>("/jobs");
+}
+
+export function cancelJob(jobId: string) {
+  return api<JobSummaryResponse>(`/jobs/${jobId}/cancel`, {
+    method: "POST",
+  });
 }

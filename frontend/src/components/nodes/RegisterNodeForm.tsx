@@ -1,5 +1,8 @@
 import { useState } from "react";
 
+import { createNode } from "../../api/nodes";
+import { createWorker } from "../../api/workers";
+
 type Props = {
   onCreated: () => void;
 };
@@ -21,27 +24,20 @@ export function RegisterNodeForm({
     setLoading(true);
 
     try {
-      const response = await fetch(
-        "http://localhost:8000/nodes",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            cpu_cores: cpu,
-            memory_mib: memory,
-            vram_mib: vram,
-          }),
-        },
-      );
+      const node = await createNode({
+        cpu_cores: cpu,
+        memory_mib: memory,
+        vram_mib: vram,
+      });
 
-      if (!response.ok) {
-        throw new Error(
-          "Failed to register node.",
-        );
-      }
+      // A node with no worker can never execute anything --
+      // it just sits idle until its heartbeat goes stale and
+      // it flips to offline. Registering a worker against the
+      // node immediately is what actually makes it capable of
+      // running jobs, not just existing as capacity on paper.
+      await createWorker({
+        node_id: node.id,
+      });
 
       onCreated();
     } catch (error) {

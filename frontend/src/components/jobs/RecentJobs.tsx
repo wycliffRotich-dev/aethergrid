@@ -1,14 +1,15 @@
 import type { JobStatus, JobSummaryResponse } from "../../api/types";
 import { useEffect, useState } from "react";
+import { cancelJob } from "../../api/jobs";
 
 type Props = {
   jobs: JobSummaryResponse[];
+  onChanged: () => void;
 };
 
-const STATUS_STYLES: Record<
-  JobStatus,
-  { dot: string; text: string; label: string }
-> = {
+type StatusStyle = { dot: string; text: string; label: string };
+
+const STATUS_STYLES: Record<JobStatus, StatusStyle> = {
   SUBMITTED: {
     dot: "bg-slate-500",
     text: "text-slate-400",
@@ -45,6 +46,12 @@ const STATUS_STYLES: Record<
     label: "cancelled",
   },
 };
+
+const CANCELLABLE_STATUSES: JobStatus[] = [
+  "SUBMITTED",
+  "QUEUED",
+  "SCHEDULED",
+];
 
 function shortId(id: string): string {
   return id.slice(0, 8);
@@ -119,7 +126,22 @@ function ExitCode({ job }: { job: JobSummaryResponse }) {
   );
 }
 
-export function RecentJobs({ jobs }: Props) {
+export function RecentJobs({ jobs, onChanged }: Props) {
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+
+  async function handleCancel(jobId: string) {
+    setCancellingId(jobId);
+
+    try {
+      await cancelJob(jobId);
+      onChanged();
+    } catch (error) {
+      alert(error);
+    } finally {
+      setCancellingId(null);
+    }
+  }
+
   return (
     <section className="mt-8 rounded-xl border border-slate-800 bg-slate-950">
       <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
@@ -149,13 +171,15 @@ export function RecentJobs({ jobs }: Props) {
               <th className="px-3 py-3 font-medium">Status</th>
               <th className="px-3 py-3 font-medium">Resources</th>
               <th className="px-3 py-3 font-medium">Duration</th>
-              <th className="px-6 py-3 font-medium">Result</th>
+              <th className="px-3 py-3 font-medium">Result</th>
+              <th className="px-6 py-3 font-medium"></th>
             </tr>
           </thead>
 
           <tbody className="divide-y divide-slate-800/60">
             {jobs.map((job) => {
               const style = STATUS_STYLES[job.status];
+              const canCancel = CANCELLABLE_STATUSES.includes(job.status);
 
               return (
                 <tr
@@ -192,8 +216,20 @@ export function RecentJobs({ jobs }: Props) {
                     <JobDuration job={job} />
                   </td>
 
-                  <td className="px-6 py-3">
+                  <td className="px-3 py-3">
                     <ExitCode job={job} />
+                  </td>
+
+                  <td className="px-6 py-3 text-right">
+                    {canCancel && (
+                      <button
+                        onClick={() => handleCancel(job.id)}
+                        disabled={cancellingId === job.id}
+                        className="rounded border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        {cancellingId === job.id ? "Cancelling..." : "Cancel"}
+                      </button>
+                    )}
                   </td>
                 </tr>
               );
