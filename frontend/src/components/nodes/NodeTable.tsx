@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { NodeResponse } from "../../api/types";
-import { removeOfflineNode } from "../../api/nodes";
+import { drainNode, removeOfflineNode } from "../../api/nodes";
 import { StatusBadge } from "../common/StatusBadge";
 
 type Props = {
@@ -8,8 +8,21 @@ type Props = {
   onChanged: () => void;
 };
 
+function healthLabel(node: NodeResponse): "Healthy" | "Draining" | "Offline" {
+  if (!node.is_alive) {
+    return "Offline";
+  }
+
+  if (node.is_draining) {
+    return "Draining";
+  }
+
+  return "Healthy";
+}
+
 export function NodeTable({ nodes, onChanged }: Props) {
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [drainingId, setDrainingId] = useState<string | null>(null);
 
   async function handleRemove(nodeId: string) {
     setRemovingId(nodeId);
@@ -21,6 +34,19 @@ export function NodeTable({ nodes, onChanged }: Props) {
       alert(error);
     } finally {
       setRemovingId(null);
+    }
+  }
+
+  async function handleDrain(nodeId: string) {
+    setDrainingId(nodeId);
+
+    try {
+      await drainNode(nodeId);
+      onChanged();
+    } catch (error) {
+      alert(error);
+    } finally {
+      setDrainingId(null);
     }
   }
 
@@ -76,7 +102,7 @@ export function NodeTable({ nodes, onChanged }: Props) {
                 </td>
 
                 <td>
-                  <StatusBadge status={node.is_alive ? "Healthy" : "Offline"} />
+                  <StatusBadge status={healthLabel(node)} />
                 </td>
 
                 <td>{node.cpu_cores}</td>
@@ -94,15 +120,27 @@ export function NodeTable({ nodes, onChanged }: Props) {
                 </td>
 
                 <td className="px-6 py-4 text-right">
-                  {!node.is_alive && (
-                    <button
-                      onClick={() => handleRemove(node.id)}
-                      disabled={removingId === node.id}
-                      className="rounded border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50"
-                    >
-                      {removingId === node.id ? "Removing..." : "Remove"}
-                    </button>
-                  )}
+                  <div className="flex justify-end gap-2">
+                    {node.is_alive && !node.is_draining && (
+                      <button
+                        onClick={() => handleDrain(node.id)}
+                        disabled={drainingId === node.id}
+                        className="rounded border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        {drainingId === node.id ? "Draining..." : "Drain"}
+                      </button>
+                    )}
+
+                    {!node.is_alive && (
+                      <button
+                        onClick={() => handleRemove(node.id)}
+                        disabled={removingId === node.id}
+                        className="rounded border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        {removingId === node.id ? "Removing..." : "Remove"}
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))

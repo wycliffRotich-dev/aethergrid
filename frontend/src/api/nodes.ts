@@ -19,3 +19,9 @@ export function heartbeatNode(nodeId: string) {
     method: "POST",
   });
 }
+
+export function drainNode(nodeId: string) {
+  return api<CreateNodeResponse>(`/nodes/${nodeId}/drain`, {
+    method: "POST",
+  });
+}

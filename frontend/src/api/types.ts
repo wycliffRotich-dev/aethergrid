@@ -7,8 +7,8 @@ export interface NodeResponse {
   available_memory_mib: number;
   available_vram_mib: number;
   is_alive: boolean;
+  is_draining: boolean;
 }
-
 export interface ListNodesResponse {
   nodes: NodeResponse[];
 }
