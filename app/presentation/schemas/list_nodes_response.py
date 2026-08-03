@@ -14,6 +14,7 @@ class NodeResponse(BaseModel):
     available_memory_mib: int
     available_vram_mib: int
     is_alive: bool
+    is_draining: bool
 
 
 class ListNodesResponse(BaseModel):

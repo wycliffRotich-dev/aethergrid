@@ -41,6 +41,9 @@ from app.application.services.create_node_service import (
 from app.application.services.create_worker_service import (
     CreateWorkerService,
 )
+from app.application.services.drain_node_service import (
+    DrainNodeService,
+)
 from app.application.services.get_job_history_service import (
     GetJobHistoryService,
 )
@@ -434,6 +437,14 @@ def get_remove_offline_node_service() -> RemoveOfflineNodeService:
     """
 
     return RemoveOfflineNodeService(
+        node_repository=_node_repository,
+    )
+def get_drain_node_service() -> DrainNodeService:
+    """
+    Return DrainNodeService.
+    """
+
+    return DrainNodeService(
         node_repository=_node_repository,
     )
 

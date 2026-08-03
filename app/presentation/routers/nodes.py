@@ -5,6 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.application.services.create_node_service import (
     CreateNodeService,
 )
+from app.application.services.drain_node_service import (
+    DrainNodeService,
+)
 from app.application.services.get_node_service import (
     GetNodeService,
 )
@@ -32,6 +35,7 @@ from app.domain.value_objects.resource_requirements import (
 )
 from app.presentation.dependencies import (
     get_create_node_service,
+    get_drain_node_service,
     get_get_node_service,
     get_heartbeat_node_service,
     get_list_nodes_service,
@@ -117,6 +121,7 @@ def list_nodes(
                 available_memory_mib=node.available.memory_mib,
                 available_vram_mib=node.available.vram_mib,
                 is_alive=node.is_alive(),
+                is_draining=node.is_draining(),
             )
             for node in nodes
         ]
@@ -150,6 +155,7 @@ def list_offline_nodes(
                 available_memory_mib=node.available.memory_mib,
                 available_vram_mib=node.available.vram_mib,
                 is_alive=node.is_alive(),
+                is_draining=node.is_draining(),
             )
             for node in nodes
         ]
@@ -189,6 +195,7 @@ def get_node(
         available_memory_mib=node.available.memory_mib,
         available_vram_mib=node.available.vram_mib,
         is_alive=node.is_alive(),
+        is_draining=node.is_draining(),
     )
 
 
@@ -226,6 +233,46 @@ def heartbeat_node(
         available_memory_mib=node.available.memory_mib,
         available_vram_mib=node.available.vram_mib,
         is_alive=node.is_alive(),
+        is_draining=node.is_draining(),
+    )
+
+
+@router.post(
+    "/{node_id}/drain",
+    response_model=GetNodeResponse,
+)
+def drain_node(
+    node_id: str,
+    service: Annotated[
+        DrainNodeService,
+        Depends(get_drain_node_service),
+    ],
+) -> GetNodeResponse:
+    """
+    Mark a compute node as draining, so it stops
+    receiving newly scheduled jobs while any work
+    already running on it continues to completion.
+    """
+    try:
+        node = service.execute(
+            NodeId.from_string(node_id),
+        )
+    except NodeNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    return GetNodeResponse(
+        id=str(node.id),
+        cpu_cores=node.capacity.cpu_cores,
+        memory_mib=node.capacity.memory_mib,
+        vram_mib=node.capacity.vram_mib,
+        available_cpu_cores=node.available.cpu_cores,
+        available_memory_mib=node.available.memory_mib,
+        available_vram_mib=node.available.vram_mib,
+        is_alive=node.is_alive(),
+        is_draining=node.is_draining(),
     )
 @router.delete(
     "/{node_id}",
