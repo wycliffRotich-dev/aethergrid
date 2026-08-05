@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     status             TEXT NOT NULL,
     assigned_node_id   UUID REFERENCES nodes(id) ON DELETE SET NULL,
     submitted_at       TIMESTAMPTZ NOT NULL,
+    started_at         TIMESTAMPTZ,
+    completed_at       TIMESTAMPTZ,
     command            JSONB,
     exit_code          INTEGER
 );
