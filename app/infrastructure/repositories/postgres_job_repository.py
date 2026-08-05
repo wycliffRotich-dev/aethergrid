@@ -47,12 +47,14 @@ class PostgresJobRepository(JobRepository):
                     id, cpu_cores, memory_mib, vram_mib,
                     priority, constraints, max_retries,
                     retry_count, status, assigned_node_id,
-                    submitted_at, command, exit_code
+                    submitted_at, started_at, completed_at,
+                    command, exit_code
                 ) VALUES (
                     %(id)s, %(cpu_cores)s, %(memory_mib)s,
                     %(vram_mib)s, %(priority)s, %(constraints)s,
                     %(max_retries)s, %(retry_count)s, %(status)s,
                     %(assigned_node_id)s, %(submitted_at)s,
+                    %(started_at)s, %(completed_at)s,
                     %(command)s, %(exit_code)s
                 )
                 ON CONFLICT (id) DO UPDATE SET
@@ -66,6 +68,8 @@ class PostgresJobRepository(JobRepository):
                     status = EXCLUDED.status,
                     assigned_node_id = EXCLUDED.assigned_node_id,
                     submitted_at = EXCLUDED.submitted_at,
+                    started_at = EXCLUDED.started_at,
+                    completed_at = EXCLUDED.completed_at,
                     command = EXCLUDED.command,
                     exit_code = EXCLUDED.exit_code
                 """,
@@ -81,6 +85,8 @@ class PostgresJobRepository(JobRepository):
                     "status": job.status.value,
                     "assigned_node_id": assigned_node_id,
                     "submitted_at": job.submitted_at,
+                    "started_at": job.started_at,
+                    "completed_at": job.completed_at,
                     "command": command,
                     "exit_code": job.exit_code,
                 },
@@ -156,6 +162,8 @@ class PostgresJobRepository(JobRepository):
             status=JobStatus(row["status"]),
             assigned_node_id=assigned_node_id,
             submitted_at=row["submitted_at"],
+            started_at=row["started_at"],
+            completed_at=row["completed_at"],
             command=command,
             exit_code=row["exit_code"],
         )
