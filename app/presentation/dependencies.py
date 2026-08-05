@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 
+from psycopg_pool import ConnectionPool
+
 from app.application.reconciliation.reconciliation_loop import (
     ReconciliationLoop,
 )
@@ -113,6 +115,9 @@ from app.domain.repositories.event_repository import (
 from app.domain.repositories.job_repository import (
     JobRepository,
 )
+from app.domain.repositories.lease_repository import (
+    LeaseRepository,
+)
 from app.domain.repositories.node_repository import (
     NodeRepository,
 )
@@ -135,6 +140,21 @@ from app.infrastructure.repositories.in_memory_node_repository import (
 from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
+from app.infrastructure.repositories.postgres_event_repository import (
+    PostgresEventRepository,
+)
+from app.infrastructure.repositories.postgres_job_repository import (
+    PostgresJobRepository,
+)
+from app.infrastructure.repositories.postgres_lease_repository import (
+    PostgresLeaseRepository,
+)
+from app.infrastructure.repositories.postgres_node_repository import (
+    PostgresNodeRepository,
+)
+from app.infrastructure.repositories.postgres_worker_repository import (
+    PostgresWorkerRepository,
+)
 from app.infrastructure.repositories.sqlite_connection import (
     create_connection,
 )
@@ -154,15 +174,44 @@ def _build_repositories() -> tuple[
     NodeRepository,
     WorkerRepository,
     EventRepository,
+    LeaseRepository,
 ]:
     """
     Choose the repository backend.
+
+    postgres is the only backend with a real Lease
+    repository (see ADR 0010) and is the only backend under
+    which a standalone worker agent process can share state
+    with this API process at all -- sqlite and memory both
+    keep Worker and Lease state in this process's own memory,
+    invisible to anything running outside it.
     """
 
     backend = os.getenv(
         "NEUROMESH_STORAGE_BACKEND",
         "memory",
     ).lower()
+
+    if backend == "postgres":
+        database_url = os.environ[
+            "NEUROMESH_DATABASE_URL"
+        ]
+
+        pool = ConnectionPool(
+            database_url,
+            min_size=1,
+            max_size=10,
+            open=True,
+            kwargs={"autocommit": True},
+        )
+
+        return (
+            PostgresJobRepository(pool),
+            PostgresNodeRepository(pool),
+            PostgresWorkerRepository(pool),
+            PostgresEventRepository(pool),
+            PostgresLeaseRepository(pool),
+        )
 
     if backend == "sqlite":
         db_path = os.getenv(
@@ -185,6 +234,7 @@ def _build_repositories() -> tuple[
             SqliteEventRepository(
                 connection,
             ),
+            InMemoryLeaseRepository(),
         )
 
     return (
@@ -192,6 +242,7 @@ def _build_repositories() -> tuple[
         InMemoryNodeRepository(),
         InMemoryWorkerRepository(),
         InMemoryEventRepository(),
+        InMemoryLeaseRepository(),
     )
 
 
@@ -200,15 +251,8 @@ def _build_repositories() -> tuple[
     _node_repository,
     _worker_repository,
     _event_repository,
+    _lease_repository,
 ) = _build_repositories()
-
-
-# Lease has no SQLite implementation, only in-memory and
-# PostgreSQL (see ADR 0010). This mirrors the existing
-# precedent already set for Worker above: both use the
-# in-memory implementation regardless of the selected
-# backend, since neither has a SQLite repository today.
-_lease_repository = InMemoryLeaseRepository()
 
 
 _record_job_events_service = RecordJobEventsService(
