@@ -26,9 +26,13 @@ from app.presentation.schemas.cluster_utilization_response import (
     ClusterUtilizationResponse,
 )
 
+from app.presentation.auth import require_api_key
+
+
 router = APIRouter(
     prefix="/cluster",
     tags=["Cluster"],
+    dependencies=[Depends(require_api_key)],
 )
 
 

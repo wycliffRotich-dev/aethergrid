@@ -13,9 +13,13 @@ from app.presentation.schemas.list_events_response import (
     ListEventsResponse,
 )
 
+from app.presentation.auth import require_api_key
+
+
 router = APIRouter(
     prefix="/events",
     tags=["Events"],
+    dependencies=[Depends(require_api_key)],
 )
 
 

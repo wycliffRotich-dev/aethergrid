@@ -40,9 +40,13 @@ from app.presentation.schemas.list_workers_response import (
     WorkerSummaryResponse,
 )
 
+from app.presentation.auth import require_api_key
+
+
 router = APIRouter(
     prefix="/workers",
     tags=["Workers"],
+    dependencies=[Depends(require_api_key)],
 )
 
 

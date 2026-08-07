@@ -56,9 +56,13 @@ from app.presentation.schemas.list_nodes_response import (
     NodeResponse,
 )
 
+from app.presentation.auth import require_api_key
+
+
 router = APIRouter(
     prefix="/nodes",
     tags=["Nodes"],
+    dependencies=[Depends(require_api_key)],
 )
 
 

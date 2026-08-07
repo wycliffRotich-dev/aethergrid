@@ -19,6 +19,9 @@ from app.application.services.acquire_lease_service import (
 from app.application.services.assign_worker_service import (
     AssignWorkerService,
 )
+from app.application.services.authenticate_api_key_service import (
+    AuthenticateApiKeyService,
+)
 from app.application.services.cancel_job_service import (
     CancelJobService,
 )
@@ -33,6 +36,9 @@ from app.application.services.cluster_tick_service import (
 )
 from app.application.services.cluster_utilization_service import (
     ClusterUtilizationService,
+)
+from app.application.services.create_api_key_service import (
+    CreateApiKeyService,
 )
 from app.application.services.create_job_service import (
     CreateJobService,
@@ -100,6 +106,9 @@ from app.application.services.renew_lease_service import (
 from app.application.services.retry_job_service import (
     RetryJobService,
 )
+from app.application.services.revoke_api_key_service import (
+    RevokeApiKeyService,
+)
 from app.application.services.scheduler_loop_service import (
     SchedulerLoopService,
 )
@@ -108,6 +117,9 @@ from app.application.services.worker_heartbeat_service import (
 )
 from app.application.workers.worker_execution_loop import (
     WorkerExecutionLoop,
+)
+from app.domain.repositories.api_key_repository import (
+    ApiKeyRepository,
 )
 from app.domain.repositories.event_repository import (
     EventRepository,
@@ -125,6 +137,9 @@ from app.domain.repositories.worker_repository import (
     WorkerRepository,
 )
 from app.domain.services.scheduler import Scheduler
+from app.infrastructure.repositories.in_memory_api_key_repository import (
+    InMemoryApiKeyRepository,
+)
 from app.infrastructure.repositories.in_memory_event_repository import (
     InMemoryEventRepository,
 )
@@ -139,6 +154,9 @@ from app.infrastructure.repositories.in_memory_node_repository import (
 )
 from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
+)
+from app.infrastructure.repositories.postgres_api_key_repository import (
+    PostgresApiKeyRepository,
 )
 from app.infrastructure.repositories.postgres_event_repository import (
     PostgresEventRepository,
@@ -175,6 +193,7 @@ def _build_repositories() -> tuple[
     WorkerRepository,
     EventRepository,
     LeaseRepository,
+    ApiKeyRepository,
 ]:
     """
     Choose the repository backend.
@@ -185,6 +204,13 @@ def _build_repositories() -> tuple[
     with this API process at all -- sqlite and memory both
     keep Worker and Lease state in this process's own memory,
     invisible to anything running outside it.
+
+    ApiKeyRepository has no SQLite implementation at all, by
+    design (see ApiKeyRepository's own docstring). The
+    sqlite backend below falls back to InMemoryApiKeyRepository,
+    the same way it already falls back to InMemoryWorkerRepository
+    and InMemoryLeaseRepository for entities without a SQLite
+    implementation.
     """
 
     backend = os.getenv(
@@ -211,6 +237,7 @@ def _build_repositories() -> tuple[
             PostgresWorkerRepository(pool),
             PostgresEventRepository(pool),
             PostgresLeaseRepository(pool),
+            PostgresApiKeyRepository(pool),
         )
 
     if backend == "sqlite":
@@ -235,6 +262,7 @@ def _build_repositories() -> tuple[
                 connection,
             ),
             InMemoryLeaseRepository(),
+            InMemoryApiKeyRepository(),
         )
 
     return (
@@ -243,6 +271,7 @@ def _build_repositories() -> tuple[
         InMemoryWorkerRepository(),
         InMemoryEventRepository(),
         InMemoryLeaseRepository(),
+        InMemoryApiKeyRepository(),
     )
 
 
@@ -252,6 +281,7 @@ def _build_repositories() -> tuple[
     _worker_repository,
     _event_repository,
     _lease_repository,
+    _api_key_repository,
 ) = _build_repositories()
 
 
@@ -569,3 +599,34 @@ def get_cluster_tick_service() -> ClusterTickService:
     """
 
     return _cluster_tick_service
+
+
+def get_create_api_key_service() -> CreateApiKeyService:
+    """
+    Return CreateApiKeyService.
+    """
+
+    return CreateApiKeyService(
+        api_key_repository=_api_key_repository,
+    )
+
+
+def get_revoke_api_key_service() -> RevokeApiKeyService:
+    """
+    Return RevokeApiKeyService.
+    """
+
+    return RevokeApiKeyService(
+        api_key_repository=_api_key_repository,
+    )
+
+
+def get_authenticate_api_key_service() -> AuthenticateApiKeyService:
+    """
+    Return AuthenticateApiKeyService, used by require_api_key
+    (see app/presentation/auth.py) to gate protected routes.
+    """
+
+    return AuthenticateApiKeyService(
+        api_key_repository=_api_key_repository,
+    )

@@ -76,3 +76,24 @@ ON events (aggregate_id);
 
 CREATE INDEX IF NOT EXISTS idx_events_occurred_at
 ON events (occurred_at);
+-- Append this block to app/infrastructure/repositories/schema.sql,
+-- after the `events` table and before the CREATE INDEX section
+-- (or alongside the other CREATE INDEX statements, whichever you
+-- prefer -- doesn't matter functionally, just keep the file's
+-- existing table-then-indexes grouping if you want to stay consistent).
+
+CREATE TABLE IF NOT EXISTS api_keys (
+    id                UUID PRIMARY KEY,
+    key_hash          TEXT NOT NULL,
+    label             TEXT NOT NULL,
+    created_at        TIMESTAMPTZ NOT NULL,
+    revoked_at        TIMESTAMPTZ,
+    last_used_at      TIMESTAMPTZ
+);
+
+-- get_by_hash() runs on every authenticated request. Without this
+-- index it's a sequential scan per call, the one place in this
+-- schema where a missing index turns into request latency, not
+-- just a slow report query.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_key_hash
+ON api_keys (key_hash);

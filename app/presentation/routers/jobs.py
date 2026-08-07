@@ -61,9 +61,13 @@ from app.presentation.schemas.list_jobs_response import (
     ListJobsResponse,
 )
 
+from app.presentation.auth import require_api_key
+
+
 router = APIRouter(
     prefix="/jobs",
     tags=["Jobs"],
+    dependencies=[Depends(require_api_key)],
 )
 
 
