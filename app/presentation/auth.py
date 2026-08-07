@@ -52,9 +52,9 @@ def require_api_key(
 
     try:
         return service.execute(raw_key)
-    except InvalidApiKeyError:
+    except InvalidApiKeyError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="invalid or revoked credential",
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from exc

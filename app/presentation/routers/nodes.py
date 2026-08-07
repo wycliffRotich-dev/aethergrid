@@ -33,6 +33,7 @@ from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from app.presentation.auth import require_api_key
 from app.presentation.dependencies import (
     get_create_node_service,
     get_drain_node_service,
@@ -55,9 +56,6 @@ from app.presentation.schemas.list_nodes_response import (
     ListNodesResponse,
     NodeResponse,
 )
-
-from app.presentation.auth import require_api_key
-
 
 router = APIRouter(
     prefix="/nodes",

@@ -22,6 +22,7 @@ from app.domain.exceptions.node_not_found_error import (
 )
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.worker_id import WorkerId
+from app.presentation.auth import require_api_key
 from app.presentation.dependencies import (
     get_create_worker_service,
     get_get_node_service,
@@ -39,9 +40,6 @@ from app.presentation.schemas.list_workers_response import (
     ListWorkersResponse,
     WorkerSummaryResponse,
 )
-
-from app.presentation.auth import require_api_key
-
 
 router = APIRouter(
     prefix="/workers",
