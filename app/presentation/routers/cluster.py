@@ -11,6 +11,7 @@ from app.application.services.cluster_health_service import (
 from app.application.services.cluster_utilization_service import (
     ClusterUtilizationService,
 )
+from app.presentation.auth import require_api_key
 from app.presentation.dependencies import (
     get_cluster_capacity_service,
     get_cluster_health_service,
@@ -29,6 +30,7 @@ from app.presentation.schemas.cluster_utilization_response import (
 router = APIRouter(
     prefix="/cluster",
     tags=["Cluster"],
+    dependencies=[Depends(require_api_key)],
 )
 
 

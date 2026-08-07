@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, status
 from app.application.services.list_events_service import (
     ListEventsService,
 )
+from app.presentation.auth import require_api_key
 from app.presentation.dependencies import (
     get_list_events_service,
 )
@@ -16,6 +17,7 @@ from app.presentation.schemas.list_events_response import (
 router = APIRouter(
     prefix="/events",
     tags=["Events"],
+    dependencies=[Depends(require_api_key)],
 )
 
 

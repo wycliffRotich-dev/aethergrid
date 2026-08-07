@@ -34,6 +34,7 @@ from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from app.presentation.auth import require_api_key
 from app.presentation.dependencies import (
     get_cancel_job_service,
     get_create_job_service,
@@ -64,6 +65,7 @@ from app.presentation.schemas.list_jobs_response import (
 router = APIRouter(
     prefix="/jobs",
     tags=["Jobs"],
+    dependencies=[Depends(require_api_key)],
 )
 
 

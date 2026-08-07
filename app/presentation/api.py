@@ -11,6 +11,9 @@ from app.presentation.dependencies import (
     get_cluster_tick_service,
     get_reconciliation_loop,
 )
+from app.presentation.routers.api_keys import (
+    router as api_keys_router,
+)
 from app.presentation.routers.cluster import (
     router as cluster_router,
 )
@@ -125,6 +128,9 @@ app.include_router(
 )
 app.include_router(
     events_router,
+)
+app.include_router(
+    api_keys_router,
 )
 
 @app.get("/")
