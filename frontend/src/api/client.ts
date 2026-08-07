@@ -2,6 +2,8 @@ const API_BASE =
   import.meta.env.VITE_API_URL ??
   "http://localhost:8000";
 
+const API_KEY = import.meta.env.VITE_API_KEY;
+
 export async function api<T>(
   path: string,
   init?: RequestInit,
@@ -12,6 +14,7 @@ export async function api<T>(
       ...init,
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${API_KEY}`,
         ...(init?.headers ?? {}),
       },
     },
