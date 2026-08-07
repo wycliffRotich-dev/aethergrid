@@ -57,13 +57,3 @@ jobs:
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
       - name: Lint with ruff
         run: ruff check .
-      - name: Update test count badge
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        uses: schneegans/dynamic-badges-action@v1.7.0
-        with:
-          auth: ${{ secrets.GIST_SECRET }}
-          gistID: 4b35dff5cea5aa68433713c36c3108bb
-          filename: aethergrid-test-badge.json
-          label: tests
-          message: ${{ steps.pytest.outputs.count }} passing
-          color: brightgreen
