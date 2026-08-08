@@ -1,4 +1,4 @@
-# ADR-0001: Job Lifecycle
+# ADR 0016: Job Lifecycle
 
 ## Status
 
@@ -8,7 +8,7 @@ Accepted
 
 ## Context
 
-NeuroMesh is responsible for orchestrating AI inference workloads across a cluster of compute nodes.
+AetherGrid is responsible for orchestrating AI inference workloads across a cluster of compute nodes.
 
 Every submitted workload progresses through a well-defined lifecycle. Different components of the system (REST API, Scheduler, Repository, Telemetry, and Workers) must agree on the meaning of each lifecycle state.
 
