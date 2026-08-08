@@ -10,7 +10,7 @@ Accepted
 
 ## Context
 
-After introducing Recharts into the Neuromesh dashboard, the production
+After introducing Recharts into the AetherGrid dashboard, the production
 frontend bundle increased to approximately 613 kB.
 
 The application builds successfully and functions correctly, but Vite emits

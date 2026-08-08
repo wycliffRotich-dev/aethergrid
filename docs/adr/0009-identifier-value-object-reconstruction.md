@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-NeuroMesh follows Domain-Driven Design and models every aggregate identifier as an immutable Value Object. Identifiers are created inside the domain when new aggregates are introduced, but repositories also need to rebuild existing objects from persistent storage.
+AetherGrid follows Domain-Driven Design and models every aggregate identifier as an immutable Value Object. Identifiers are created inside the domain when new aggregates are introduced, but repositories also need to rebuild existing objects from persistent storage.
 
 While implementing the PostgreSQL Event Repository we discovered that `EventId` could create new identifiers but could not reconstruct one that had already been stored. The repository therefore had no consistent way to hydrate an `Event` from the database.
 

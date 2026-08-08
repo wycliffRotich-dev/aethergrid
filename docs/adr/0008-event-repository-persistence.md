@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-NeuroMesh records domain events whenever important changes occur within the system. Creating a job, scheduling it, or transitioning it through its lifecycle all produce events that describe what happened and when it happened.
+AetherGrid records domain events whenever important changes occur within the system. Creating a job, scheduling it, or transitioning it through its lifecycle all produce events that describe what happened and when it happened.
 
 Initially, those events lived only in memory. That was sufficient while the event log existed purely to support application behavior during a single process lifetime. The limitation became obvious once event history became a first-class feature. Restarting the application meant the entire history disappeared.
 
@@ -35,4 +35,4 @@ Historical events survive application restarts when SQLite is enabled. That make
 
 This decision also reduces future work. Supporting another backend, such as PostgreSQL, only requires implementing the same repository contract and satisfying the existing contract tests. No application or domain code needs to change.
 
-Most importantly, the architecture stays consistent. Every major persistence concern in NeuroMesh now follows the same design principles instead of introducing special cases for individual aggregates.
+Most importantly, the architecture stays consistent. Every major persistence concern in AetherGrid now follows the same design principles instead of introducing special cases for individual aggregates.

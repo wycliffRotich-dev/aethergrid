@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-NeuroMesh's repository abstraction (`NodeRepository`, `JobRepository`, `WorkerRepository`, `LeaseRepository`, `EventRepository`) is meant to let any aggregate be persisted to any backend without the domain or application layers knowing the difference. In practice, PostgreSQL implementations existed only for `Node` and `Event`. `Lease` and `Worker` had in-memory implementations only, and `Job` had in-memory and SQLite but no PostgreSQL implementation, leaving the persistence layer without real parity or contract-test coverage for three of five aggregates.
+AetherGrid's repository abstraction (`NodeRepository`, `JobRepository`, `WorkerRepository`, `LeaseRepository`, `EventRepository`) is meant to let any aggregate be persisted to any backend without the domain or application layers knowing the difference. In practice, PostgreSQL implementations existed only for `Node` and `Event`. `Lease` and `Worker` had in-memory implementations only, and `Job` had in-memory and SQLite but no PostgreSQL implementation, leaving the persistence layer without real parity or contract-test coverage for three of five aggregates.
 
 Building the missing `PostgresLeaseRepository`, `PostgresWorkerRepository`, and `PostgresJobRepository` against real foreign-key-constrained tables surfaced three defects that had been latent in the codebase:
 

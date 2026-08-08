@@ -5,7 +5,7 @@ Accepted
 
 ## Context
 
-NeuroMesh's PostgreSQL repositories use `psycopg_pool.ConnectionPool`
+AetherGrid's PostgreSQL repositories use `psycopg_pool.ConnectionPool`
 to manage database connections (see ADR 0004 for why psycopg was
 chosen over SQLAlchemy).
 
@@ -42,13 +42,13 @@ suppressed and not ignored.
 ## Consequences
 
 ### Positive
-- No behavior change is introduced while NeuroMesh is under active
+- No behavior change is introduced while AetherGrid is under active
   feature development, avoiding lifecycle churn unrelated to the
   current work.
 - The eventual fix (deciding between `open=True` and full
   context-manager-based lifecycle management) is scheduled as
   deliberate work rather than forgotten or silently accepted.
-- Consistent with NeuroMesh's standing practice: warnings are
+- Consistent with AetherGrid's standing practice: warnings are
   investigated and recorded, never suppressed for the sake of a
   clean terminal.
 

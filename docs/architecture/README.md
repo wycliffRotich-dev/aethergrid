@@ -1,6 +1,6 @@
-# Neuromesh Architecture
+# AetherGrid Architecture
 
-This directory contains the living architecture documentation for Neuromesh.
+This directory contains the living architecture documentation for AetherGrid.
 
 The diagrams are written in Mermaid and render natively on GitHub.
 

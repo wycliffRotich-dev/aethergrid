@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-NeuroMesh schedules jobs onto compute nodes and assigns them to workers
+AetherGrid schedules jobs onto compute nodes and assigns them to workers
 through a lease. Once a worker has accepted a job, the platform must
 ensure that execution follows a consistent lifecycle while maintaining
 lease ownership.
