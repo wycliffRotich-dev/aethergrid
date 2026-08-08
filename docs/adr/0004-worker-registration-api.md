@@ -8,7 +8,7 @@
 
 ## Context
 
-NeuroMesh follows a strict Domain-Driven Design (DDD) architecture.
+AetherGrid follows a strict Domain-Driven Design (DDD) architecture.
 
 A `Worker` is a domain entity that belongs to a `Node` and is managed by
 the server. Initially, the Worker Registration API accepted both a worker
@@ -29,7 +29,7 @@ During the introduction of strongly typed value objects (`WorkerId`,
 The client became responsible for generating the identity of a domain
 entity.
 
-This violated one of the design principles adopted throughout NeuroMesh:
+This violated one of the design principles adopted throughout AetherGrid:
 
 > Entity identity is part of the Domain Model and must be controlled by the
 > Domain, not external clients.
@@ -195,7 +195,7 @@ This ADR affects:
 ## Compliance
 
 This decision aligns with the architectural principles adopted by
-NeuroMesh:
+AetherGrid:
 
 - Domain-Driven Design (DDD)
 - Clean Architecture

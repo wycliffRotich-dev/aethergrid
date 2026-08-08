@@ -2,7 +2,7 @@
 
 ## Goal
 
-Establish the core business model of Neuromesh independently of frameworks,
+Establish the core business model of AetherGrid independently of frameworks,
 databases, and APIs.
 
 ## Delivered

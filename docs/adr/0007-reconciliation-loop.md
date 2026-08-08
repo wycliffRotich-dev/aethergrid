@@ -24,7 +24,7 @@ continuously repairs inconsistent state without operator intervention.
 
 ## Decision
 
-NeuroMesh introduces a dedicated Reconciliation Loop.
+AetherGrid introduces a dedicated Reconciliation Loop.
 
 The reconciliation loop periodically scans the system and compares the
 state of:

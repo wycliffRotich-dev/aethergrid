@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-NeuroMesh requires a persistence layer for PostgreSQL-backed repositories.
+AetherGrid requires a persistence layer for PostgreSQL-backed repositories.
 
 The project follows a clean architecture approach where domain entities and application services should remain independent from infrastructure frameworks.
 

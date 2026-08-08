@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-NeuroMesh schedules distributed AI workloads across compute nodes and workers.
+AetherGrid schedules distributed AI workloads across compute nodes and workers.
 
 A scheduled job requires an execution owner. Without an ownership mechanism, multiple workers could accidentally execute the same job, especially during retries, worker reconnects, network failures, or scheduler retries.
 
@@ -14,7 +14,7 @@ A simple assignment relationship between jobs and workers is insufficient becaus
 
 ## Decision
 
-NeuroMesh uses a lease-based ownership model for worker job execution.
+AetherGrid uses a lease-based ownership model for worker job execution.
 
 When a worker accepts a job:
 
