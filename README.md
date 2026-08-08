@@ -137,7 +137,6 @@ CI runs the full test suite against a live Postgres service on every push. See `
 ## What's Next
 
 - A real worker/node agent process; liveness today is honestly approximated by the dashboard heartbeating on the client's behalf while a tab is open, which is transparent about its limits but isn't a substitute for an actual agent
-- Sending credentials from the dashboard: gating every route, including reads, means the frontend needs updating to carry a key, and doesn't yet
 - Further API hardening for public deployment: rate limiting, structured logging, error tracking
 - Live cloud deployment with CI/CD auto-deploy on merge
 
