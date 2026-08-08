@@ -1,4 +1,5 @@
 name: CI
+
 on:
   push:
     branches: [main]
@@ -55,5 +56,15 @@ jobs:
           pytest -v | tee pytest-output.log
           COUNT=$(grep -oP '\d+(?= passed)' pytest-output.log | tail -1)
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+      - name: Update live test count badge
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: 4b35dff5cea5aa68433713c36c3108bb
+          filename: aethergrid-test-badge.json
+          label: tests
+          message: ${{ steps.pytest.outputs.count }} passed
+          color: brightgreen
       - name: Lint with ruff
         run: ruff check .
