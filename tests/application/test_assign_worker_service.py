@@ -107,7 +107,12 @@ def test_assign_worker_service_assigns_job_to_idle_worker() -> None:
 
     assert worker.status is WorkerStatus.BUSY
 
-    assert job.status is JobStatus.RUNNING
+    # Assignment means the worker now holds the job, not that
+    # execution has begun. The job stays SCHEDULED until an
+    # agent explicitly confirms it has started running (see
+    # ADR 0019) -- reporting RUNNING any earlier would be the
+    # system lying about its own state.
+    assert job.status is JobStatus.SCHEDULED
 def test_assign_worker_service_records_worker_assigned_event() -> None:
     """
     Assigning a job to a worker must record a WorkerAssigned

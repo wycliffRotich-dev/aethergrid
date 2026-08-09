@@ -71,12 +71,18 @@ def test_scheduler_loop_assigns_idle_worker_and_starts_job() -> None:
     """
     When an idle worker exists on the selected node, a
     single tick must both schedule the job onto the node
-    and immediately hand it to that worker, moving the job
-    all the way to RUNNING in one pass. This is the full
-    pipeline that CreateJobService used to only get half of
-    (node allocation, with no worker assignment); it must
-    be covered here since SchedulerLoopService is now the
-    single place scheduling and assignment both happen.
+    and hand it to that worker, moving the worker to BUSY
+    and attaching the job as its running_job. The job itself
+    stays SCHEDULED, not RUNNING: assignment means the worker
+    now holds the job, not that execution has begun. A job
+    only transitions to RUNNING once whatever is actually
+    executing it confirms it has started (see ADR 0019) --
+    reporting RUNNING any earlier would be the system lying
+    about its own state. This is the full pipeline that
+    CreateJobService used to only get half of (node
+    allocation, with no worker assignment); it must be
+    covered here since SchedulerLoopService is now the single
+    place scheduling and assignment both happen.
     """
     node = Node(
         id=NodeId.new(),
@@ -120,7 +126,7 @@ def test_scheduler_loop_assigns_idle_worker_and_starts_job() -> None:
 
     service.execute()
 
-    assert job.status == JobStatus.RUNNING
+    assert job.status == JobStatus.SCHEDULED
     assert job.assigned_node_id == node.id
 
     stored_worker = workers.get_by_id(worker.id)
