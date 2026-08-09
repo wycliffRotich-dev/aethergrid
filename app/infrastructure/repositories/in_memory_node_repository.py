@@ -28,6 +28,16 @@ class InMemoryNodeRepository(NodeRepository):
     ) -> None:
         self._nodes[node.id] = node
 
+    def clear(
+        self,
+    ) -> None:
+        """
+        Remove every node. Test-only: lets presentation-layer
+        tests reset the shared module-level singleton between
+        tests instead of leaking state across the whole suite.
+        """
+        self._nodes.clear()
+
     def list(
         self,
     ) -> list[Node]:

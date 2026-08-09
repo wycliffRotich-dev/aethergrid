@@ -27,6 +27,16 @@ class InMemoryJobRepository(JobRepository):
     ) -> None:
         self._jobs[str(job.id)] = job
 
+    def clear(
+        self,
+    ) -> None:
+        """
+        Remove every job. Test-only: lets presentation-layer
+        tests reset the shared module-level singleton between
+        tests instead of leaking state across the whole suite.
+        """
+        self._jobs.clear()
+
     def get_by_id(
         self,
         job_id: JobId,

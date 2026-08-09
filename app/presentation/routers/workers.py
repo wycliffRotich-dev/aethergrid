@@ -1,4 +1,5 @@
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -17,12 +18,22 @@ from app.application.services.list_workers_service import (
 from app.application.services.register_worker_service import (
     RegisterWorkerService,
 )
+from app.application.services.start_job_service import (
+    StartJobService,
+)
 from app.application.services.worker_heartbeat_service import (
     WorkerHeartbeatService,
 )
 from app.domain.exceptions.node_not_found_error import (
     NodeNotFoundError,
 )
+from app.domain.exceptions.worker_job_mismatch_error import (
+    WorkerJobMismatchError,
+)
+from app.domain.exceptions.worker_not_found_error import (
+    WorkerNotFoundError,
+)
+from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.worker_id import WorkerId
 from app.presentation.auth import require_api_key
@@ -32,6 +43,7 @@ from app.presentation.dependencies import (
     get_get_worker_service,
     get_list_workers_service,
     get_register_worker_service,
+    get_start_job_service,
     get_worker_heartbeat_service,
 )
 from app.presentation.schemas.create_worker_request import (
@@ -184,6 +196,82 @@ def get_worker(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Worker not found.",
         )
+
+    running_job = None
+
+    if worker.running_job is not None:
+        running_job = RunningJobResponse(
+            id=str(worker.running_job.id),
+            command=worker.running_job.command,
+            execution_timeout_seconds=(
+                worker.running_job.execution_timeout.total_seconds()
+            ),
+        )
+
+    return GetWorkerResponse(
+        id=str(worker.id),
+        status=worker.status.name,
+        node_id=str(worker.node.id),
+        last_seen_at=worker.last_seen_at,
+        running_job=running_job,
+    )
+
+
+@router.post(
+    "/{worker_id}/jobs/{job_id}/start",
+    response_model=GetWorkerResponse,
+)
+def start_job(
+    worker_id: str,
+    job_id: str,
+    service: Annotated[
+        StartJobService,
+        Depends(get_start_job_service),
+    ],
+) -> GetWorkerResponse:
+    """
+    Confirm that a worker has actually begun executing the
+    job assigned to it, transitioning the job from SCHEDULED
+    to RUNNING.
+
+    This is the only thing that makes RUNNING true. Assignment
+    alone does not: see AssignWorkerService.
+    """
+    try:
+        worker_id_value = WorkerId(
+            worker_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Malformed worker id.",
+        ) from exc
+
+    try:
+        job_id_value = JobId(
+            value=UUID(job_id),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Malformed job id.",
+        ) from exc
+
+    try:
+        worker = service.execute(
+            worker_id_value,
+            job_id_value,
+        )
+    except WorkerNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except WorkerJobMismatchError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
 
     running_job = None
 
