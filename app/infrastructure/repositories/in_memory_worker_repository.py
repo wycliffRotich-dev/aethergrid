@@ -32,6 +32,16 @@ class InMemoryWorkerRepository(WorkerRepository):
         """
         self._workers[worker.id] = worker
 
+    def clear(
+        self,
+    ) -> None:
+        """
+        Remove every worker. Test-only: lets presentation-layer
+        tests reset the shared module-level singleton between
+        tests instead of leaking state across the whole suite.
+        """
+        self._workers.clear()
+
     def get_by_id(
         self,
         worker_id: WorkerId,

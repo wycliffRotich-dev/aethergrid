@@ -177,6 +177,32 @@ class WorkerExecutionLoop:
                     event_type="JobFailed",
                 )
 
+        # Release the lease and persist the worker as IDLE *before*
+        # persisting the job's terminal status. Order matters here to
+        # avoid two races:
+        #
+        # 1. AssignWorkerService only treats a worker as assignable
+        #    once it's saved with running_job cleared. If this
+        #    worker's old lease is still present when that happens,
+        #    a fresh assignment can race in and try to acquire a new
+        #    lease for the same worker_id, hitting the
+        #    leases_worker_id_key unique constraint.
+        # 2. PostgresWorkerRepository reconstructs worker.running_job
+        #    via a live join against the jobs table by running_job_id
+        #    -- not a cached reference. If the job row is saved as
+        #    COMPLETED before the worker row is saved with
+        #    running_job_id cleared, any read of this worker in that
+        #    window resolves a running_job that's already COMPLETED,
+        #    and calling worker.start() on it raises
+        #    InvalidJobTransition.
+        self._release_lease_service.execute(
+            worker_id,
+        )
+
+        self._worker_repository.save(
+            worker,
+        )
+
         if job.assigned_node_id is not None:
             node = self._node_repository.get_by_id(
                 job.assigned_node_id,
@@ -193,12 +219,4 @@ class WorkerExecutionLoop:
 
         self._job_repository.save(
             job,
-        )
-
-        self._worker_repository.save(
-            worker,
-        )
-
-        self._release_lease_service.execute(
-            worker_id,
         )

@@ -115,6 +115,9 @@ from app.application.services.revoke_api_key_service import (
 from app.application.services.scheduler_loop_service import (
     SchedulerLoopService,
 )
+from app.application.services.start_job_service import (
+    StartJobService,
+)
 from app.application.services.worker_heartbeat_service import (
     WorkerHeartbeatService,
 )
@@ -581,6 +584,16 @@ def get_get_worker_service() -> GetWorkerService:
     """
 
     return GetWorkerService(
+        worker_repository=_worker_repository,
+    )
+
+
+def get_start_job_service() -> StartJobService:
+    """
+    Return StartJobService.
+    """
+
+    return StartJobService(
         worker_repository=_worker_repository,
     )
 

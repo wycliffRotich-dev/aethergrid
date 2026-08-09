@@ -32,6 +32,8 @@ class CreateWorkerService:
             node=node,
         )
 
+        worker.ready()
+
         self._worker_repository.save(
             worker,
         )
