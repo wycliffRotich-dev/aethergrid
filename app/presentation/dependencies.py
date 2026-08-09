@@ -61,6 +61,9 @@ from app.application.services.get_job_service import (
 from app.application.services.get_node_service import (
     GetNodeService,
 )
+from app.application.services.get_worker_service import (
+    GetWorkerService,
+)
 from app.application.services.heartbeat_node_service import (
     HeartbeatNodeService,
 )
@@ -569,6 +572,16 @@ def get_cluster_capacity_service() -> ClusterCapacityService:
 
     return ClusterCapacityService(
         node_repository=_node_repository,
+    )
+
+
+def get_get_worker_service() -> GetWorkerService:
+    """
+    Return GetWorkerService.
+    """
+
+    return GetWorkerService(
+        worker_repository=_worker_repository,
     )
 
 

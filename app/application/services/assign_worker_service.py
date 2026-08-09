@@ -72,7 +72,17 @@ class AssignWorkerService:
                     job,
                 )
 
-            worker.start()
+            # Deliberately does not call worker.start() here.
+            # Assignment means "this worker now holds the job",
+            # not "execution has begun" -- those used to be the
+            # same instant when execution happened synchronously
+            # in this same process. With a real agent (ADR 0019),
+            # there's a real network hop between the two, and the
+            # job must stay SCHEDULED until the agent that's
+            # actually running it confirms it has (the future
+            # /workers/{worker_id}/jobs/{job_id}/start endpoint).
+            # Reporting RUNNING before that would be the system
+            # lying about its own state.
 
             self._worker_repository.save(
                 worker,
