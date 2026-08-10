@@ -598,6 +598,11 @@ def get_start_job_service() -> StartJobService:
     )
 
 
+def get_renew_lease_service() -> RenewLeaseService:
+    """
+    Return RenewLeaseService.
+    """
+    return _renew_lease_service
 def get_create_worker_service() -> CreateWorkerService:
     """
     Return CreateWorkerService.
