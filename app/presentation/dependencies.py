@@ -106,6 +106,9 @@ from app.application.services.remove_offline_node_service import (
 from app.application.services.renew_lease_service import (
     RenewLeaseService,
 )
+from app.application.services.report_job_outcome_service import (
+    ReportJobOutcomeService,
+)
 from app.application.services.retry_job_service import (
     RetryJobService,
 )
@@ -311,6 +314,17 @@ _release_lease_service = ReleaseLeaseService(
     worker_repository=_worker_repository,
     record_job_events_service=_record_job_events_service,
 )
+
+
+_report_job_outcome_service = ReportJobOutcomeService(
+    worker_repository=_worker_repository,
+    job_repository=_job_repository,
+    node_repository=_node_repository,
+    release_lease_service=_release_lease_service,
+    record_job_events_service=_record_job_events_service,
+)
+
+
 _assign_worker_service = AssignWorkerService(
     worker_repository=_worker_repository,
     acquire_lease_service=_acquire_lease_service,
@@ -603,6 +617,15 @@ def get_renew_lease_service() -> RenewLeaseService:
     Return RenewLeaseService.
     """
     return _renew_lease_service
+
+
+def get_report_job_outcome_service() -> ReportJobOutcomeService:
+    """
+    Return ReportJobOutcomeService.
+    """
+    return _report_job_outcome_service
+
+
 def get_create_worker_service() -> CreateWorkerService:
     """
     Return CreateWorkerService.
