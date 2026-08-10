@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.domain.entities.worker import Worker
 from app.domain.repositories.worker_repository import (
     WorkerRepository,
 )
@@ -20,9 +21,11 @@ class WorkerHeartbeatService:
     def execute(
         self,
         worker_id: WorkerId,
-    ) -> None:
+    ) -> Worker:
         """
         Record that the worker is alive.
+
+        Returns the updated worker.
         """
         worker = self._worker_repository.get_by_id(
             worker_id,
@@ -38,3 +41,5 @@ class WorkerHeartbeatService:
         self._worker_repository.save(
             worker,
         )
+
+        return worker
