@@ -18,11 +18,20 @@ from app.application.services.list_workers_service import (
 from app.application.services.register_worker_service import (
     RegisterWorkerService,
 )
+from app.application.services.renew_lease_service import (
+    RenewLeaseService,
+)
 from app.application.services.start_job_service import (
     StartJobService,
 )
 from app.application.services.worker_heartbeat_service import (
     WorkerHeartbeatService,
+)
+from app.domain.exceptions.lease_not_found_error import (
+    LeaseNotFoundError,
+)
+from app.domain.exceptions.no_active_lease_error import (
+    NoActiveLeaseError,
 )
 from app.domain.exceptions.node_not_found_error import (
     NodeNotFoundError,
@@ -43,6 +52,7 @@ from app.presentation.dependencies import (
     get_get_worker_service,
     get_list_workers_service,
     get_register_worker_service,
+    get_renew_lease_service,
     get_start_job_service,
     get_worker_heartbeat_service,
 )
@@ -268,6 +278,82 @@ def start_job(
             detail=str(exc),
         ) from exc
     except WorkerJobMismatchError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    running_job = None
+
+    if worker.running_job is not None:
+        running_job = RunningJobResponse(
+            id=str(worker.running_job.id),
+            command=worker.running_job.command,
+            execution_timeout_seconds=(
+                worker.running_job.execution_timeout.total_seconds()
+            ),
+        )
+
+    return GetWorkerResponse(
+        id=str(worker.id),
+        status=worker.status.name,
+        node_id=str(worker.node.id),
+        last_seen_at=worker.last_seen_at,
+        running_job=running_job,
+    )
+
+
+@router.post(
+    "/{worker_id}/lease/renew",
+    response_model=GetWorkerResponse,
+)
+def renew_lease(
+    worker_id: str,
+    get_worker_service: Annotated[
+        GetWorkerService,
+        Depends(get_get_worker_service),
+    ],
+    renew_lease_service: Annotated[
+        RenewLeaseService,
+        Depends(get_renew_lease_service),
+    ],
+) -> GetWorkerResponse:
+    """
+    Renew the lease this worker holds on the job it's
+    currently executing.
+
+    Checks worker existence first (404), same layering as
+    start_job, before enforcing the lease rule itself (409):
+    RenewLeaseService has no worker-existence concept of its
+    own, only lease existence, so checking here keeps 404 vs
+    409 consistent across every worker-scoped endpoint rather
+    than leaking that internal distinction to callers.
+    """
+    try:
+        worker_id_value = WorkerId(
+            worker_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Malformed worker id.",
+        ) from exc
+
+    worker = get_worker_service.execute(
+        worker_id_value,
+    )
+
+    if worker is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Worker not found.",
+        )
+
+    try:
+        renew_lease_service.execute(
+            worker_id_value,
+        )
+    except (NoActiveLeaseError, LeaseNotFoundError) as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
