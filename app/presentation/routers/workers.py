@@ -21,6 +21,9 @@ from app.application.services.register_worker_service import (
 from app.application.services.renew_lease_service import (
     RenewLeaseService,
 )
+from app.application.services.report_job_outcome_service import (
+    ReportJobOutcomeService,
+)
 from app.application.services.start_job_service import (
     StartJobService,
 )
@@ -53,6 +56,7 @@ from app.presentation.dependencies import (
     get_list_workers_service,
     get_register_worker_service,
     get_renew_lease_service,
+    get_report_job_outcome_service,
     get_start_job_service,
     get_worker_heartbeat_service,
 )
@@ -69,6 +73,9 @@ from app.presentation.schemas.get_worker_response import (
 from app.presentation.schemas.list_workers_response import (
     ListWorkersResponse,
     WorkerSummaryResponse,
+)
+from app.presentation.schemas.report_job_outcome_request import (
+    ReportJobOutcomeRequest,
 )
 
 router = APIRouter(
@@ -278,6 +285,176 @@ def start_job(
             detail=str(exc),
         ) from exc
     except WorkerJobMismatchError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    running_job = None
+
+    if worker.running_job is not None:
+        running_job = RunningJobResponse(
+            id=str(worker.running_job.id),
+            command=worker.running_job.command,
+            execution_timeout_seconds=(
+                worker.running_job.execution_timeout.total_seconds()
+            ),
+        )
+
+    return GetWorkerResponse(
+        id=str(worker.id),
+        status=worker.status.name,
+        node_id=str(worker.node.id),
+        last_seen_at=worker.last_seen_at,
+        running_job=running_job,
+    )
+
+
+@router.post(
+    "/{worker_id}/jobs/{job_id}/complete",
+    response_model=GetWorkerResponse,
+)
+def complete_job(
+    worker_id: str,
+    job_id: str,
+    request: ReportJobOutcomeRequest,
+    service: Annotated[
+        ReportJobOutcomeService,
+        Depends(
+            get_report_job_outcome_service,
+        ),
+    ],
+) -> GetWorkerResponse:
+    """
+    Report that a job completed successfully.
+
+    409 covers both WorkerJobMismatchError (worker does not
+    hold this job) and NoActiveLeaseError/LeaseNotFoundError
+    (reconciliation already reclaimed the lease), the same
+    way renew_lease folds its own lease failures into 409:
+    both mean the caller's view of who owns this job is
+    stale, not that the request itself was malformed.
+    """
+    try:
+        worker_id_value = WorkerId(
+            worker_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Malformed worker id.",
+        ) from exc
+
+    try:
+        job_id_value = JobId(
+            value=UUID(job_id),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Malformed job id.",
+        ) from exc
+
+    try:
+        worker = service.complete(
+            worker_id_value,
+            job_id_value,
+            exit_code=request.exit_code,
+        )
+    except WorkerNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except WorkerJobMismatchError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except (NoActiveLeaseError, LeaseNotFoundError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    running_job = None
+
+    if worker.running_job is not None:
+        running_job = RunningJobResponse(
+            id=str(worker.running_job.id),
+            command=worker.running_job.command,
+            execution_timeout_seconds=(
+                worker.running_job.execution_timeout.total_seconds()
+            ),
+        )
+
+    return GetWorkerResponse(
+        id=str(worker.id),
+        status=worker.status.name,
+        node_id=str(worker.node.id),
+        last_seen_at=worker.last_seen_at,
+        running_job=running_job,
+    )
+
+
+@router.post(
+    "/{worker_id}/jobs/{job_id}/fail",
+    response_model=GetWorkerResponse,
+)
+def fail_job(
+    worker_id: str,
+    job_id: str,
+    request: ReportJobOutcomeRequest,
+    service: Annotated[
+        ReportJobOutcomeService,
+        Depends(
+            get_report_job_outcome_service,
+        ),
+    ],
+) -> GetWorkerResponse:
+    """
+    Report that a job failed.
+
+    Raises the same exceptions as complete_job, for the same
+    reasons.
+    """
+    try:
+        worker_id_value = WorkerId(
+            worker_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Malformed worker id.",
+        ) from exc
+
+    try:
+        job_id_value = JobId(
+            value=UUID(job_id),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Malformed job id.",
+        ) from exc
+
+    try:
+        worker = service.fail(
+            worker_id_value,
+            job_id_value,
+            exit_code=request.exit_code,
+        )
+    except WorkerNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except WorkerJobMismatchError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except (NoActiveLeaseError, LeaseNotFoundError) as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
