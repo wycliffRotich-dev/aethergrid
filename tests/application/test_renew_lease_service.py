@@ -1,5 +1,7 @@
 from datetime import timedelta
 
+import pytest
+
 from app.application.services.renew_lease_service import (
     RenewLeaseService,
 )
@@ -7,6 +9,9 @@ from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
 from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
+from app.domain.exceptions.no_active_lease_error import (
+    NoActiveLeaseError,
+)
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
@@ -71,3 +76,20 @@ def test_execute_renews_worker_lease() -> None:
 
     assert renewed is not None
     assert renewed.expires_at > original_expiration
+
+
+def test_execute_raises_when_worker_has_no_active_lease() -> None:
+    """
+    A worker that never acquired a lease, or whose lease was
+    already reclaimed by reconciliation before this call even
+    looked it up, must raise NoActiveLeaseError -- not silently
+    no-op, and not create a fresh lease out of nothing.
+    """
+    repository = InMemoryLeaseRepository()
+
+    service = RenewLeaseService(
+        lease_repository=repository,
+    )
+
+    with pytest.raises(NoActiveLeaseError):
+        service.execute(WorkerId.new())

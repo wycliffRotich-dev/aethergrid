@@ -3,6 +3,9 @@ from __future__ import annotations
 from datetime import timedelta
 
 from app.domain.entities.lease import DEFAULT_LEASE_DURATION
+from app.domain.exceptions.no_active_lease_error import (
+    NoActiveLeaseError,
+)
 from app.domain.repositories.lease_repository import (
     LeaseRepository,
 )
@@ -35,18 +38,23 @@ class RenewLeaseService:
         """
         Renew the worker's active lease.
 
-        Raises LeaseNotFoundError (via the repository) if the
-        lease no longer exists -- this worker doesn't own the
-        job anymore.
+        Raises:
+            NoActiveLeaseError: this worker has no lease on
+                record at all -- it never acquired one, or
+                reconciliation already reclaimed and removed
+                it before this call even looked it up.
+            LeaseNotFoundError: the lease was found by this
+                call's own lookup, but the underlying row was
+                deleted by reconciliation in the narrow window
+                between that lookup and the actual renew,
+                raised by the repository, not this service.
         """
         lease = self._lease_repository.get_by_worker_id(
             worker_id,
         )
 
         if lease is None:
-            raise ValueError(
-                "Worker does not own an active lease."
-            )
+            raise NoActiveLeaseError(worker_id)
 
         self._lease_repository.renew(
             lease.id,

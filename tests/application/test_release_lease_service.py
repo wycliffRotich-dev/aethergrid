@@ -12,6 +12,12 @@ from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
 from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
+from app.domain.exceptions.no_active_lease_error import (
+    NoActiveLeaseError,
+)
+from app.domain.exceptions.worker_not_found_error import (
+    WorkerNotFoundError,
+)
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
@@ -140,10 +146,7 @@ def test_execute_raises_when_worker_has_no_active_lease() -> None:
         worker_repository=worker_repository,
     )
 
-    with pytest.raises(
-        ValueError,
-        match="does not own an active lease",
-    ):
+    with pytest.raises(NoActiveLeaseError):
         service.execute(worker.id)
 
 
@@ -165,10 +168,7 @@ def test_execute_raises_when_worker_does_not_exist() -> None:
         worker_repository=worker_repository,
     )
 
-    with pytest.raises(
-        ValueError,
-        match="Worker does not exist",
-    ):
+    with pytest.raises(WorkerNotFoundError):
         service.execute(worker.id)
 def test_execute_records_lease_released_event() -> None:
     """

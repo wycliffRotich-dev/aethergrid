@@ -3,6 +3,12 @@ from __future__ import annotations
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
+from app.domain.exceptions.no_active_lease_error import (
+    NoActiveLeaseError,
+)
+from app.domain.exceptions.worker_not_found_error import (
+    WorkerNotFoundError,
+)
 from app.domain.repositories.lease_repository import (
     LeaseRepository,
 )
@@ -44,18 +50,14 @@ class ReleaseLeaseService:
         )
 
         if lease is None:
-            raise ValueError(
-                "Worker does not own an active lease."
-            )
+            raise NoActiveLeaseError(worker_id)
 
         worker = self._worker_repository.get_by_id(
             worker_id,
         )
 
         if worker is None:
-            raise ValueError(
-                "Worker does not exist."
-            )
+            raise WorkerNotFoundError(worker_id)
 
         self._lease_repository.delete(
             lease.job_id,
