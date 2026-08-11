@@ -162,7 +162,15 @@ def run_job(
 
     def keep_lease_alive() -> None:
         while not stop_renewing.wait(RENEWAL_INTERVAL_SECONDS):
-            if not renew_lease(client, worker_id):
+            try:
+                if not renew_lease(client, worker_id):
+                    lost_lease.set()
+                    return
+            except httpx.HTTPError as exc:
+                print(
+                    f"Lease renewal failed: {exc}. "
+                    f"Treating lease as lost."
+                )
                 lost_lease.set()
                 return
 
