@@ -5,6 +5,7 @@ from psycopg_pool import ConnectionPool
 
 from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
+from app.domain.enums.worker_management import WorkerManagement
 from app.domain.enums.worker_status import WorkerStatus
 from app.domain.repositories.worker_repository import WorkerRepository
 from app.domain.value_objects.job_id import JobId
@@ -34,14 +35,16 @@ class PostgresWorkerRepository(WorkerRepository):
             conn.execute(
                 """
                 INSERT INTO workers (
-                    id, node_id, status, running_job_id, last_seen_at
+                    id, node_id, status, managed_by,
+                    running_job_id, last_seen_at
                 ) VALUES (
-                    %(id)s, %(node_id)s, %(status)s,
+                    %(id)s, %(node_id)s, %(status)s, %(managed_by)s,
                     %(running_job_id)s, %(last_seen_at)s
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     node_id = EXCLUDED.node_id,
                     status = EXCLUDED.status,
+                    managed_by = EXCLUDED.managed_by,
                     running_job_id = EXCLUDED.running_job_id,
                     last_seen_at = EXCLUDED.last_seen_at
                 """,
@@ -49,6 +52,7 @@ class PostgresWorkerRepository(WorkerRepository):
                     "id": str(worker.id),
                     "node_id": str(worker.node.id),
                     "status": worker.status.value,
+                    "managed_by": worker.managed_by.value,
                     "running_job_id": running_job_id,
                     "last_seen_at": worker.last_seen_at,
                 },
@@ -108,6 +112,7 @@ class PostgresWorkerRepository(WorkerRepository):
             id=WorkerId(row["id"]),
             node=node,
             status=WorkerStatus(row["status"]),
+            managed_by=WorkerManagement(row["managed_by"]),
             running_job=running_job,
             last_seen_at=row["last_seen_at"],
         )

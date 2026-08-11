@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 from app.domain.entities.job import Job
 from app.domain.entities.node import Node
+from app.domain.enums.worker_management import WorkerManagement
 from app.domain.enums.worker_status import WorkerStatus
 from app.domain.value_objects.worker_id import WorkerId
 
@@ -27,6 +28,7 @@ class Worker:
     node: Node
 
     status: WorkerStatus = WorkerStatus.STARTING
+    managed_by: WorkerManagement = WorkerManagement.DASHBOARD
 
     running_job: Job | None = None
 

@@ -69,9 +69,16 @@ def _client(api_key: str) -> httpx.Client:
 
 
 def register_worker(client: httpx.Client, node_id: str) -> str:
+    # managed_by="AGENT" marks this worker as owned by this
+    # standalone process rather than ClusterTickService's in-process
+    # execution loop, so the loop skips it and this agent is the
+    # only thing that starts, executes, and reports outcomes for its
+    # jobs (ADR 0019, issue #90). Every other caller of POST /workers
+    # (e.g. the dashboard) omits this field and defaults to
+    # "DASHBOARD", unaffected by this agent's existence.
     response = client.post(
         "/workers",
-        json={"node_id": node_id},
+        json={"node_id": node_id, "managed_by": "AGENT"},
     )
     response.raise_for_status()
     worker_id = response.json()["id"]

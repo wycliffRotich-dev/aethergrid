@@ -38,9 +38,18 @@ CREATE TABLE IF NOT EXISTS workers (
     id                UUID PRIMARY KEY,
     node_id           UUID NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
     status            TEXT NOT NULL,
+    managed_by        TEXT NOT NULL DEFAULT 'DASHBOARD',
     running_job_id    UUID REFERENCES jobs(id) ON DELETE SET NULL,
     last_seen_at      TIMESTAMPTZ NOT NULL
 );
+
+-- CREATE TABLE IF NOT EXISTS is a no-op against a database that
+-- already has a workers table from before managed_by existed, so
+-- this ALTER covers any environment being upgraded in place rather
+-- than created fresh (this project has no migration framework by
+-- design, see the header above).
+ALTER TABLE workers
+ADD COLUMN IF NOT EXISTS managed_by TEXT NOT NULL DEFAULT 'DASHBOARD';
 
 CREATE TABLE IF NOT EXISTS leases (
     id                UUID PRIMARY KEY,
@@ -76,12 +85,6 @@ ON events (aggregate_id);
 
 CREATE INDEX IF NOT EXISTS idx_events_occurred_at
 ON events (occurred_at);
--- Append this block to app/infrastructure/repositories/schema.sql,
--- after the `events` table and before the CREATE INDEX section
--- (or alongside the other CREATE INDEX statements, whichever you
--- prefer -- doesn't matter functionally, just keep the file's
--- existing table-then-indexes grouping if you want to stay consistent).
-
 CREATE TABLE IF NOT EXISTS api_keys (
     id                UUID PRIMARY KEY,
     key_hash          TEXT NOT NULL,

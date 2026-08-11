@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
+from app.domain.enums.worker_management import WorkerManagement
 from app.domain.repositories.worker_repository import (
     WorkerRepository,
 )
@@ -23,6 +24,7 @@ class CreateWorkerService:
     def execute(
         self,
         node: Node,
+        managed_by: WorkerManagement = WorkerManagement.DASHBOARD,
     ) -> Worker:
         """
         Create and persist a worker.
@@ -30,6 +32,7 @@ class CreateWorkerService:
         worker = Worker(
             id=WorkerId.new(),
             node=node,
+            managed_by=managed_by,
         )
 
         worker.ready()
