@@ -79,9 +79,16 @@ def register_worker(client: httpx.Client, node_id: str) -> str:
     return worker_id
 
 
-def heartbeat(client: httpx.Client, worker_id: str) -> None:
+def heartbeat_worker(client: httpx.Client, worker_id: str) -> None:
     response = client.post(
         f"/workers/{worker_id}/heartbeat",
+    )
+    response.raise_for_status()
+
+
+def heartbeat_node(client: httpx.Client, node_id: str) -> None:
+    response = client.post(
+        f"/nodes/{node_id}/heartbeat",
     )
     response.raise_for_status()
 
@@ -247,9 +254,19 @@ def main() -> None:
     stop_heartbeating = threading.Event()
 
     def keep_heartbeating() -> None:
+        # Both the worker and the node it belongs to need
+        # independent, continuous heartbeats. Worker.is_alive()
+        # and Node.is_alive() are separate clocks (same as
+        # useWorkerHeartbeatKeeper.ts already documented for the
+        # browser-tab stand-in this agent replaces); nothing else
+        # heartbeats the node on an interval once this agent is
+        # the thing driving the cluster, and a node the scheduler
+        # considers dead will never have jobs scheduled onto it,
+        # regardless of how alive its worker looks.
         while not stop_heartbeating.wait(HEARTBEAT_INTERVAL_SECONDS):
             try:
-                heartbeat(client, worker_id)
+                heartbeat_worker(client, worker_id)
+                heartbeat_node(client, node_id)
             except httpx.HTTPError as exc:
                 print(f"Heartbeat failed: {exc}")
 
@@ -259,10 +276,10 @@ def main() -> None:
     )
     heartbeat_thread.start()
 
-    # Send one heartbeat immediately, don't wait for the first
-    # HEARTBEAT_INTERVAL_SECONDS tick, so the worker doesn't sit
-    # unnecessarily close to its own registration-time last_seen_at.
-    heartbeat(client, worker_id)
+    # Send one heartbeat of each immediately, don't wait for the
+    # first HEARTBEAT_INTERVAL_SECONDS tick.
+    heartbeat_worker(client, worker_id)
+    heartbeat_node(client, node_id)
 
     print(
         f"Agent running. Polling every {POLL_INTERVAL_SECONDS}s, "
