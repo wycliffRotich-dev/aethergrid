@@ -30,6 +30,7 @@ from app.application.services.start_job_service import (
 from app.application.services.worker_heartbeat_service import (
     WorkerHeartbeatService,
 )
+from app.domain.enums.worker_management import WorkerManagement
 from app.domain.exceptions.lease_not_found_error import (
     LeaseNotFoundError,
 )
@@ -129,6 +130,7 @@ def create_worker(
 
     worker = create_worker_service.execute(
         node,
+        managed_by=WorkerManagement(request.managed_by),
     )
 
     worker = register_worker_service.execute(

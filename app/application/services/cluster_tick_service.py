@@ -8,6 +8,7 @@ from app.application.services.scheduler_loop_service import (
 from app.application.workers.worker_execution_loop import (
     WorkerExecutionLoop,
 )
+from app.domain.enums.worker_management import WorkerManagement
 from app.domain.repositories.worker_repository import (
     WorkerRepository,
 )
@@ -55,6 +56,16 @@ class ClusterTickService:
 
         for worker in self._worker_repository.list():
             if worker.running_job is None:
+                continue
+
+            if worker.managed_by is WorkerManagement.AGENT:
+                # A standalone agent (scripts/run_agent.py) is
+                # polling and executing this worker's jobs itself
+                # over HTTP. Driving it through the in-process loop
+                # too would race the agent for the same job (ADR
+                # 0019, issue #90); the agent is the sole owner of
+                # execution for any worker registered with
+                # managed_by="AGENT".
                 continue
 
             try:
