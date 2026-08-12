@@ -7,6 +7,9 @@ from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
 from app.domain.enums.job_status import JobStatus
+from app.domain.exceptions.no_available_node_error import (
+    NoAvailableNodeError,
+)
 from app.domain.repositories.job_repository import (
     JobRepository,
 )
@@ -86,6 +89,34 @@ class SchedulerLoopService:
                 )
 
             if self._assign_worker_service is not None:
-                self._assign_worker_service.execute(
-                    job,
-                )
+                try:
+                    self._assign_worker_service.execute(
+                        job,
+                    )
+                except NoAvailableNodeError:
+                    # The node had capacity, but no idle worker was
+                    # registered on it yet (e.g. an agent hadn't
+                    # finished starting up). The job was already
+                    # saved as SCHEDULED above, which permanently
+                    # removes it from this method's own QUEUED
+                    # filter -- without this, it would never be
+                    # revisited by any future tick, even once a
+                    # worker does become available. Undo the
+                    # scheduling decision and give the node's
+                    # capacity back so the job is retried on the
+                    # very next tick instead of being stranded.
+                    job.unschedule()
+                    node.release(
+                        job.resources,
+                    )
+                    self._node_repository.save(
+                        node,
+                    )
+                    self._job_repository.save(
+                        job,
+                    )
+                    if self._record_job_events_service is not None:
+                        self._record_job_events_service.record(
+                            aggregate_id=str(job.id),
+                            event_type="JobUnscheduled",
+                        )
