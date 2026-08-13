@@ -1,6 +1,5 @@
 import time
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app.presentation.api import app
