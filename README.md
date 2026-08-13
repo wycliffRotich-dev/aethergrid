@@ -39,7 +39,7 @@ Every non-obvious decision in this codebase, why a domain rule lives where it do
 - [**ADR 0014 — Continuous Lease Renewal**](docs/adr/0014-continuous-lease-renewal.md): why a lease is renewed continuously for a job's entire runtime instead of once at acquisition.
 - [**ADR 0015 — API Key Authentication**](docs/adr/0015-api-key-authentication.md): why opaque server-issued tokens were chosen over JWTs for a system that needs instant revocation, and why building authentication still didn't answer whether `Job.command` should now be exposed, that's a separate decision, and it hasn't been made.
 - [**ADR 0018 — Domain Owns Scheduling Policy**](docs/adr/0018-domain-owns-scheduling-policy.md): why `list_available()` moved out of the repository entirely, since deciding which nodes are eligible for scheduling is a business rule, not a persistence concern, and letting infrastructure decide that would have made scheduling behavior dependent on which database backend was running.
-- [**ADR 0019 — Standalone Worker Agent Process**](docs/adr/0019-standalone-worker-agent-process.md): the staged plan for replacing in-process job execution with a real out-of-process agent that confirms its own execution start over the network, and why that cutover is deliberately incremental rather than a single big-bang rewrite.
+- [**ADR 0019 — Standalone Worker Agent Process**](docs/adr/0019-standalone-worker-agent-process.md): replacing in-process job execution with a real out-of-process agent that confirms its own execution start over the network, and why pull-based polling was chosen over push delivery, since it reuses reconciliation this codebase already trusts instead of introducing new failure and delivery-guarantee logic.
 
 If you're evaluating whether someone can operate at a systems level rather than a feature level, this is the fastest way to check.
 
@@ -96,14 +96,14 @@ Authentication now exists. Every route, including reads, requires a valid API ke
 
 ## Test Coverage
 
-260 tests across domain, application, infrastructure, and API layers, 257 passing and 3 deliberately skipped, not silently ignored:
+260 tests across domain, application, infrastructure, and API layers, 259 passing and 1 deliberately skipped, not silently ignored:
 
 - Full domain logic coverage: job lifecycle, retry policy, constraint matching, node and worker liveness, lease semantics, node draining and the scheduler's exclusion of draining nodes, and API key issuance, revocation, and usage tracking
 - Contract tests proving every repository's in-memory, SQLite (where implemented), and PostgreSQL implementations behave identically, including foreign-key-enforced aggregates such as `Worker` and `Lease`, and specifically that lease renewal fails rather than resurrects a lease already reclaimed by reconciliation
 - Application service tests for every use case, including lease acquisition, renewal, release, reconciliation repair (both the requeue-with-retries-remaining path and the fail-outright-once-exhausted path), real subprocess execution (including a test that genuinely kills a process that ignores `SIGTERM`, forcing `SIGKILL`), and the full API key lifecycle from issuance through revocation
 - Event recording tests proving every lifecycle event fires at the correct point, in the correct order, across the full job lifecycle, scheduling, assignment, lease acquisition and release, completion, failure, and reconciliation reclaim
 - API-level tests against real FastAPI endpoints, including the cluster-wide event feed, per-job history, and every route's auth requirement, verified through a real end-to-end request, not mocked
-- Two API-level tests are skipped rather than deleted or forced green: both assert a stable "job assigned but not yet started" window that the system doesn't provide yet, since the scheduler loop still drives a job through its full lifecycle at assignment time. Each skip states exactly what it's blocked on ([ADR 0019](docs/adr/0019-standalone-worker-agent-process.md) stage 4), so the gap shows up in `pytest`'s own output instead of only in a commit message
+- One API-level test is skipped rather than deleted or forced green: it asserts a stable "lease actually held" window that the system doesn't provide yet, since jobs created through the public API have no command and complete synchronously within the same tick they're assigned. The skip states exactly what it's blocked on ([ADR 0019](docs/adr/0019-standalone-worker-agent-process.md), out-of-process execution), so the gap shows up in `pytest`'s own output instead of only in a commit message
 
 ```bash
 pytest
