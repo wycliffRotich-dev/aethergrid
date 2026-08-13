@@ -1,6 +1,5 @@
 import time
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app.presentation.api import app
@@ -41,20 +40,6 @@ def test_get_existing_worker_returns_200_with_no_running_job() -> None:
 
 
 
-@pytest.mark.skip(
-    reason=(
-        "ClusterTickService still drives WorkerExecutionLoop "
-        "every tick for any worker holding a running_job, and "
-        "WorkerExecutionLoop's own guard (if not job.is_running(): "
-        "worker.start()) immediately starts and completes the job "
-        "in-process regardless of this change. There is no stable "
-        "assigned-but-not-yet-started window until ClusterTickService "
-        "stops auto-executing locally and instead leaves jobs for an "
-        "agent to pick up (ADR 0019, staged step 4, deliberately "
-        "deferred until the agent endpoints exist and are proven). "
-        "Un-skip this once that cutover lands."
-    ),
-)
 def test_get_worker_returns_running_job_once_assigned() -> None:
     """
     Once a job is assigned to this worker, running_job must
@@ -80,7 +65,7 @@ def test_get_worker_returns_running_job_once_assigned() -> None:
 
         worker_response = client.post(
             "/workers",
-            json={"node_id": node_id},
+            json={"node_id": node_id, "managed_by": "AGENT"},
         )
         worker_id = worker_response.json()["id"]
 
@@ -95,7 +80,7 @@ def test_get_worker_returns_running_job_once_assigned() -> None:
         assert job_response.status_code == 201
         job_id = job_response.json()["id"]
 
-        deadline = time.monotonic() + 3.0
+        deadline = time.monotonic() + 8.0
         body = None
 
         while time.monotonic() < deadline:

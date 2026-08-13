@@ -1,27 +1,10 @@
 import time
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app.presentation.api import app
 
 
-@pytest.mark.skip(
-    reason=(
-        "Same root cause as test_get_worker_returns_running_job_once_"
-        "assigned in test_get_worker_api.py: ClusterTickService still "
-        "drives WorkerExecutionLoop every tick for any worker holding "
-        "a running_job, and WorkerExecutionLoop's own guard "
-        "(if not job.is_running(): worker.start()) immediately starts "
-        "and completes the job in-process before this test's explicit "
-        "POST .../start call is guaranteed to land first. There is no "
-        "stable assigned-but-not-yet-started window until "
-        "ClusterTickService stops auto-executing locally and instead "
-        "leaves jobs for an agent to pick up (ADR 0019, staged step 4, "
-        "deliberately deferred until the agent endpoints exist and are "
-        "proven). Un-skip this once that cutover lands."
-    ),
-)
 def test_start_job_transitions_job_to_running() -> None:
     """
     Once a worker holds a job as its running_job, calling
@@ -48,7 +31,7 @@ def test_start_job_transitions_job_to_running() -> None:
 
         worker_response = client.post(
             "/workers",
-            json={"node_id": node_id},
+            json={"node_id": node_id, "managed_by": "AGENT"},
         )
         worker_id = worker_response.json()["id"]
 

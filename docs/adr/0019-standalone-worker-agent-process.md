@@ -119,6 +119,16 @@ agent's next poll.
   process alongside the API and frontend for jobs to actually
   execute, one more moving part than today's single `docker
   compose up`.
+- One test currently reflects this gap directly:
+  `test_renew_lease_succeeds_while_worker_holds_a_job` in
+  `tests/presentation/test_renew_lease_api.py` is skipped and
+  stubbed (`raise NotImplementedError`), because jobs created
+  through the public API today have no `command` and complete
+  synchronously within the same tick they're assigned (see
+  `JobExecutionService`), leaving no stable window in which a
+  lease is actually held. This test can only be written once
+  out-of-process execution creates a genuine gap between a
+  worker acquiring a lease and the job finishing.
 
 ## Alternatives Considered
 
