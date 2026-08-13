@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import logging
+
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
+)
+from app.domain.exceptions.invalid_job_transition import (
+    InvalidJobTransition,
 )
 from app.domain.repositories.job_repository import (
     JobRepository,
@@ -12,6 +17,8 @@ from app.domain.repositories.lease_repository import (
 from app.domain.repositories.worker_repository import (
     WorkerRepository,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class RecoverExpiredLeaseService:
@@ -64,6 +71,16 @@ class RecoverExpiredLeaseService:
         outright once retries are exhausted, so a
         consistently unhealthy worker cannot cause a job to
         be reassigned and abandoned forever.
+
+        A job may also no longer be in a reclaimable state at
+        all by the time its lease expires -- for example, it
+        left SCHEDULED via the scheduler's own unschedule()
+        path (see NoAvailableNodeError handling) before this
+        lease's TTL ran out. That's not an error: the lease
+        row is already gone (deleted above) and there's
+        nothing left to reconcile for this job, so we log and
+        move on rather than letting one stale lease crash the
+        entire reconciliation pass.
         """
         for lease in self._lease_repository.list():
             if not lease.is_expired():
@@ -87,7 +104,18 @@ class RecoverExpiredLeaseService:
                 )
 
             if job is not None:
-                job.reclaim()
+                try:
+                    job.reclaim()
+                except InvalidJobTransition:
+                    logger.warning(
+                        "Skipping reclaim for job %s: lease expired but "
+                        "job is no longer in a reclaimable state "
+                        "(status=%s). Stale lease row has already been "
+                        "deleted.",
+                        job.id,
+                        job.status,
+                    )
+                    continue
                 self._job_repository.save(
                     job,
                 )
