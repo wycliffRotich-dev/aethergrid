@@ -96,14 +96,13 @@ Authentication now exists. Every route, including reads, requires a valid API ke
 
 ## Test Coverage
 
-260 tests across domain, application, infrastructure, and API layers, 259 passing and 1 deliberately skipped, not silently ignored:
+260 tests across domain, application, infrastructure, and API layers, all passing:
 
 - Full domain logic coverage: job lifecycle, retry policy, constraint matching, node and worker liveness, lease semantics, node draining and the scheduler's exclusion of draining nodes, and API key issuance, revocation, and usage tracking
 - Contract tests proving every repository's in-memory, SQLite (where implemented), and PostgreSQL implementations behave identically, including foreign-key-enforced aggregates such as `Worker` and `Lease`, and specifically that lease renewal fails rather than resurrects a lease already reclaimed by reconciliation
 - Application service tests for every use case, including lease acquisition, renewal, release, reconciliation repair (both the requeue-with-retries-remaining path and the fail-outright-once-exhausted path), real subprocess execution (including a test that genuinely kills a process that ignores `SIGTERM`, forcing `SIGKILL`), and the full API key lifecycle from issuance through revocation
 - Event recording tests proving every lifecycle event fires at the correct point, in the correct order, across the full job lifecycle, scheduling, assignment, lease acquisition and release, completion, failure, and reconciliation reclaim
 - API-level tests against real FastAPI endpoints, including the cluster-wide event feed, per-job history, and every route's auth requirement, verified through a real end-to-end request, not mocked
-- One API-level test is skipped rather than deleted or forced green: it asserts a stable "lease actually held" window that the system doesn't provide yet, since jobs created through the public API have no command and complete synchronously within the same tick they're assigned. The skip states exactly what it's blocked on ([ADR 0019](docs/adr/0019-standalone-worker-agent-process.md), out-of-process execution), so the gap shows up in `pytest`'s own output instead of only in a commit message
 
 ```bash
 pytest
