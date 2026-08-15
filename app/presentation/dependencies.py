@@ -22,9 +22,6 @@ from app.application.services.assign_worker_service import (
 from app.application.services.authenticate_api_key_service import (
     AuthenticateApiKeyService,
 )
-from app.application.services.rate_limiter_service import (
-    RateLimiterService,
-)
 from app.application.services.cancel_job_service import (
     CancelJobService,
 )
@@ -93,6 +90,9 @@ from app.application.services.list_workers_service import (
 )
 from app.application.services.mark_dead_workers_service import (
     MarkDeadWorkersService,
+)
+from app.application.services.rate_limiter_service import (
+    RateLimiterService,
 )
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
