@@ -91,6 +91,9 @@ from app.application.services.list_workers_service import (
 from app.application.services.mark_dead_workers_service import (
     MarkDeadWorkersService,
 )
+from app.application.services.rate_limiter_service import (
+    RateLimiterService,
+)
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
@@ -387,6 +390,12 @@ _reconciliation_loop = ReconciliationLoop(
 )
 
 
+_rate_limiter_service = RateLimiterService(
+    capacity=60,
+    refill_rate_per_second=1.0,
+)
+
+
 def get_reconciliation_loop() -> ReconciliationLoop:
     """
     Return the ReconciliationLoop, the single entry point for
@@ -394,6 +403,14 @@ def get_reconciliation_loop() -> ReconciliationLoop:
     workers, expired leases, and offline nodes.
     """
     return _reconciliation_loop
+
+def get_rate_limiter_service() -> RateLimiterService:
+    """
+    Return the RateLimiterService, a single shared instance
+    so every request across every router draws from the same
+    per-ApiKey buckets (see ADR 0021).
+    """
+    return _rate_limiter_service
 
 def get_create_job_service() -> CreateJobService:
     """

@@ -6,7 +6,7 @@ import pytest
 
 from app.domain.entities.api_key import ApiKey
 from app.presentation.api import app
-from app.presentation.auth import require_api_key
+from app.presentation.auth import require_api_key, require_rate_limit
 
 
 @pytest.fixture(autouse=True)
@@ -31,6 +31,30 @@ def bypass_api_key_auth():
     app.dependency_overrides[require_api_key] = lambda: fake_caller
     yield
     app.dependency_overrides.pop(require_api_key, None)
+
+
+@pytest.fixture(autouse=True)
+def bypass_rate_limit():
+    """
+    Presentation-layer tests exercise route behavior, not the
+    rate limiter itself -- that belongs to
+    tests/application/test_rate_limiter_service.py. Without this
+    override, the whole suite would share one RateLimiterService
+    singleton (see dependencies.py) and one token bucket, since
+    bypass_api_key_auth above returns the same fake_caller
+    identity for every request across every test in this
+    directory. Hundreds of requests against a single bucket in
+    one pytest session would start returning real 429s, causing
+    unrelated tests to fail for a reason that has nothing to do
+    with what they're actually testing.
+
+    Scoped to tests/presentation/ only, by virtue of where this
+    file lives -- tests elsewhere still exercise the real rate
+    limit gate.
+    """
+    app.dependency_overrides[require_rate_limit] = lambda: None
+    yield
+    app.dependency_overrides.pop(require_rate_limit, None)
 
 
 @pytest.fixture(autouse=True)

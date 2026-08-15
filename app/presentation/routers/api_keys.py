@@ -13,7 +13,10 @@ from app.domain.exceptions.api_key_not_found_error import (
     ApiKeyNotFoundError,
 )
 from app.domain.value_objects.api_key_id import ApiKeyId
-from app.presentation.auth import require_api_key
+from app.presentation.auth import (
+    require_api_key,
+    require_rate_limit,
+)
 from app.presentation.dependencies import (
     get_create_api_key_service,
     get_revoke_api_key_service,
@@ -35,7 +38,14 @@ router = APIRouter(
     # exists at all. The very first key has to come from
     # scripts/issue_api_key.py, run locally with direct
     # repository access, never over the network.
-    dependencies=[Depends(require_api_key)],
+    #
+    # Rate limited too (ADR 0021): an already-valid key that
+    # issues or revokes other keys in a tight loop is still a
+    # caller worth throttling, the same as any other route.
+    dependencies=[
+        Depends(require_api_key),
+        Depends(require_rate_limit),
+    ],
 )
 
 

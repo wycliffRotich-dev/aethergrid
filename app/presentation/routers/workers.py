@@ -49,7 +49,10 @@ from app.domain.exceptions.worker_not_found_error import (
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.worker_id import WorkerId
-from app.presentation.auth import require_api_key
+from app.presentation.auth import (
+    require_api_key,
+    require_rate_limit,
+)
 from app.presentation.dependencies import (
     get_create_worker_service,
     get_get_node_service,
@@ -82,7 +85,10 @@ from app.presentation.schemas.report_job_outcome_request import (
 router = APIRouter(
     prefix="/workers",
     tags=["Workers"],
-    dependencies=[Depends(require_api_key)],
+    dependencies=[
+        Depends(require_api_key),
+        Depends(require_rate_limit),
+    ],
 )
 
 
