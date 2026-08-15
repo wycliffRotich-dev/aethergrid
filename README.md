@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="#test-coverage"><img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/wycliffRotich-dev/4b35dff5cea5aa68433713c36c3108bb/raw/aethergrid-test-badge.json" alt="Tests"></a>
-  <a href="#engineering-decision-records"><img src="https://img.shields.io/badge/ADRs-20-blueviolet" alt="ADRs"></a>
+  <a href="#engineering-decision-records"><img src="https://img.shields.io/badge/ADRs-21-blueviolet" alt="ADRs"></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
   <a href="#tech-stack"><img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python"></a>
   <a href="#tech-stack"><img src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI"></a>
@@ -31,13 +31,13 @@ AetherGrid was built around one rule: **the domain logic doesn't know or care wh
 
 ## Engineering Decision Records
 
-Every non-obvious decision in this codebase, why a domain rule lives where it does, why an obvious-looking shortcut was rejected, what broke and how it got fixed, is written down at the moment it was made, not reconstructed afterward for a portfolio. 20 ADRs live in [`/docs/adr`](docs/adr). A few worth reading directly if you want to see the reasoning, not just the conclusion:
+Every non-obvious decision in this codebase, why a domain rule lives where it does, why an obvious-looking shortcut was rejected, what broke and how it got fixed, is written down at the moment it was made, not reconstructed afterward for a portfolio. 21 ADRs live in [`/docs/adr`](docs/adr). A few worth reading directly if you want to see the reasoning, not just the conclusion:
 
 - [**ADR 0007 — Reconciliation Loop**](docs/adr/0007-reconciliation-loop.md): how the system detects and repairs state left inconsistent by dead workers and expired leases, instead of assuming the happy path is the only path.
 - [**ADR 0011 — Job Reclaim and Reconciliation Repair**](docs/adr/0011-job-reclaim-and-reconciliation-repair.md): closing a real race condition where a dying worker's lease renewal could land after reconciliation had already started reassigning its work.
 - [**ADR 0012 — Real Job Execution**](docs/adr/0012-real-job-execution.md): building genuine subprocess execution with enforced timeouts, then deliberately keeping it unreachable from the public API until the system had authentication, and proving that absence with a test rather than a comment.
 - [**ADR 0014 — Continuous Lease Renewal**](docs/adr/0014-continuous-lease-renewal.md): why a lease is renewed continuously for a job's entire runtime instead of once at acquisition.
-- [**ADR 0015 — API Key Authentication**](docs/adr/0015-api-key-authentication.md): why opaque server-issued tokens were chosen over JWTs for a system that needs instant revocation, and why building authentication still didn't answer whether `Job.command` should now be exposed, that's a separate decision, and it hasn't been made.
+- [**ADR 0015 — API Key Authentication**](docs/adr/0015-api-key-authentication.md): why opaque server-issued tokens were chosen over JWTs for a system that needs instant revocation, and why building authentication still didn't answer whether `Job.command` should be exposed, that question stayed open until [ADR 0020](docs/adr/0020-expose-job-command-to-authenticated-agents.md), which resolved it narrowly: a worker can read the one command already assigned to it, nothing broader.
 - [**ADR 0018 — Domain Owns Scheduling Policy**](docs/adr/0018-domain-owns-scheduling-policy.md): why `list_available()` moved out of the repository entirely, since deciding which nodes are eligible for scheduling is a business rule, not a persistence concern, and letting infrastructure decide that would have made scheduling behavior dependent on which database backend was running.
 - [**ADR 0019 — Standalone Worker Agent Process**](docs/adr/0019-standalone-worker-agent-process.md): replacing in-process job execution with a real out-of-process agent that confirms its own execution start over the network, and why pull-based polling was chosen over push delivery, since it reuses reconciliation this codebase already trusts instead of introducing new failure and delivery-guarantee logic.
 
@@ -78,7 +78,7 @@ The system is split into four layers, with dependencies pointing inward:
 
 **Presentation**: FastAPI endpoints for jobs, nodes, workers, events, cluster health, and API keys that validate input, call an application service, and return a response. Every route, on every router, requires a valid API key. No business logic lives in this layer. The frontend mirrors the same discipline: `api/*.ts` typed HTTP calls, `hooks/*.ts` data-fetching hooks, and page/component composition, no business logic embedded in components either.
 
-Every non-obvious decision, why domain owns scheduling instead of application, why raw psycopg over an ORM, how job lifecycle transitions are enforced, why leases exist instead of a simple assignment field, why renewal is a strict update rather than an upsert, why opaque tokens were chosen over JWTs, why job commands are deliberately still not exposed over the public API, is documented as an ADR in [`/docs/adr`](docs/adr).
+Every non-obvious decision, why domain owns scheduling instead of application, why raw psycopg over an ORM, how job lifecycle transitions are enforced, why leases exist instead of a simple assignment field, why renewal is a strict update rather than an upsert, why opaque tokens were chosen over JWTs, why job commands are deliberately still not exposed over the public API, and why that boundary was later reopened narrowly for workers reading their own assigned job ([ADR 0020](docs/adr/0020-expose-job-command-to-authenticated-agents.md)), is documented as an ADR in [`/docs/adr`](docs/adr).
 
 ---
 
