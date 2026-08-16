@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from contextlib import asynccontextmanager
 
@@ -10,6 +11,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.presentation.dependencies import (
     get_cluster_tick_service,
     get_reconciliation_loop,
+    get_request_logging_service,
+)
+from app.presentation.request_logging_middleware import (
+    RequestLoggingMiddleware,
 )
 from app.presentation.routers.api_keys import (
     router as api_keys_router,
@@ -33,6 +38,74 @@ from app.presentation.routers.workers import (
 logger = logging.getLogger(__name__)
 
 TICK_INTERVAL_SECONDS = 1.0
+
+
+class _JsonFormatter(logging.Formatter):
+    """
+    Renders every log record as a single JSON line (see
+    ADR 0022). Configured once, at startup, on the root
+    logger, so this applies uniformly to request logs
+    (RequestLoggingService, "aethergrid.requests") and the
+    existing cluster-loop logs (this module's own logger)
+    alike, without either needing its own configuration.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload: dict[str, object] = {
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+
+        for field in (
+            "method",
+            "path",
+            "caller_id",
+            "status_code",
+            "duration_ms",
+        ):
+            if hasattr(record, field):
+                payload[field] = getattr(record, field)
+
+        if record.exc_info:
+            payload["exc_info"] = self.formatException(
+                record.exc_info
+            )
+
+        return json.dumps(payload)
+
+
+def _configure_logging() -> None:
+    """
+    Configure the root logger once, at startup, with a JSON
+    formatter (see ADR 0022). Configuring the root logger,
+    rather than a single named logger, means every logger in
+    this application, present and future, is covered without
+    needing individual setup.
+    """
+    handler = logging.StreamHandler()
+    handler.setFormatter(_JsonFormatter())
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    root_logger.addHandler(handler)
+
+    # Configuring the root logger at INFO applies to every
+    # logger in the process, not only this application's own.
+    # httpx, used internally by TestClient in this codebase's
+    # own test suite (and by anything else using httpx as an
+    # HTTP client), logs its own request line at INFO; left
+    # unconstrained, that log line would now propagate to our
+    # handler too, indistinguishable from this application's
+    # own request logs. Held at WARNING here so this stays
+    # scoped to what ADR 0022 actually asked for: uniform
+    # coverage of this application's logging, not every
+    # dependency's internal logging as a side effect.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+
+_configure_logging()
 
 
 async def _run_cluster_loop() -> None:
@@ -112,6 +185,11 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+app.add_middleware(
+    RequestLoggingMiddleware,
+    service=get_request_logging_service(),
 )
 
 app.include_router(
