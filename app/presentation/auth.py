@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 
 from app.application.services.authenticate_api_key_service import (
     AuthenticateApiKeyService,
@@ -21,6 +21,7 @@ from app.presentation.dependencies import (
 
 def require_api_key(
     *,
+    request: Request,
     authorization: Annotated[
         str | None,
         Header(),
@@ -52,13 +53,17 @@ def require_api_key(
         )
     raw_key = authorization.removeprefix("Bearer ").strip()
     try:
-        return service.execute(raw_key)
+        caller = service.execute(raw_key)
     except InvalidApiKeyError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="invalid or revoked credential",
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
+
+    request.state.caller_id = str(caller.id)
+
+    return caller
 
 
 def require_rate_limit(

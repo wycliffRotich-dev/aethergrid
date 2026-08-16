@@ -112,6 +112,9 @@ from app.application.services.renew_lease_service import (
 from app.application.services.report_job_outcome_service import (
     ReportJobOutcomeService,
 )
+from app.application.services.request_logging_service import (
+    RequestLoggingService,
+)
 from app.application.services.retry_job_service import (
     RetryJobService,
 )
@@ -396,6 +399,9 @@ _rate_limiter_service = RateLimiterService(
 )
 
 
+_request_logging_service = RequestLoggingService()
+
+
 def get_reconciliation_loop() -> ReconciliationLoop:
     """
     Return the ReconciliationLoop, the single entry point for
@@ -411,6 +417,14 @@ def get_rate_limiter_service() -> RateLimiterService:
     per-ApiKey buckets (see ADR 0021).
     """
     return _rate_limiter_service
+
+def get_request_logging_service() -> RequestLoggingService:
+    """
+    Return the RequestLoggingService, a single shared instance
+    so every request logged across the whole application uses
+    the same configured logger (see ADR 0022).
+    """
+    return _request_logging_service
 
 def get_create_job_service() -> CreateJobService:
     """
