@@ -15,9 +15,12 @@
   <a href="#tech-stack"><img src="https://img.shields.io/badge/PostgreSQL-336791?logo=postgresql&logoColor=white" alt="PostgreSQL"></a>
   <a href="#tech-stack"><img src="https://img.shields.io/badge/React-TypeScript-61DAFB?logo=react&logoColor=black" alt="React"></a>
   <a href="#tech-stack"><img src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white" alt="Docker"></a>
+  <a href="https://aethergrid-ugcg.onrender.com/docs"><img src="https://img.shields.io/badge/Live%20Demo-aethergrid--ugcg.onrender.com-brightgreen?logo=render&logoColor=white" alt="Live Demo"></a>
 </p>
 
 AetherGrid takes workloads, matches them against available compute nodes based on resource requirements and constraints, and manages the full lifecycle: queued, scheduled, running, completed, failed, retried, cancelled. Jobs run through workers registered against nodes, and job execution ownership is enforced through time-bound leases rather than a simple assignment flag. Every route requires API key authentication, including the endpoint that issues keys.
+
+**Try it live**: the full API is deployed and reachable at [aethergrid-ugcg.onrender.com/docs](https://aethergrid-ugcg.onrender.com/docs) — real Postgres, real auth, real API-key-gated endpoints. Running on a free instance, so the first request after a period of inactivity can take up to 50 seconds to wake.
 
 ---
 
@@ -138,7 +141,8 @@ CI runs the full test suite against a live Postgres service on every push. See `
 
 ## What's Next
 
-- Live cloud deployment with CI/CD auto-deploy on merge
+- ~~Live cloud deployment with CI/CD auto-deploy on merge~~ — done, see the Live Demo badge above. Render auto-deploys the API from `main` on every merge.
+- Deploy the React dashboard alongside the API (currently only the backend is live; the frontend still runs locally per "Running It")
 
 ---
 
