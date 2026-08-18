@@ -141,7 +141,7 @@ CI runs the full test suite against a live Postgres service on every push. See `
 
 ## What's Next
 
-- ~~Live cloud deployment with CI/CD auto-deploy on merge~~ — done, see the Live Demo badge above. Render auto-deploys the API from `main` on every merge.
+- ~~Live cloud deployment with CI/CD auto-deploy on merge~~. Done, see the Live Demo badge above. Render auto-deploys the API from `main` on every merge.
 - Deploy the React dashboard alongside the API (currently only the backend is live; the frontend still runs locally per "Running It")
 
 ---
