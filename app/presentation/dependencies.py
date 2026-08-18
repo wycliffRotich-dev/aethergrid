@@ -52,6 +52,9 @@ from app.application.services.create_worker_service import (
 from app.application.services.drain_node_service import (
     DrainNodeService,
 )
+from app.application.services.error_tracking_service import (
+    ErrorTrackingService,
+)
 from app.application.services.get_job_history_service import (
     GetJobHistoryService,
 )
@@ -402,6 +405,9 @@ _rate_limiter_service = RateLimiterService(
 _request_logging_service = RequestLoggingService()
 
 
+_error_tracking_service = ErrorTrackingService()
+
+
 def get_reconciliation_loop() -> ReconciliationLoop:
     """
     Return the ReconciliationLoop, the single entry point for
@@ -425,6 +431,14 @@ def get_request_logging_service() -> RequestLoggingService:
     the same configured logger (see ADR 0022).
     """
     return _request_logging_service
+
+def get_error_tracking_service() -> ErrorTrackingService:
+    """
+    Return the ErrorTrackingService, a single shared instance
+    so captured errors across the whole application land in
+    the same bounded in-memory store (see ADR 0023).
+    """
+    return _error_tracking_service
 
 def get_create_job_service() -> CreateJobService:
     """
