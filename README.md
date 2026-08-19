@@ -148,3 +148,22 @@ This isn't trying to compete with Kubernetes or Ray at scale. It's a demonstrati
 ## License
 
 MIT License.
+
+<div align="right">
+
+### Let's connect
+
+<a href="tel:+254745275288">
+  <img src="https://img.icons8.com/ios-filled/40/2ECC71/phone.png" width="36" height="36" alt="Call">
+</a>
+<a href="https://wa.me/254745275288">
+  <img src="https://cdn.simpleicons.org/whatsapp/25D366" width="36" height="36" alt="WhatsApp">
+</a>
+<a href="https://linkedin.com/in/rotichkipleting">
+  <img src="https://cdn.simpleicons.org/linkedin/0A66C2" width="36" height="36" alt="LinkedIn">
+</a>
+<a href="mailto:celestinerotich@gmail.com">
+  <img src="https://cdn.simpleicons.org/gmail/EA4335" width="36" height="36" alt="Email">
+</a>
+
+</div>
