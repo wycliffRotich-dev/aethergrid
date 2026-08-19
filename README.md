@@ -145,25 +145,29 @@ This isn't trying to compete with Kubernetes or Ray at scale. It's a demonstrati
 
 ---
 
+<table>
+<tr>
+<td>
+
 ## License
 
-MIT License.
-
-<div align="right">
+</td>
+<td align="right">
 
 ### Let's connect
 
-<a href="tel:+254745275288">
-  <img src="https://img.icons8.com/ios-filled/40/2ECC71/phone.png" width="36" height="36" alt="Call">
-</a>
-<a href="https://wa.me/254745275288">
-  <img src="https://cdn.simpleicons.org/whatsapp/25D366" width="36" height="36" alt="WhatsApp">
-</a>
-<a href="https://linkedin.com/in/rotichkipleting">
-  <img src="https://cdn.simpleicons.org/linkedin/0A66C2" width="36" height="36" alt="LinkedIn">
-</a>
-<a href="mailto:celestinerotich@gmail.com">
-  <img src="https://cdn.simpleicons.org/gmail/EA4335" width="36" height="36" alt="Email">
-</a>
+</td>
+</tr>
+<tr>
+<td>
 
-</div>
+MIT License.
+
+</td>
+<td align="right">
+
+<a href="tel:+254745275288"><img src="https://img.icons8.com/ios-filled/32/25D366/phone.png" alt="Call" /></a>&nbsp;&nbsp;<a href="https://wa.me/254745275288"><img src="https://img.icons8.com/ios-filled/32/25D366/whatsapp.png" alt="WhatsApp" /></a>&nbsp;&nbsp;<a href="https://linkedin.com/in/rotichkipleting"><img src="https://img.icons8.com/ios-filled/32/0A66C2/linkedin.png" alt="LinkedIn" /></a>&nbsp;&nbsp;<a href="mailto:celestinerotich@gmail.com"><img src="https://img.icons8.com/ios-filled/32/EA4335/gmail.png" alt="Email" /></a>
+
+</td>
+</tr>
+</table>
