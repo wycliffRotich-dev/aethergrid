@@ -1,8 +1,8 @@
+import { getApiKey } from "./authKey";
+
 const API_BASE =
   import.meta.env.VITE_API_URL ??
   "http://localhost:8000";
-
-const API_KEY = import.meta.env.VITE_API_KEY;
 
 export async function api<T>(
   path: string,
@@ -14,21 +14,18 @@ export async function api<T>(
       ...init,
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${API_KEY}`,
+        Authorization: `Bearer ${getApiKey() ?? ""}`,
         ...(init?.headers ?? {}),
       },
     },
   );
-
   if (!response.ok) {
     throw new Error(
       `API Error ${response.status}`,
     );
   }
-
   if (response.status === 204) {
     return undefined as T;
   }
-
   return response.json();
 }
