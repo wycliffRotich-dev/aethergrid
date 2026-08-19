@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="#test-coverage"><img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/wycliffRotich-dev/4b35dff5cea5aa68433713c36c3108bb/raw/aethergrid-test-badge.json" alt="Tests"></a>
-  <a href="#engineering-decision-records"><img src="https://img.shields.io/badge/ADRs-23-blueviolet" alt="ADRs"></a>
+  <a href="#engineering-decision-records"><img src="https://img.shields.io/badge/ADRs-24-blueviolet" alt="ADRs"></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
   <a href="#tech-stack"><img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python"></a>
   <a href="#tech-stack"><img src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI"></a>
@@ -34,7 +34,7 @@ AetherGrid was built around one rule: **the domain logic doesn't know or care wh
 
 ## Engineering Decision Records
 
-Every non-obvious decision in this codebase, why a domain rule lives where it does, why an obvious-looking shortcut was rejected, what broke and how it got fixed, is written down at the moment it was made, not reconstructed afterward for a portfolio. 23 ADRs live in [`/docs/adr`](docs/adr). A few worth reading directly if you want to see the reasoning, not just the conclusion:
+Every non-obvious decision in this codebase, why a domain rule lives where it does, why an obvious-looking shortcut was rejected, what broke and how it got fixed, is written down at the moment it was made, not reconstructed afterward for a portfolio. 24 ADRs live in [`/docs/adr`](docs/adr). A few worth reading directly if you want to see the reasoning, not just the conclusion:
 
 - [**ADR 0007 — Reconciliation Loop**](docs/adr/0007-reconciliation-loop.md): how the system detects and repairs state left inconsistent by dead workers and expired leases, instead of assuming the happy path is the only path.
 - [**ADR 0011 — Job Reclaim and Reconciliation Repair**](docs/adr/0011-job-reclaim-and-reconciliation-repair.md): closing a real race condition where a dying worker's lease renewal could land after reconciliation had already started reassigning its work.
