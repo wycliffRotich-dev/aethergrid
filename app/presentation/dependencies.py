@@ -231,10 +231,23 @@ def _build_repositories() -> tuple[
     implementation.
     """
 
-    backend = os.getenv(
-        "NEUROMESH_STORAGE_BACKEND",
-        "memory",
-    ).lower()
+    backend = os.getenv("NEUROMESH_STORAGE_BACKEND")
+    if backend is None:
+        raise RuntimeError(
+            "NEUROMESH_STORAGE_BACKEND is not set. Set it "
+            "explicitly to 'postgres', 'sqlite', or 'memory' "
+            "so the storage backend is a deliberate choice, "
+            "not a silent default. A script that issues real "
+            "credentials should never succeed against a "
+            "throwaway in-memory store without saying so."
+        )
+    backend = backend.lower()
+    if backend not in ("postgres", "sqlite", "memory"):
+        raise RuntimeError(
+            f"Unrecognized NEUROMESH_STORAGE_BACKEND: "
+            f"'{backend}'. Expected one of "
+            f"'postgres', 'sqlite', or 'memory'."
+        )
 
     if backend == "postgres":
         database_url = os.environ[
