@@ -11,6 +11,9 @@ from app.domain.entities.worker import Worker
 from app.domain.exceptions.no_available_node_error import (
     NoAvailableNodeError,
 )
+from app.domain.exceptions.worker_not_found_error import (
+    WorkerNotFoundError,
+)
 from app.domain.repositories.worker_repository import (
     WorkerRepository,
 )
@@ -32,7 +35,7 @@ class AssignWorkerService:
         self,
         worker_repository: WorkerRepository,
         acquire_lease_service: AcquireLeaseService | None = None,
-        record_job_events_service: RecordJobEventsService | None = None,
+        record_job_events_service: RecordJobEventsService | None =None,
     ) -> None:
         self._worker_repository = worker_repository
         self._acquire_lease_service = acquire_lease_service
@@ -67,10 +70,30 @@ class AssignWorkerService:
                 )
 
             if self._acquire_lease_service is not None:
-                self._acquire_lease_service.execute(
-                    worker,
-                    job,
-                )
+                try:
+                    self._acquire_lease_service.execute(
+                        worker,
+                        job,
+                    )
+                except WorkerNotFoundError as exc:
+                    # The worker we just read as IDLE was deleted
+                    # concurrently -- most likely its node went
+                    # offline and was removed by
+                    # RemoveOfflineNodeService, cascading the
+                    # delete to this worker row (schema.sql:
+                    # workers.node_id ON DELETE CASCADE). By the
+                    # time the lease insert ran, the worker no
+                    # longer existed. From the scheduler's
+                    # perspective this is indistinguishable from
+                    # "no idle worker was actually available", so
+                    # it's reported the same way: the caller
+                    # (SchedulerLoopService) already knows how to
+                    # unschedule the job and retry it on the next
+                    # tick.
+                    raise NoAvailableNodeError(
+                        "No idle worker is available on the "
+                        "assigned node."
+                    ) from exc
 
             # Deliberately does not call worker.start() here.
             # Assignment means "this worker now holds the job",
