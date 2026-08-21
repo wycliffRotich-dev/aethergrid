@@ -27,7 +27,7 @@ jobs:
           --health-timeout=5s
           --health-retries=5
     env:
-      DATABASE_URL: postgresql://neuromesh:neuromesh@localhost:5432/neuromesh_test
+      NEUROMESH_DATABASE_URL: postgresql://neuromesh:neuromesh@localhost:5432/neuromesh_test
       NEUROMESH_STORAGE_BACKEND: postgres
     steps:
       - name: Check out code
