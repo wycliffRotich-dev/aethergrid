@@ -27,7 +27,8 @@ jobs:
           --health-timeout=5s
           --health-retries=5
     env:
-      DATABASE_URL: postgresql://neuromesh:neuromesh@localhost:5432/neuromesh_test
+      NEUROMESH_DATABASE_URL: postgresql://neuromesh:neuromesh@localhost:5432/neuromesh_test
+      NEUROMESH_STORAGE_BACKEND: postgres
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -52,9 +53,15 @@ jobs:
             -f app/infrastructure/repositories/schema.sql
       - name: Run tests
         id: pytest
+        shell: bash
         run: |
+          set -o pipefail
           pytest -v | tee pytest-output.log
           COUNT=$(grep -oP '\d+(?= passed)' pytest-output.log | tail -1)
+          if [ -z "$COUNT" ]; then
+            echo "::error::Could not parse a passed-test count from pytest output; treating as failure"
+            exit 1
+          fi
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
       - name: Update live test count badge
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
