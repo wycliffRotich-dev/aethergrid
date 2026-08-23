@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="#test-coverage"><img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/wycliffRotich-dev/4b35dff5cea5aa68433713c36c3108bb/raw/aethergrid-test-badge.json" alt="Tests"></a>
-  <a href="#engineering-decision-records"><img src="https://img.shields.io/badge/ADRs-27-blueviolet" alt="ADRs"></a>
+  <a href="#engineering-decision-records"><img src="https://img.shields.io/badge/ADRs-28-blueviolet" alt="ADRs"></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
   <a href="#tech-stack"><img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python"></a>
   <a href="#tech-stack"><img src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI"></a>
@@ -93,7 +93,9 @@ Building the capability correctly and proving it works, while deferring public e
 
 Authentication now exists. Every route, including reads, requires a valid API key, and the only way to mint one without already holding one is a script run locally with direct database access, never over HTTP (ADR 0015). That closes the specific gap ADR 0012 named.
 
-`Job.command` still isn't exposed. Whether an authenticated caller should be trusted with arbitrary command execution is a separate decision about scope and blast radius, not infrastructure, and it hasn't been made yet. The pattern holds either way: build it correctly, prove it works, and don't ship the exposure until the actual risk has been reasoned through, not just until the previous blocker is gone.
+`Job.command` is now exposed through the public `CreateJobRequest` API, gated by the same API key requirement every other route already uses ([ADR 0028](docs/adr/0028-expose-job-command-through-public-create-job-api.md)). No new key tier was introduced: the risk this decision accepts is scoped explicitly to today's deployment, where exactly one person holds a key capable of triggering command execution in production, and it's a scope this project committed to revisiting, not one it's treating as permanently sufficient. The moment a second production key is issued to anyone else, this decision is under-scoped, and a tiered credential model has to be built before that happens, not after.
+
+The pattern holds either way: build it correctly, prove it works, and don't ship the exposure until the actual risk has been reasoned through — in this case, reasoned through and accepted as a bounded, checkable trade-off rather than deferred indefinitely.
 
 ---
 
