@@ -147,3 +147,67 @@ def test_create_job_service_does_not_schedule_job() -> None:
     assert event_types == [
         "JobCreated",
     ]
+
+
+def test_create_job_service_persists_command() -> None:
+    """
+    A command passed to execute() must be stored on the
+    created job, so it can later be read by an assigned
+    worker (ADR 0020) and actually run (ADR 0012, ADR 0028).
+    """
+    job_repository = InMemoryJobRepository()
+    event_repository = InMemoryEventRepository()
+
+    record_job_events_service = RecordJobEventsService(
+        event_repository=event_repository,
+    )
+
+    service = CreateJobService(
+        job_repository=job_repository,
+        record_job_events_service=record_job_events_service,
+    )
+
+    job = service.execute(
+        ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=512,
+            vram_mib=0,
+        ),
+        command=["python", "train.py"],
+    )
+
+    stored = job_repository.get_by_id(
+        job.id,
+    )
+
+    assert stored is not None
+    assert stored.command == ["python", "train.py"]
+
+
+def test_create_job_service_defaults_command_to_none() -> None:
+    """
+    Every job created before ADR 0028 relied on command
+    defaulting to None. That default must not change for
+    callers who don't pass command at all.
+    """
+    job_repository = InMemoryJobRepository()
+    event_repository = InMemoryEventRepository()
+
+    record_job_events_service = RecordJobEventsService(
+        event_repository=event_repository,
+    )
+
+    service = CreateJobService(
+        job_repository=job_repository,
+        record_job_events_service=record_job_events_service,
+    )
+
+    job = service.execute(
+        ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=512,
+            vram_mib=0,
+        ),
+    )
+
+    assert job.command is None

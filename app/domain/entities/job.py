@@ -67,12 +67,12 @@ class Job:
     worker never needs shell=True and this can never be
     used for shell injection.
 
-    None by default: jobs created through the public API
-    (CreateJobService) do not currently set this. Real
-    subprocess execution exists and is fully exercised at
-    the service layer, but is not yet wired to accept
-    arbitrary caller-supplied commands over an
-    unauthenticated HTTP endpoint. See ADR 0012.
+    None by default. Settable through the public API as of
+    ADR 0028: any authenticated caller may set an arbitrary
+    command when creating a job. This is a deliberate,
+    scoped decision, not an oversight, see ADR 0028 for the
+    blast-radius reasoning and the condition under which it
+    must be revisited.
     """
 
     exit_code: int | None = None

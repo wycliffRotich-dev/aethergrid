@@ -98,6 +98,7 @@ def create_job(
 
     job = service.execute(
         resources,
+        request.command,
     )
 
     return CreateJobResponse(
