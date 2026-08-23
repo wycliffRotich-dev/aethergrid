@@ -43,10 +43,12 @@ class CreateJobService:
     def execute(
         self,
         resources: ResourceRequirements,
+        command: list[str] | None = None,
     ) -> Job:
         job = Job(
             id=JobId.new(),
             resources=resources,
+            command=command,
         )
 
         job.queue()

@@ -7,10 +7,11 @@ class JobSummaryResponse(BaseModel):
     """
     A single job as shown in a job listing.
 
-    Deliberately excludes `command`: job commands are not
-    exposed over the public API yet (see ADR 0012). This
-    schema only ever reflects execution outcome
-    (status, exit_code), never the command that produced it.
+    Deliberately excludes `command`, same reasoning as
+    GetJobResponse: settable since ADR 0028, but reads stay
+    scoped to the assigned worker per ADR 0020. This schema
+    only ever reflects execution outcome (status,
+    exit_code), never the command that produced it.
     """
 
     id: str

@@ -23,7 +23,12 @@ def test_list_jobs_includes_newly_created_job() -> None:
     """
     A job just created should appear in the list response,
     exposing status and exit_code (still None before it
-    runs), without ever exposing `command`.
+    runs), without ever exposing `command` -- even when a
+    command was actually set (ADR 0028), not just when it
+    was left as the None default. The earlier version of
+    this test only proved a job with no command couldn't
+    leak a command it never had; this proves the boundary
+    holds when there's actually something to leak.
     """
     create_response = client.post(
         "/jobs",
@@ -31,6 +36,7 @@ def test_list_jobs_includes_newly_created_job() -> None:
             "cpu_cores": 1,
             "memory_mib": 512,
             "vram_mib": 0,
+            "command": ["python", "train.py"],
         },
     )
 
