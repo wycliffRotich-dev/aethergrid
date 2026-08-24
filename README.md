@@ -81,21 +81,21 @@ The system is split into four layers, with dependencies pointing inward:
 
 **Presentation**: FastAPI endpoints for jobs, nodes, workers, events, cluster health, and API keys that validate input, call an application service, and return a response. Every route, on every router, requires a valid API key. No business logic lives in this layer. The frontend mirrors the same discipline: `api/*.ts` typed HTTP calls, `hooks/*.ts` data-fetching hooks, and page/component composition, no business logic embedded in components either.
 
-Every non-obvious decision, why domain owns scheduling instead of application, why raw psycopg over an ORM, how job lifecycle transitions are enforced, why leases exist instead of a simple assignment field, why renewal is a strict update rather than an upsert, why opaque tokens were chosen over JWTs, why job commands are deliberately still not exposed over the public API, and why that boundary was later reopened narrowly for workers reading their own assigned job ([ADR 0020](docs/adr/0020-expose-job-command-to-authenticated-agents.md)), is documented as an ADR in [`/docs/adr`](docs/adr).
+Every non-obvious decision, why domain owns scheduling instead of application, why raw psycopg over an ORM, how job lifecycle transitions are enforced, why leases exist instead of a simple assignment field, why renewal is a strict update rather than an upsert, why opaque tokens were chosen over JWTs, why job commands were deliberately kept unreachable from the public API until authentication existed, then reopened narrowly, first for workers reading only their own assigned job's command ([ADR 0020](docs/adr/0020-expose-job-command-to-authenticated-agents.md)), later for the public `CreateJobRequest` API itself ([ADR 0028](docs/adr/0028-expose-job-command-through-public-create-job-api.md)), is documented as an ADR in [`/docs/adr`](docs/adr).
 
 ---
 
 ## A Deliberate Security Decision Worth Naming
 
-The execution engine can run real, arbitrary commands as subprocesses, with real timeout enforcement. `Job.command` and `Job.exit_code` exist on the domain model and are fully tested at the service layer. They are **not** exposed through the public `CreateJobRequest` API, and this is enforced by a test asserting the field's absence from every response, not left as a comment.
+The execution engine runs real, arbitrary commands as subprocesses with real timeout enforcement. `Job.command` and `Job.exit_code` are fully tested at the service layer. Until recently, neither was exposed through the public `CreateJobRequest` API, a boundary enforced by a test asserting the field's absence, not left as a comment.
 
-Building the capability correctly and proving it works, while deferring public exposure until authentication existed, was judged a more honest state to ship than either skipping the feature or exposing it prematurely (ADR 0012).
+Shipping the capability before exposing it was the deliberate call: build it correctly, prove it works, defer the exposure decision until it can be made deliberately rather than by default (ADR 0012).
 
-Authentication now exists. Every route, including reads, requires a valid API key, and the only way to mint one without already holding one is a script run locally with direct database access, never over HTTP (ADR 0015). That closes the specific gap ADR 0012 named.
+Authentication closed the first gap. Every route now requires a valid API key, and the only way to mint one without already holding one is a script run locally with direct database access, never over HTTP (ADR 0015). That left a sharper question open: what should *any* authenticated caller be trusted to do, given this system runs a single key tier with no role distinction.
 
-`Job.command` is now exposed through the public `CreateJobRequest` API, gated by the same API key requirement every other route already uses ([ADR 0028](docs/adr/0028-expose-job-command-through-public-create-job-api.md)). No new key tier was introduced: the risk this decision accepts is scoped explicitly to today's deployment, where exactly one person holds a key capable of triggering command execution in production, and it's a scope this project committed to revisiting, not one it's treating as permanently sufficient. The moment a second production key is issued to anyone else, this decision is under-scoped, and a tiered credential model has to be built before that happens, not after.
+That question has been answered twice, narrowly each time. ADR 0020 let an assigned worker read the one command already set for its own job, nothing broader. ADR 0028 closed the rest: `command` is now settable through the public API, gated by the same key requirement every other route uses. No new credential tier, by design, matching ADR 0018's stance against building permission systems for risk that hasn't been measured. In production, that risk is scoped to whoever holds a Render Shell-issued key (ADR 0025), today, exactly one person. ADR 0028 names the exact trigger for revisiting that: the day a second key exists.
 
-The pattern holds either way: build it correctly, prove it works, and don't ship the exposure until the actual risk has been reasoned through — in this case, reasoned through and accepted as a bounded, checkable trade-off rather than deferred indefinitely.
+The pattern holds throughout: build it right, prove it works, name the risk before shipping the exposure, not just wait for the last blocker to clear.
 
 ---
 
