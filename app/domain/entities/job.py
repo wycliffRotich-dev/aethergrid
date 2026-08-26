@@ -58,6 +58,16 @@ class Job:
 
     completed_at: datetime | None = None
 
+    cancellation_requested_at: datetime | None = None
+    """
+    When cancellation was requested for a RUNNING job (ADR
+    0029). None unless request_cancellation() has been
+    called. Distinct from completed_at: a job can sit in
+    CANCELLING, cancellation requested but not yet confirmed,
+    for a real bounded window while the signal is delivered
+    on the worker's next lease renewal.
+    """
+
     command: list[str] | None = None
     """
     The argv-style command this job executes, e.g.
@@ -99,6 +109,12 @@ class Job:
             JobStatus.COMPLETED,
             JobStatus.FAILED,
             JobStatus.QUEUED,
+            JobStatus.CANCELLING,
+        },
+        JobStatus.CANCELLING: {
+            JobStatus.COMPLETED,
+            JobStatus.FAILED,
+            JobStatus.CANCELLED,
         },
         JobStatus.COMPLETED: set(),
         JobStatus.FAILED: {
@@ -177,6 +193,11 @@ class Job:
         self,
     ) -> bool:
         return self.status is JobStatus.CANCELLED
+
+    def is_cancelling(
+        self,
+    ) -> bool:
+        return self.status is JobStatus.CANCELLING
 
     def has_timed_out(
         self,
@@ -268,6 +289,48 @@ class Job:
             JobStatus.CANCELLED,
         )
 
+    def request_cancellation(
+        self,
+    ) -> None:
+        """
+        Request cancellation of a job that is already
+        RUNNING (ADR 0029).
+
+        This does not stop anything by itself. It makes the
+        request visible by moving the job to CANCELLING;
+        actually terminating the subprocess happens
+        asynchronously, delivered on the worker's next lease
+        renewal. A job in CANCELLING may still legitimately
+        resolve to COMPLETED or FAILED if it finishes before
+        that signal is delivered -- whichever actually
+        happens first wins, the same way a lease renewal that
+        loses a race against reconciliation drops its result
+        rather than overwrite the real outcome.
+        """
+        self.cancellation_requested_at = utc_now()
+
+        self._transition_to(
+            JobStatus.CANCELLING,
+        )
+
+    def confirm_cancelled(
+        self,
+        exit_code: int | None = None,
+    ) -> None:
+        """
+        Confirm that a job's subprocess was actually
+        terminated after a cancellation request (ADR 0029).
+
+        Only legal from CANCELLING: a job that was never
+        asked to cancel has nothing to confirm.
+        """
+        self.completed_at = utc_now()
+        self.exit_code = exit_code
+
+        self._transition_to(
+            JobStatus.CANCELLED,
+        )
+
     def can_retry(
         self,
     ) -> bool:
@@ -307,6 +370,7 @@ class Job:
         self.started_at = None
         self.completed_at = None
         self.exit_code = None
+        self.cancellation_requested_at = None
 
         self._transition_to(
             JobStatus.QUEUED,
