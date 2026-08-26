@@ -18,7 +18,14 @@ Please include:
 
 ## What to Expect
 
-This is a solo-maintained project. There's no formal SLA, but reports will be acknowledged and looked at as soon as possible. Given the project's current scope (see the README's "A Deliberate Security Decision Worth Naming" section), some risk areas, like arbitrary command execution, are already known and deliberately unexposed rather than hidden. If your report overlaps with something already documented there, it's still worth reporting, context helps.
+This is a solo-maintained project. There is no formal SLA, but reports
+will be acknowledged and looked at as soon as possible.
+
+Given the project's current scope, some risk areas carry inherent
+tradeoffs that have been reviewed and deliberately accepted rather
+than overlooked. If your report touches one of these, it is still
+worth reporting, since a real report often reveals something the
+existing review did not account for.
 
 ## Scope
 
