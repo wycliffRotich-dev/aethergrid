@@ -263,12 +263,18 @@ def cancel_job(
     ],
 ) -> GetJobResponse:
     """
-    Cancel a queued or scheduled job.
+    Cancel a job.
 
-    A job that has already started running, or has already
-    reached a terminal state, cannot be cancelled -- that's
-    a conflict with the job's current state, not a bad
-    request or a missing resource.
+    Queued or scheduled jobs are cancelled immediately.
+    A running job instead enters CANCELLING (ADR 0029): the
+    request is recorded, but actual termination is delivered
+    asynchronously to the worker on its next lease renewal,
+    not by this endpoint. A job already CANCELLING is a
+    no-op, returned unchanged rather than re-cancelled.
+
+    A job that has already reached a terminal state cannot
+    be cancelled -- that's a conflict with the job's current
+    state, not a bad request or a missing resource.
     """
     job_uuid = JobId(
         value=UUID(job_id),
