@@ -227,6 +227,7 @@ def get_worker(
     if worker.running_job is not None:
         running_job = RunningJobResponse(
             id=str(worker.running_job.id),
+            status=worker.running_job.status.name,
             command=worker.running_job.command,
             execution_timeout_seconds=(
                 worker.running_job.execution_timeout.total_seconds()
@@ -303,6 +304,7 @@ def start_job(
     if worker.running_job is not None:
         running_job = RunningJobResponse(
             id=str(worker.running_job.id),
+            status=worker.running_job.status.name,
             command=worker.running_job.command,
             execution_timeout_seconds=(
                 worker.running_job.execution_timeout.total_seconds()
@@ -390,6 +392,7 @@ def complete_job(
     if worker.running_job is not None:
         running_job = RunningJobResponse(
             id=str(worker.running_job.id),
+            status=worker.running_job.status.name,
             command=worker.running_job.command,
             execution_timeout_seconds=(
                 worker.running_job.execution_timeout.total_seconds()
@@ -473,6 +476,7 @@ def fail_job(
     if worker.running_job is not None:
         running_job = RunningJobResponse(
             id=str(worker.running_job.id),
+            status=worker.running_job.status.name,
             command=worker.running_job.command,
             execution_timeout_seconds=(
                 worker.running_job.execution_timeout.total_seconds()
@@ -549,6 +553,7 @@ def renew_lease(
     if worker.running_job is not None:
         running_job = RunningJobResponse(
             id=str(worker.running_job.id),
+            status=worker.running_job.status.name,
             command=worker.running_job.command,
             execution_timeout_seconds=(
                 worker.running_job.execution_timeout.total_seconds()

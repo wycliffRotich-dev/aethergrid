@@ -17,6 +17,7 @@ class RunningJobResponse(BaseModel):
     """
 
     id: str
+    status: str
     command: list[str] | None
     execution_timeout_seconds: float
 
