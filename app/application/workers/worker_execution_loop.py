@@ -82,6 +82,7 @@ class WorkerExecutionLoop:
         release_lease_service: ReleaseLeaseService,
         job_execution_service: JobExecutionService,
         record_job_events_service: RecordJobEventsService | None = None,
+        renewal_interval_seconds: float = RENEWAL_INTERVAL_SECONDS,
     ) -> None:
         self._worker_repository = worker_repository
         self._job_repository = job_repository
@@ -90,6 +91,7 @@ class WorkerExecutionLoop:
         self._release_lease_service = release_lease_service
         self._job_execution_service = job_execution_service
         self._record_job_events_service = record_job_events_service
+        self._renewal_interval_seconds = renewal_interval_seconds
     def execute(
         self,
         worker_id: WorkerId,
@@ -122,18 +124,56 @@ class WorkerExecutionLoop:
             worker.start()
 
         stop_renewing = threading.Event()
+        cancel_event = threading.Event()
         lost_lease: list[LeaseNotFoundError] = []
 
         def keep_lease_alive() -> None:
             # wait() returns True once stop_renewing is set (we're
             # done executing), False on each timeout -- that's our
             # actual renew signal
-            while not stop_renewing.wait(RENEWAL_INTERVAL_SECONDS):
+            while not stop_renewing.wait(self._renewal_interval_seconds):
                 try:
                     self._renew_lease_service.execute(worker_id)
                 except LeaseNotFoundError as exc:
                     lost_lease.append(exc)
                     return
+
+                # Cancellation delivery (ADR 0029): reuses this
+                # same renewal cycle rather than a separate
+                # channel. request_cancellation() runs on job, the
+                # same object worker.running_job refers to, not a
+                # freshly fetched copy -- that keeps it consistent
+                # with what worker.cancel_job() will need once
+                # execution actually stops. Guarded on
+                # cancel_event itself so a second renewal tick
+                # after the first doesn't call
+                # request_cancellation() twice and raise on an
+                # already-CANCELLING job.
+                if not cancel_event.is_set():
+                    current = self._job_repository.get_by_id(
+                        job.id,
+                    )
+
+                    if (
+                        current is not None
+                        and current.is_cancelling()
+                    ):
+                        # job (this loop's own in-memory copy)
+                        # may already show CANCELLING here even
+                        # though we haven't called
+                        # request_cancellation() on it ourselves
+                        # -- an in-memory repository can hand back
+                        # the very same object a concurrent
+                        # cancellation request already mutated,
+                        # rather than a distinct copy the way a
+                        # real database-backed repository would.
+                        # Only transition it if it isn't already
+                        # there; either way, the subprocess still
+                        # needs to be signalled.
+                        if not job.is_cancelling():
+                            job.request_cancellation()
+
+                        cancel_event.set()
 
         renewal_thread = threading.Thread(
             target=keep_lease_alive,
@@ -145,6 +185,7 @@ class WorkerExecutionLoop:
             result = self._job_execution_service.execute(
                 command=job.command,
                 timeout=job.execution_timeout,
+                cancel_event=cancel_event,
             )
         finally:
             stop_renewing.set()
@@ -156,7 +197,17 @@ class WorkerExecutionLoop:
             # than risk stomping whoever reconciliation handed this to
             raise lost_lease[0]
 
-        if result.succeeded:
+        if result.cancelled:
+            worker.cancel_job(
+                exit_code=result.exit_code,
+            )
+
+            if self._record_job_events_service is not None:
+                self._record_job_events_service.record(
+                    aggregate_id=str(job.id),
+                    event_type="JobCancelled",
+                )
+        elif result.succeeded:
             worker.complete(
                 exit_code=result.exit_code,
             )

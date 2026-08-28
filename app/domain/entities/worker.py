@@ -163,6 +163,28 @@ class Worker:
         self.running_job = None
         self.status = WorkerStatus.IDLE
 
+    def cancel_job(
+        self,
+        exit_code: int | None = None,
+    ) -> None:
+        """
+        Confirm the running job's cancellation was actually
+        applied to its subprocess (ADR 0029). Only legal
+        while the job is in CANCELLING, the same guard
+        Job.confirm_cancelled() already enforces.
+        """
+        if self.running_job is None:
+            raise ValueError(
+                "No running job."
+            )
+
+        self.running_job.confirm_cancelled(
+            exit_code=exit_code,
+        )
+
+        self.running_job = None
+        self.status = WorkerStatus.IDLE
+
     def drain(
         self,
     ) -> None:

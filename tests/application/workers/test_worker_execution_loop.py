@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import threading
+import time
+from datetime import timedelta
+
 from app.application.services.job_execution_service import (
     JobExecutionService,
 )
@@ -432,3 +436,155 @@ def test_run_once_records_job_failed_event_on_nonzero_exit() -> None:
     assert recorded[0].event_type == "JobFailed"
     assert recorded[0].aggregate_id == str(job.id)
     assert recorded[0].aggregate_type == "Job"
+
+
+def test_run_once_cancels_job_requested_to_cancel_during_execution() -> None:
+    """
+    A job whose cancellation is requested (e.g. via
+    CancelJobService, a separate request) while it is
+    actually running must have its subprocess terminated and
+    be persisted as CANCELLED, not left RUNNING or marked
+    FAILED (ADR 0029). Cancellation is simulated the same way
+    a real concurrent request would apply it: through the job
+    repository, not by touching the loop's internals
+    directly.
+    """
+    worker, job, node = _make_worker_and_job(
+        command=["python3", "-c", "import time; time.sleep(5)"],
+    )
+
+    lease = Lease.create(
+        worker_id=worker.id,
+        job_id=job.id,
+    )
+
+    lease_repository = InMemoryLeaseRepository()
+    lease_repository.save(lease)
+
+    worker_repository = InMemoryWorkerRepository([worker])
+    job_repository = InMemoryJobRepository([job])
+    node_repository = InMemoryNodeRepository([node])
+
+    renew_lease_service = RenewLeaseService(
+        lease_repository=lease_repository,
+    )
+
+    release_lease_service = ReleaseLeaseService(
+        lease_repository=lease_repository,
+        worker_repository=worker_repository,
+    )
+
+    job_execution_service = JobExecutionService(
+        poll_interval=timedelta(seconds=0.05),
+    )
+
+    loop = WorkerExecutionLoop(
+        worker_repository=worker_repository,
+        job_repository=job_repository,
+        node_repository=node_repository,
+        renew_lease_service=renew_lease_service,
+        release_lease_service=release_lease_service,
+        job_execution_service=job_execution_service,
+        renewal_interval_seconds=0.1,
+    )
+
+    def request_cancellation_soon() -> None:
+        time.sleep(0.2)
+        stored = job_repository.get_by_id(job.id)
+        assert stored is not None
+        stored.request_cancellation()
+        job_repository.save(stored)
+
+    threading.Thread(
+        target=request_cancellation_soon,
+        daemon=True,
+    ).start()
+
+    loop.execute(worker.id)
+
+    saved_worker = worker_repository.get_by_id(worker.id)
+    saved_job = job_repository.get_by_id(job.id)
+    saved_node = node_repository.get_by_id(node.id)
+
+    assert saved_worker is not None
+    assert saved_worker.is_idle()
+    assert saved_worker.running_job is None
+
+    assert saved_job is not None
+    assert saved_job.is_cancelled()
+
+    assert lease_repository.get_by_worker_id(worker.id) is None
+
+    assert saved_node is not None
+    assert saved_node.available == saved_node.capacity
+
+
+def test_run_once_records_job_cancelled_event() -> None:
+    """
+    A confirmed cancellation must record a JobCancelled
+    event, distinct from JobCompleted or JobFailed.
+    """
+    worker, job, node = _make_worker_and_job(
+        command=["python3", "-c", "import time; time.sleep(5)"],
+    )
+
+    lease = Lease.create(
+        worker_id=worker.id,
+        job_id=job.id,
+    )
+
+    lease_repository = InMemoryLeaseRepository()
+    lease_repository.save(lease)
+
+    worker_repository = InMemoryWorkerRepository([worker])
+    job_repository = InMemoryJobRepository([job])
+    node_repository = InMemoryNodeRepository([node])
+
+    events = InMemoryEventRepository()
+    record_job_events_service = RecordJobEventsService(
+        event_repository=events,
+    )
+
+    renew_lease_service = RenewLeaseService(
+        lease_repository=lease_repository,
+    )
+
+    release_lease_service = ReleaseLeaseService(
+        lease_repository=lease_repository,
+        worker_repository=worker_repository,
+    )
+
+    job_execution_service = JobExecutionService(
+        poll_interval=timedelta(seconds=0.05),
+    )
+
+    loop = WorkerExecutionLoop(
+        worker_repository=worker_repository,
+        job_repository=job_repository,
+        node_repository=node_repository,
+        renew_lease_service=renew_lease_service,
+        release_lease_service=release_lease_service,
+        job_execution_service=job_execution_service,
+        record_job_events_service=record_job_events_service,
+        renewal_interval_seconds=0.1,
+    )
+
+    def request_cancellation_soon() -> None:
+        time.sleep(0.2)
+        stored = job_repository.get_by_id(job.id)
+        assert stored is not None
+        stored.request_cancellation()
+        job_repository.save(stored)
+
+    threading.Thread(
+        target=request_cancellation_soon,
+        daemon=True,
+    ).start()
+
+    loop.execute(worker.id)
+
+    recorded = events.list()
+
+    assert len(recorded) == 1
+    assert recorded[0].event_type == "JobCancelled"
+    assert recorded[0].aggregate_id == str(job.id)
