@@ -43,6 +43,7 @@ from datetime import timedelta
 import httpx
 
 from app.application.services.job_execution_service import (
+    JobExecutionResult,
     JobExecutionService,
 )
 from app.domain.entities.lease import DEFAULT_LEASE_DURATION
@@ -115,36 +116,61 @@ def start_job(client: httpx.Client, worker_id: str, job_id: str) -> None:
     response.raise_for_status()
 
 
-def renew_lease(client: httpx.Client, worker_id: str) -> bool:
+def renew_lease(
+    client: httpx.Client,
+    worker_id: str,
+) -> tuple[bool, str | None]:
     """
-    Returns False if the lease is already gone (409): the caller
-    must stop renewing and must not persist whatever the
-    subprocess eventually returns, someone else may already own
-    this job (ADR 0011).
+    Returns (lease_still_held, job_status).
+
+    lease_still_held is False if the lease is already gone
+    (409): the caller must stop renewing and must not persist
+    whatever the subprocess eventually returns, someone else
+    may already own this job (ADR 0011).
+
+    job_status is the assigned job's current status as of
+    this renewal (ADR 0029), read from the same response
+    every renewal already receives rather than a separate
+    call. None if the lease was lost.
     """
     response = client.post(
         f"/workers/{worker_id}/lease/renew",
     )
 
     if response.status_code == 409:
-        return False
+        return False, None
 
     response.raise_for_status()
-    return True
+
+    body = response.json()
+    running_job = body.get("running_job")
+    job_status = running_job["status"] if running_job else None
+
+    return True, job_status
 
 
 def report_outcome(
     client: httpx.Client,
     worker_id: str,
     job_id: str,
-    succeeded: bool,
-    exit_code: int | None,
+    result: JobExecutionResult,
 ) -> None:
-    path = "complete" if succeeded else "fail"
+    """
+    Report a job's real outcome: cancelled, completed, or
+    failed (ADR 0029). cancelled is checked first, since a
+    cancelled result is also not succeeded and would
+    otherwise be misreported as a plain failure.
+    """
+    if result.cancelled:
+        path = "cancel"
+    elif result.succeeded:
+        path = "complete"
+    else:
+        path = "fail"
 
     response = client.post(
         f"/workers/{worker_id}/jobs/{job_id}/{path}",
-        json={"exit_code": exit_code},
+        json={"exit_code": result.exit_code},
     )
 
     if response.status_code == 409:
@@ -172,14 +198,16 @@ def run_job(
     start_job(client, worker_id, job_id)
 
     stop_renewing = threading.Event()
+    cancel_event = threading.Event()
     lost_lease = threading.Event()
 
     def keep_lease_alive() -> None:
         while not stop_renewing.wait(RENEWAL_INTERVAL_SECONDS):
             try:
-                if not renew_lease(client, worker_id):
-                    lost_lease.set()
-                    return
+                lease_ok, job_status = renew_lease(
+                    client,
+                    worker_id,
+                )
             except httpx.HTTPError as exc:
                 print(
                     f"Lease renewal failed: {exc}. "
@@ -187,6 +215,16 @@ def run_job(
                 )
                 lost_lease.set()
                 return
+
+            if not lease_ok:
+                lost_lease.set()
+                return
+
+            if (
+                not cancel_event.is_set()
+                and job_status == "CANCELLING"
+            ):
+                cancel_event.set()
 
     renewal_thread = threading.Thread(
         target=keep_lease_alive,
@@ -200,6 +238,7 @@ def run_job(
         result = job_execution_service.execute(
             command=command,
             timeout=timeout,
+            cancel_event=cancel_event,
         )
     finally:
         stop_renewing.set()
@@ -214,15 +253,16 @@ def run_job(
 
     print(
         f"Job {job_id} finished: "
-        f"succeeded={result.succeeded} exit_code={result.exit_code}"
+        f"succeeded={result.succeeded} "
+        f"cancelled={result.cancelled} "
+        f"exit_code={result.exit_code}"
     )
 
     report_outcome(
         client,
         worker_id,
         job_id,
-        succeeded=result.succeeded,
-        exit_code=result.exit_code,
+        result,
     )
 
 

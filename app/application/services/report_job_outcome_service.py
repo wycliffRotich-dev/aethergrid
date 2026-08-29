@@ -194,3 +194,34 @@ class ReportJobOutcomeService:
             job,
             event_type="JobFailed",
         )
+
+    def cancel(
+        self,
+        worker_id: WorkerId,
+        job_id: JobId,
+        exit_code: int | None = None,
+    ) -> Worker:
+        """
+        Report that a job's cancellation was confirmed: its
+        subprocess was actually terminated (ADR 0029).
+
+        Raises the same exceptions as complete()/fail(), for
+        the same reasons.
+        """
+        worker = self._get_owning_worker(
+            worker_id,
+            job_id,
+        )
+
+        job = worker.running_job
+
+        worker.cancel_job(
+            exit_code=exit_code,
+        )
+
+        return self._finish(
+            worker,
+            worker_id,
+            job,
+            event_type="JobCancelled",
+        )
