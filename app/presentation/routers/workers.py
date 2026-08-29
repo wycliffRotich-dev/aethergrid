@@ -493,6 +493,97 @@ def fail_job(
 
 
 @router.post(
+    "/{worker_id}/jobs/{job_id}/cancel",
+    response_model=GetWorkerResponse,
+)
+def confirm_job_cancellation(
+    worker_id: str,
+    job_id: str,
+    request: ReportJobOutcomeRequest,
+    service: Annotated[
+        ReportJobOutcomeService,
+        Depends(
+            get_report_job_outcome_service,
+        ),
+    ],
+) -> GetWorkerResponse:
+    """
+    Confirm that a job's cancellation was actually applied to
+    its subprocess (ADR 0029).
+
+    Distinct from POST /jobs/{job_id}/cancel, which requests
+    a cancellation. This endpoint is worker-scoped and
+    reports that the request was carried out, the same way
+    complete_job/fail_job report an outcome rather than
+    request one.
+
+    Raises the same exceptions as complete_job, for the same
+    reasons.
+    """
+    try:
+        worker_id_value = WorkerId(
+            worker_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Malformed worker id.",
+        ) from exc
+
+    try:
+        job_id_value = JobId(
+            value=UUID(job_id),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Malformed job id.",
+        ) from exc
+
+    try:
+        worker = service.cancel(
+            worker_id_value,
+            job_id_value,
+            exit_code=request.exit_code,
+        )
+    except WorkerNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except WorkerJobMismatchError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except (NoActiveLeaseError, LeaseNotFoundError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    running_job = None
+
+    if worker.running_job is not None:
+        running_job = RunningJobResponse(
+            id=str(worker.running_job.id),
+            status=worker.running_job.status.name,
+            command=worker.running_job.command,
+            execution_timeout_seconds=(
+                worker.running_job.execution_timeout.total_seconds()
+            ),
+        )
+
+    return GetWorkerResponse(
+        id=str(worker.id),
+        status=worker.status.name,
+        node_id=str(worker.node.id),
+        last_seen_at=worker.last_seen_at,
+        running_job=running_job,
+    )
+
+
+@router.post(
     "/{worker_id}/lease/renew",
     response_model=GetWorkerResponse,
 )

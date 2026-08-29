@@ -314,3 +314,87 @@ def test_fail_raises_worker_not_found_error() -> None:
             WorkerId.new(),
             job.id,
         )
+
+
+def test_cancel_marks_job_cancelled_releases_lease_and_node() -> None:
+    worker, job, node = _make_running_worker_and_job()
+    job.request_cancellation()
+
+    service, worker_repository, job_repository, node_repository, lease_repository = (
+        _build_service(worker, job, node)
+    )
+
+    service.cancel(
+        worker.id,
+        job.id,
+        exit_code=-15,
+    )
+
+    saved_worker = worker_repository.get_by_id(worker.id)
+    saved_job = job_repository.get_by_id(job.id)
+    saved_node = node_repository.get_by_id(node.id)
+
+    assert saved_worker is not None
+    assert saved_worker.is_idle()
+    assert saved_worker.running_job is None
+
+    assert saved_job is not None
+    assert saved_job.is_cancelled()
+    assert saved_job.exit_code == -15
+
+    assert lease_repository.get_by_worker_id(worker.id) is None
+
+    assert saved_node is not None
+    assert saved_node.available == saved_node.capacity
+
+
+def test_cancel_records_job_cancelled_event() -> None:
+    worker, job, node = _make_running_worker_and_job()
+    job.request_cancellation()
+
+    events = InMemoryEventRepository()
+    record_job_events_service = RecordJobEventsService(
+        event_repository=events,
+    )
+
+    service, *_ = _build_service(
+        worker, job, node, record_job_events_service,
+    )
+
+    service.cancel(
+        worker.id,
+        job.id,
+    )
+
+    recorded = events.list()
+
+    assert len(recorded) == 1
+    assert recorded[0].event_type == "JobCancelled"
+    assert recorded[0].aggregate_id == str(job.id)
+    assert recorded[0].aggregate_type == "Job"
+
+
+def test_cancel_raises_worker_not_found_error() -> None:
+    worker, job, node = _make_running_worker_and_job()
+    job.request_cancellation()
+
+    service, *_ = _build_service(worker, job, node)
+
+    with pytest.raises(WorkerNotFoundError):
+        service.cancel(
+            WorkerId.new(),
+            job.id,
+        )
+
+
+def test_cancel_raises_worker_job_mismatch_when_worker_holds_different_job() -> None:
+    worker, job, node = _make_running_worker_and_job()
+    job.request_cancellation()
+
+    service, *_ = _build_service(worker, job, node)
+
+    with pytest.raises(WorkerJobMismatchError):
+        service.cancel(
+            worker.id,
+            JobId.new(),
+        )
