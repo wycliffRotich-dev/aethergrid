@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="#test-coverage"><img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/wycliffRotich-dev/4b35dff5cea5aa68433713c36c3108bb/raw/aethergrid-test-badge.json" alt="Tests"></a>
-  <a href="#engineering-decision-records"><img src="https://img.shields.io/badge/ADRs-28-blueviolet" alt="ADRs"></a>
+  <a href="#engineering-decision-records"><img src="https://img.shields.io/badge/ADRs-29-blueviolet" alt="ADRs"></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
   <a href="#tech-stack"><img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python"></a>
   <a href="#tech-stack"><img src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI"></a>
@@ -34,7 +34,7 @@ AetherGrid was built around one rule: **the domain logic doesn't know or care wh
 
 ## Engineering Decision Records
 
-Every non-obvious decision in this codebase, why a domain rule lives where it does, why an obvious-looking shortcut was rejected, what broke and how it got fixed, is written down at the moment it was made, not reconstructed afterward for a portfolio. 28 ADRs live in [`/docs/adr`](docs/adr). A few worth reading directly if you want to see the reasoning, not just the conclusion:
+Every non-obvious decision in this codebase, why a domain rule lives where it does, why an obvious-looking shortcut was rejected, what broke and how it got fixed, is written down at the moment it was made, not reconstructed afterward for a portfolio. 29 ADRs live in [`/docs/adr`](docs/adr). A few worth reading directly if you want to see the reasoning, not just the conclusion:
 
 - [**ADR 0007 - Reconciliation Loop**](docs/adr/0007-reconciliation-loop.md): how the system detects and repairs state left inconsistent by dead workers and expired leases, instead of assuming the happy path is the only path.
 - [**ADR 0011 - Job Reclaim and Reconciliation Repair**](docs/adr/0011-job-reclaim-and-reconciliation-repair.md): closing a real race condition where a dying worker's lease renewal could land after reconciliation had already started reassigning its work.
@@ -43,6 +43,7 @@ Every non-obvious decision in this codebase, why a domain rule lives where it do
 - [**ADR 0015 - API Key Authentication**](docs/adr/0015-api-key-authentication.md): why opaque server-issued tokens were chosen over JWTs for a system that needs instant revocation, and why building authentication still didn't answer whether `Job.command` should be exposed, that question stayed open until [ADR 0020](docs/adr/0020-expose-job-command-to-authenticated-agents.md), which resolved it narrowly: a worker can read the one command already assigned to it, nothing broader.
 - [**ADR 0018 - Domain Owns Scheduling Policy**](docs/adr/0018-domain-owns-scheduling-policy.md): why `list_available()` moved out of the repository entirely, since deciding which nodes are eligible for scheduling is a business rule, not a persistence concern, and letting infrastructure decide that would have made scheduling behavior dependent on which database backend was running.
 - [**ADR 0019 - Standalone Worker Agent Process**](docs/adr/0019-standalone-worker-agent-process.md): replacing in-process job execution with a real out-of-process agent that confirms its own execution start over the network, and why pull-based polling was chosen over push delivery, since it reuses reconciliation this codebase already trusts instead of introducing new failure and delivery-guarantee logic.
+- [**ADR 0029 - Cancel a Running Job by Reusing Lease Renewal**](docs/adr/0029-cancel-running-job-via-lease-renewal.md): extending an existing, already-trusted channel (lease renewal) to deliver cancellation to a running job's subprocess, instead of adding a second polling mechanism, and introducing an explicit CANCELLING status so a job caught mid-cancellation is a visible, real state rather than indistinguishable from one still running.
 
 If you're evaluating whether someone can operate at a systems level rather than a feature level, this is the fastest way to check.
 
@@ -51,7 +52,7 @@ If you're evaluating whether someone can operate at a systems level rather than 
 ## Key Capabilities
 
 - **API key authentication gating every route**: no endpoint in the system, including the one that issues keys, is reachable without a valid credential. The only way to mint the first key is a script run locally with direct database access, never over HTTP, closing the exact self-service-credential hole that pattern would otherwise leave open
-- **Job lifecycle management**: explicit state transitions (Queued → Scheduled → Running → Completed/Failed/Cancelled) with configurable retry policies and priority-aware scheduling, plus cancel and retry actions reachable from the dashboard
+- **Job lifecycle management**: explicit state transitions (Queued → Scheduled → Running → Completed/Failed/Cancelled), including cancellation of a job already `RUNNING` via an explicit `CANCELLING` state, with configurable retry policies and priority-aware scheduling, plus cancel and retry actions reachable from the dashboard
 - **Per-job lifecycle history**: every job has a dedicated detail page (`/jobs/{id}`) showing its full real event timeline, `JobCreated` through completion, not just its current status
 - **Constraint-aware best-fit allocator**: matches workloads to nodes based on resource requirements and labels, while skipping nodes that are draining or offline
 - **Node draining**: a healthy node can be taken out of scheduling rotation for maintenance without killing it outright; the scheduler stops assigning it new work while anything already running on it continues to completion
@@ -101,11 +102,11 @@ The pattern holds throughout: build it right, prove it works, name the risk befo
 
 ## Test Coverage
 
-289 tests across domain, application, infrastructure, and API layers, all passing:
+310 tests across domain, application, infrastructure, and API layers, all passing:
 
 - Full domain logic coverage: job lifecycle, retry policy, constraint matching, node and worker liveness, lease semantics, node draining and the scheduler's exclusion of draining nodes, and API key issuance, revocation, and usage tracking
 - Contract tests proving every repository's in-memory, SQLite (where implemented), and PostgreSQL implementations behave identically, including foreign-key-enforced aggregates such as `Worker` and `Lease`, and specifically that lease renewal fails rather than resurrects a lease already reclaimed by reconciliation
-- Application service tests for every use case, including lease acquisition, renewal, release, reconciliation repair (both the requeue-with-retries-remaining path and the fail-outright-once-exhausted path), real subprocess execution (including a test that genuinely kills a process that ignores `SIGTERM`, forcing `SIGKILL`), and the full API key lifecycle from issuance through revocation
+- Application service tests for every use case, including lease acquisition, renewal, release, reconciliation repair (both the requeue-with-retries-remaining path and the fail-outright-once-exhausted path), real subprocess execution (including tests that genuinely kill a process that ignores `SIGTERM`, forcing `SIGKILL`, on both the timeout path and the cancellation path), and the full API key lifecycle from issuance through revocation
 - Event recording tests proving every lifecycle event fires at the correct point, in the correct order, across the full job lifecycle, scheduling, assignment, lease acquisition and release, completion, failure, and reconciliation reclaim
 - API-level tests against real FastAPI endpoints, including the cluster-wide event feed, per-job history, and every route's auth requirement, verified through a real end-to-end request, not mocked
 
