@@ -27,8 +27,29 @@ class CreateWorkerService:
         managed_by: WorkerManagement = WorkerManagement.DASHBOARD,
     ) -> Worker:
         """
-        Create and persist a worker.
+        Create and persist a worker for a node, or reclaim
+        the node's existing worker if one is already
+        registered (ADR 0030).
+
+        Reclaiming preserves the existing WorkerId across an
+        agent restart rather than minting a new one, using
+        Worker.recover(), the same recovery path
+        reconciliation already applies to abandoned work.
         """
+        existing = self._worker_repository.get_by_node_id(
+            node.id,
+        )
+
+        if existing is not None:
+            existing.recover()
+            existing.managed_by = managed_by
+
+            self._worker_repository.save(
+                existing,
+            )
+
+            return existing
+
         worker = Worker(
             id=WorkerId.new(),
             node=node,
