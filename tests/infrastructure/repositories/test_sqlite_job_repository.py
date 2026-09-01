@@ -217,3 +217,47 @@ def test_round_trips_job_with_no_command(db_path) -> None:
 
     assert reloaded is not None
     assert reloaded.command is None
+
+
+def test_round_trips_started_at_and_completed_at(db_path) -> None:
+    """
+    started_at and completed_at must survive a save/load
+    cycle across independent connections. Neither column
+    previously existed in the SQLite schema at all, so both
+    were silently dropped on every save.
+    """
+    job = _make_job()
+    job.queue()
+    job.assign_to(NodeId.new())
+    job.start()
+
+    write_connection = create_connection(db_path)
+    write_repository = SqliteJobRepository(write_connection)
+    write_repository.save(job)
+    write_connection.close()
+
+    read_connection = create_connection(db_path)
+    read_repository = SqliteJobRepository(read_connection)
+    reloaded = read_repository.get_by_id(job.id)
+    read_connection.close()
+
+    assert reloaded is not None
+    assert reloaded.started_at is not None
+    assert reloaded.started_at == job.started_at
+    assert reloaded.completed_at is None
+
+    job.complete(exit_code=0)
+
+    write_connection = create_connection(db_path)
+    write_repository = SqliteJobRepository(write_connection)
+    write_repository.save(job)
+    write_connection.close()
+
+    read_connection = create_connection(db_path)
+    read_repository = SqliteJobRepository(read_connection)
+    reloaded_after_completion = read_repository.get_by_id(job.id)
+    read_connection.close()
+
+    assert reloaded_after_completion is not None
+    assert reloaded_after_completion.completed_at is not None
+    assert reloaded_after_completion.completed_at == job.completed_at
