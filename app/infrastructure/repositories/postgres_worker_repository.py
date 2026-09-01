@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
@@ -155,6 +157,10 @@ class PostgresWorkerRepository(WorkerRepository):
             else None
         )
 
+        command = row["command"]
+        if isinstance(command, str):
+            command = json.loads(command)
+
         return Job(
             id=JobId(row["id"]),
             resources=ResourceRequirements(
@@ -169,4 +175,8 @@ class PostgresWorkerRepository(WorkerRepository):
             status=JobStatus(row["status"]),
             assigned_node_id=assigned_node_id,
             submitted_at=row["submitted_at"],
+            started_at=row["started_at"],
+            completed_at=row["completed_at"],
+            command=command,
+            exit_code=row["exit_code"],
         )
