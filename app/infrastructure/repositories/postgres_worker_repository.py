@@ -192,4 +192,5 @@ class PostgresWorkerRepository(WorkerRepository):
             completed_at=row["completed_at"],
             command=command,
             exit_code=row["exit_code"],
+            cancellation_requested_at=row["cancellation_requested_at"],
         )

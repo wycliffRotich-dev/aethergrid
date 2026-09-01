@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     started_at         TIMESTAMPTZ,
     completed_at       TIMESTAMPTZ,
     command            JSONB,
-    exit_code          INTEGER
+    exit_code          INTEGER,
+    cancellation_requested_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS workers (
@@ -50,6 +51,12 @@ CREATE TABLE IF NOT EXISTS workers (
 -- design, see the header above).
 ALTER TABLE workers
 ADD COLUMN IF NOT EXISTS managed_by TEXT NOT NULL DEFAULT 'DASHBOARD';
+
+-- Same rationale as the managed_by ALTER above: covers any
+-- environment created before ADR 0029 introduced cancellation,
+-- whose jobs table predates this column.
+ALTER TABLE jobs
+ADD COLUMN IF NOT EXISTS cancellation_requested_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS leases (
     id                UUID PRIMARY KEY,
