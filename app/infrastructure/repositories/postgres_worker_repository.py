@@ -69,6 +69,19 @@ class PostgresWorkerRepository(WorkerRepository):
             ).fetchone()
         return self._to_entity(conn, row) if row else None
 
+    def get_by_node_id(self, node_id: NodeId) -> Worker | None:
+        """
+        Retrieve the worker registered for a node, if one
+        exists (ADR 0030).
+        """
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            row = conn.execute(
+                "SELECT * FROM workers WHERE node_id = %s",
+                (str(node_id),),
+            ).fetchone()
+        return self._to_entity(conn, row) if row else None
+
     def list(self) -> list[Worker]:
         with self._pool.connection() as conn:
             conn.row_factory = dict_row

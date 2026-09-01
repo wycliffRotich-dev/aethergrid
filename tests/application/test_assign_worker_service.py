@@ -50,6 +50,16 @@ class InMemoryWorkerRepository(
     ) -> Worker | None:
         return self._workers.get(worker_id)
 
+    def get_by_node_id(
+        self,
+        node_id,
+    ) -> Worker | None:
+        for worker in self._workers.values():
+            if worker.node.id == node_id:
+                return worker
+
+        return None
+
     def list(
         self,
     ) -> list[Worker]:

@@ -4,6 +4,7 @@ from app.domain.entities.worker import Worker
 from app.domain.repositories.worker_repository import (
     WorkerRepository,
 )
+from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.worker_id import WorkerId
 
 
@@ -50,6 +51,20 @@ class InMemoryWorkerRepository(WorkerRepository):
         Retrieve a worker by its identifier.
         """
         return self._workers.get(worker_id)
+
+    def get_by_node_id(
+        self,
+        node_id: NodeId,
+    ) -> Worker | None:
+        """
+        Retrieve the worker registered for a node, if one
+        exists (ADR 0030).
+        """
+        for worker in self._workers.values():
+            if worker.node.id == node_id:
+                return worker
+
+        return None
 
     def list(
         self,

@@ -61,6 +61,24 @@ class WorkerRepositoryContract:
     ) -> None:
         assert repository.get_by_id(WorkerId.new()) is None
 
+    def test_get_by_node_id_returns_matching_worker(
+        self,
+        repository,
+    ) -> None:
+        worker = self._make_worker()
+        repository.save(worker)
+
+        stored = repository.get_by_node_id(worker.node.id)
+
+        assert stored is not None
+        assert stored.id == worker.id
+
+    def test_get_by_node_id_returns_none_when_missing(
+        self,
+        repository,
+    ) -> None:
+        assert repository.get_by_node_id(NodeId.new()) is None
+
     def test_list_workers(
         self,
         repository,
