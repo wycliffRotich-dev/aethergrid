@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     status TEXT NOT NULL,
     assigned_node_id TEXT,
     submitted_at TEXT NOT NULL,
+    started_at TEXT,
+    completed_at TEXT,
     command TEXT,
     exit_code INTEGER,
     cancellation_requested_at TEXT
@@ -73,10 +75,12 @@ class SqliteJobRepository(JobRepository):
                 status,
                 assigned_node_id,
                 submitted_at,
+                started_at,
+                completed_at,
                 command,
                 exit_code,
                 cancellation_requested_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 cpu_cores = excluded.cpu_cores,
                 memory_mib = excluded.memory_mib,
@@ -88,6 +92,8 @@ class SqliteJobRepository(JobRepository):
                 status = excluded.status,
                 assigned_node_id = excluded.assigned_node_id,
                 submitted_at = excluded.submitted_at,
+                started_at = excluded.started_at,
+                completed_at = excluded.completed_at,
                 command = excluded.command,
                 exit_code = excluded.exit_code,
                 cancellation_requested_at = excluded.cancellation_requested_at
@@ -104,6 +110,8 @@ class SqliteJobRepository(JobRepository):
                 job.status.value,
                 (str(job.assigned_node_id) if job.assigned_node_id is not None else None),
                 job.submitted_at.isoformat(),
+                (job.started_at.isoformat() if job.started_at is not None else None),
+                (job.completed_at.isoformat() if job.completed_at is not None else None),
                 command,
                 job.exit_code,
                 (
@@ -199,6 +207,16 @@ class SqliteJobRepository(JobRepository):
             assigned_node_id=assigned_node_id,
             submitted_at=datetime.fromisoformat(
                 row["submitted_at"],
+            ),
+            started_at=(
+                datetime.fromisoformat(row["started_at"])
+                if row["started_at"] is not None
+                else None
+            ),
+            completed_at=(
+                datetime.fromisoformat(row["completed_at"])
+                if row["completed_at"] is not None
+                else None
             ),
             command=command,
             exit_code=row["exit_code"],
