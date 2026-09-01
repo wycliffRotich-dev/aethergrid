@@ -31,6 +31,11 @@ const STATUS_STYLES: Record<JobStatus, StatusStyle> = {
     text: "text-amber-300",
     label: "running",
   },
+  CANCELLING: {
+    dot: "bg-orange-400 animate-pulse",
+    text: "text-orange-300",
+    label: "cancelling",
+  },
   COMPLETED: {
     dot: "bg-emerald-500",
     text: "text-emerald-400",
@@ -52,6 +57,7 @@ const CANCELLABLE_STATUSES: JobStatus[] = [
   "SUBMITTED",
   "QUEUED",
   "SCHEDULED",
+  "RUNNING",
 ];
 
 function shortId(id: string): string {

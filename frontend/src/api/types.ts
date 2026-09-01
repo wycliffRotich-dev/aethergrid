@@ -18,6 +18,7 @@ export type JobStatus =
   | "QUEUED"
   | "SCHEDULED"
   | "RUNNING"
+  | "CANCELLING"
   | "COMPLETED"
   | "FAILED"
   | "CANCELLED";

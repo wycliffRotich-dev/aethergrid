@@ -9,6 +9,7 @@ export type CreateJobRequest = {
   cpu_cores: number;
   memory_mib: number;
   vram_mib: number;
+  command?: string[];
 };
 
 export function createJob(
