@@ -74,7 +74,7 @@ export default function JobDetailPage() {
     );
   }
 
-  const canCancel = ["SUBMITTED", "QUEUED", "SCHEDULED"].includes(job.status);
+  const canCancel = ["SUBMITTED", "QUEUED", "SCHEDULED", "RUNNING"].includes(job.status);
   const canRetry = job.status === "FAILED";
 
   return (

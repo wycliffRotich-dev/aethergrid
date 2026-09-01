@@ -12,6 +12,7 @@ export function SubmitJobForm({
   const [cpu, setCpu] = useState(1);
   const [memory, setMemory] = useState(2048);
   const [vram, setVram] = useState(0);
+  const [command, setCommand] = useState("");
 
   const [loading, setLoading] =
     useState(false);
@@ -24,10 +25,15 @@ export function SubmitJobForm({
     setLoading(true);
 
     try {
+      const trimmedCommand = command.trim();
+
       await createJob({
         cpu_cores: cpu,
         memory_mib: memory,
         vram_mib: vram,
+        ...(trimmedCommand.length > 0
+          ? { command: trimmedCommand.split(/\s+/) }
+          : {}),
       });
 
       onSubmitted();
@@ -91,6 +97,29 @@ export function SubmitJobForm({
             }
             className="w-full rounded border border-slate-700 bg-slate-800 p-2 text-white"
           />
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm text-slate-300">
+            Command (optional)
+          </label>
+
+          <input
+            type="text"
+            value={command}
+            onChange={(e) =>
+              setCommand(e.target.value)
+            }
+            placeholder="python train.py --epochs 5"
+            className="w-full rounded border border-slate-700 bg-slate-800 p-2 font-mono text-sm text-white placeholder:text-slate-600"
+          />
+
+          <p className="mt-1 text-xs text-slate-500">
+            Split on spaces into an argv-style command, e.g.
+            the same way you'd type it in a terminal. No shell
+            operators like | or &gt; are supported. Leave blank
+            for a no-op job.
+          </p>
         </div>
 
         <button
