@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     assigned_node_id TEXT,
     submitted_at TEXT NOT NULL,
     command TEXT,
-    exit_code INTEGER
+    exit_code INTEGER,
+    cancellation_requested_at TEXT
 );
 """
 
@@ -73,8 +74,9 @@ class SqliteJobRepository(JobRepository):
                 assigned_node_id,
                 submitted_at,
                 command,
-                exit_code
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                exit_code,
+                cancellation_requested_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 cpu_cores = excluded.cpu_cores,
                 memory_mib = excluded.memory_mib,
@@ -87,7 +89,8 @@ class SqliteJobRepository(JobRepository):
                 assigned_node_id = excluded.assigned_node_id,
                 submitted_at = excluded.submitted_at,
                 command = excluded.command,
-                exit_code = excluded.exit_code
+                exit_code = excluded.exit_code,
+                cancellation_requested_at = excluded.cancellation_requested_at
             """,
             (
                 str(job.id),
@@ -103,6 +106,11 @@ class SqliteJobRepository(JobRepository):
                 job.submitted_at.isoformat(),
                 command,
                 job.exit_code,
+                (
+                    job.cancellation_requested_at.isoformat()
+                    if job.cancellation_requested_at is not None
+                    else None
+                ),
             ),
         )
         self._connection.commit()
@@ -194,4 +202,9 @@ class SqliteJobRepository(JobRepository):
             ),
             command=command,
             exit_code=row["exit_code"],
+            cancellation_requested_at=(
+                datetime.fromisoformat(row["cancellation_requested_at"])
+                if row["cancellation_requested_at"] is not None
+                else None
+            ),
         )
