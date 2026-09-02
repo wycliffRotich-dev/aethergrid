@@ -667,6 +667,7 @@ def get_start_job_service() -> StartJobService:
 
     return StartJobService(
         worker_repository=_worker_repository,
+        job_repository=_job_repository,
     )
 
 
