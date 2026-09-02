@@ -7,6 +7,7 @@ from app.domain.exceptions.worker_job_mismatch_error import (
 from app.domain.exceptions.worker_not_found_error import (
     WorkerNotFoundError,
 )
+from app.domain.repositories.job_repository import JobRepository
 from app.domain.repositories.worker_repository import (
     WorkerRepository,
 )
@@ -31,8 +32,10 @@ class StartJobService:
     def __init__(
         self,
         worker_repository: WorkerRepository,
+        job_repository: JobRepository,
     ) -> None:
         self._worker_repository = worker_repository
+        self._job_repository = job_repository
 
     def execute(
         self,
@@ -68,5 +71,23 @@ class StartJobService:
         self._worker_repository.save(
             worker,
         )
+
+        # worker.start() mutates worker.running_job (the same
+        # Job object) to RUNNING in memory, but never persists
+        # that job on its own -- WorkerRepository.save() only
+        # writes the workers table. Without this, the jobs
+        # table row stays SCHEDULED forever for any backend
+        # that reconstructs Job independently of Worker (real
+        # Postgres/SQLite, not the in-memory repositories that
+        # happen to share object references and mask this).
+        # Discovered running a real standalone agent against
+        # real Postgres for the first time (ADR 0019, ADR 0030
+        # fleet-scale testing) -- every prior job completion
+        # went through WorkerExecutionLoop's in-process path
+        # instead, which never hits this gap.
+        if worker.running_job is not None:
+            self._job_repository.save(
+                worker.running_job,
+            )
 
         return worker
