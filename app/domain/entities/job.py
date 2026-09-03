@@ -384,24 +384,44 @@ class Job:
         (a dead worker, an offline node, or an expired lease),
         as opposed to a job that failed on its own merits.
 
-        This is only legal while the job is SCHEDULED or
-        RUNNING, since those are the only states in which a
+        Legal while the job is SCHEDULED, RUNNING, or
+        CANCELLING, since those are the only states in which a
         worker could plausibly still be holding it.
 
-        Reclaiming consumes a retry attempt, using the same
-        accounting as retry(). This is deliberate: without it,
-        a single unhealthy node could cause a job to be
-        endlessly reassigned and re-abandoned, consuming
-        scheduling cycles and node capacity indefinitely
-        without ever reaching a terminal state. Once retries
-        are exhausted, the job fails instead of requeuing
-        again.
+        A CANCELLING job is finalized as CANCELLED instead of
+        retried (ADR 0031): cancellation was already requested
+        before the worker died, so the dead worker didn't
+        prevent that outcome, it just failed to confirm it.
+        Retrying would start a fresh execution attempt the
+        caller never asked for and had already asked to stop.
+        No retry attempt is consumed for this path, since
+        retry accounting exists to bound attempts to run a
+        job, not attempts to stop one.
+
+        Reclaiming a SCHEDULED or RUNNING job consumes a retry
+        attempt, using the same accounting as retry(). This is
+        deliberate: without it, a single unhealthy node could
+        cause a job to be endlessly reassigned and
+        re-abandoned, consuming scheduling cycles and node
+        capacity indefinitely without ever reaching a terminal
+        state. Once retries are exhausted, the job fails
+        instead of requeuing again.
         """
+        if self.is_cancelling():
+            self.assigned_node_id = None
+            self.completed_at = utc_now()
+
+            self._transition_to(
+                JobStatus.CANCELLED,
+            )
+            return
+
         if not (
             self.is_scheduled() or self.is_running()
         ):
             raise InvalidJobTransition(
-                "Only scheduled or running jobs may be reclaimed."
+                "Only scheduled, running, or cancelling jobs "
+                "may be reclaimed."
             )
 
         if not self.can_retry():
