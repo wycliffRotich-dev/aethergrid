@@ -124,21 +124,29 @@ async def _run_cluster_loop() -> None:
     same way, in its own try/except, so a failure there
     can't prevent the next cluster tick from running either.
 
-    Note: ClusterTickService.execute() runs synchronously,
-    including any real subprocess execution via
-    JobExecutionService. Every job created through the
-    public API today has no command (see ADR 0012), so this
-    resolves instantly. If real command execution is ever
-    exposed publicly, this call should move to a thread
-    (e.g. via asyncio.to_thread) so a long-running job can't
-    block the event loop.
+    ClusterTickService.execute() now runs on a worker thread via
+    asyncio.to_thread (ADR 0032), since it may execute a
+    job's real, arbitrary command (ADR 0028) for an
+    unbounded, caller-controlled duration. Without this, a
+    single long-running job would block this event loop,
+    and with it every other request this server handles, for
+    the job's entire execution.
+
+    ReconciliationLoop.execute() is deliberately left as a
+    direct call, not threaded: it never executes a job's
+    command, and its work (marking dead workers, reclaiming
+    expired leases, recovering offline nodes) is bounded and
+    repository-bound, so moving it would add thread-hop
+    overhead with no corresponding benefit (ADR 0032).
     """
     cluster_tick_service = get_cluster_tick_service()
     reconciliation_loop = get_reconciliation_loop()
 
     while True:
         try:
-            cluster_tick_service.execute()
+            await asyncio.to_thread(
+                cluster_tick_service.execute,
+            )
         except Exception:
             logger.exception(
                 "Unexpected error running cluster tick.",
