@@ -104,6 +104,8 @@ class RecoverExpiredLeaseService:
                 )
 
             if job is not None:
+                was_cancelling = job.is_cancelling()
+
                 try:
                     job.reclaim()
                 except InvalidJobTransition:
@@ -121,7 +123,18 @@ class RecoverExpiredLeaseService:
                 )
 
                 if self._record_job_events_service is not None:
+                    # A job that was CANCELLING is finalized as
+                    # CANCELLED by reclaim() (ADR 0031), not
+                    # retried, so the event recorded should say
+                    # what actually happened to the job, not the
+                    # generic reclaim event used for the
+                    # SCHEDULED/RUNNING retry path.
+                    event_type = (
+                        "JobCancelled"
+                        if was_cancelling
+                        else "JobReclaimed"
+                    )
                     self._record_job_events_service.record(
                         aggregate_id=str(job.id),
-                        event_type="JobReclaimed",
+                        event_type=event_type,
                     )

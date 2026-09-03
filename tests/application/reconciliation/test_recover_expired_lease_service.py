@@ -227,3 +227,129 @@ def test_recover_expired_lease_records_job_reclaimed_event() -> None:
     assert recorded[0].event_type == "JobReclaimed"
     assert recorded[0].aggregate_id == str(job.id)
     assert recorded[0].aggregate_type == "Job"
+
+
+def test_recover_expired_lease_finalizes_cancelling_job_as_cancelled() -> None:
+    """
+    A job that was CANCELLING when its worker died is
+    finalized as CANCELLED, not requeued, since cancellation
+    was already requested before the worker died (ADR 0031).
+    No retry attempt is consumed.
+    """
+    node = _make_node()
+
+    worker = Worker(
+        id=WorkerId.new(),
+        node=node,
+    )
+
+    worker.ready()
+
+    job = Job(
+        id=JobId.new(),
+        resources=ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=512,
+            vram_mib=0,
+        ),
+        max_retries=1,
+    )
+
+    job.queue()
+    job.assign_to(node.id)
+
+    worker.accept(job)
+    worker.start()
+    job.request_cancellation()
+
+    lease = _make_expired_lease(worker, job)
+
+    worker_repository = InMemoryWorkerRepository([worker])
+    job_repository = InMemoryJobRepository([job])
+    lease_repository = InMemoryLeaseRepository()
+    lease_repository.save(lease)
+
+    service = RecoverExpiredLeaseService(
+        worker_repository=worker_repository,
+        job_repository=job_repository,
+        lease_repository=lease_repository,
+    )
+
+    service.execute()
+
+    recovered_worker = worker_repository.get_by_id(worker.id)
+    recovered_job = job_repository.get_by_id(job.id)
+
+    assert recovered_worker is not None
+    assert recovered_worker.is_idle()
+
+    assert recovered_job is not None
+    assert recovered_job.is_cancelled()
+    assert recovered_job.retry_count == 0
+
+    assert (
+        lease_repository.get_by_worker_id(worker.id) is None
+    )
+
+
+def test_recover_expired_lease_records_job_cancelled_event_for_cancelling_job() -> None:
+    """
+    Reclaiming a job that was CANCELLING when its lease
+    expired must record JobCancelled, not the generic
+    JobReclaimed used for the SCHEDULED/RUNNING retry path,
+    since the event history should describe what actually
+    happened to the job (ADR 0031).
+    """
+    node = _make_node()
+
+    worker = Worker(
+        id=WorkerId.new(),
+        node=node,
+    )
+
+    worker.ready()
+
+    job = Job(
+        id=JobId.new(),
+        resources=ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=512,
+            vram_mib=0,
+        ),
+        max_retries=1,
+    )
+
+    job.queue()
+    job.assign_to(node.id)
+
+    worker.accept(job)
+    worker.start()
+    job.request_cancellation()
+
+    lease = _make_expired_lease(worker, job)
+
+    worker_repository = InMemoryWorkerRepository([worker])
+    job_repository = InMemoryJobRepository([job])
+    lease_repository = InMemoryLeaseRepository()
+    lease_repository.save(lease)
+
+    events = InMemoryEventRepository()
+    record_job_events_service = RecordJobEventsService(
+        event_repository=events,
+    )
+
+    service = RecoverExpiredLeaseService(
+        worker_repository=worker_repository,
+        job_repository=job_repository,
+        lease_repository=lease_repository,
+        record_job_events_service=record_job_events_service,
+    )
+
+    service.execute()
+
+    recorded = events.list()
+
+    assert len(recorded) == 1
+    assert recorded[0].event_type == "JobCancelled"
+    assert recorded[0].aggregate_id == str(job.id)
+    assert recorded[0].aggregate_type == "Job"
