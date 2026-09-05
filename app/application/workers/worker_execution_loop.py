@@ -5,6 +5,9 @@ import threading
 from app.application.services.job_execution_service import (
     JobExecutionService,
 )
+from app.application.services.job_execution_support import (
+    persist_job_started,
+)
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
@@ -122,6 +125,20 @@ class WorkerExecutionLoop:
         # reach a terminal state and clear running_job.
         if not job.is_running():
             worker.start()
+
+            # WorkerRepository.save() only writes the workers
+            # table, never the job worker.running_job points
+            # to. Without this, the jobs table row stays
+            # SCHEDULED for the job's entire real execution
+            # (ADR 0033) -- verified directly: a concurrent
+            # CancelJobService call against a real, non-shared-
+            # reference-backed repository reads the stale
+            # SCHEDULED row and silently ignores the request
+            # instead of reaching request_cancellation().
+            persist_job_started(
+                self._job_repository,
+                worker,
+            )
 
         stop_renewing = threading.Event()
         cancel_event = threading.Event()
@@ -267,6 +284,35 @@ class WorkerExecutionLoop:
                 self._node_repository.save(
                     node,
                 )
+
+        # The renewal thread's periodic check (keep_lease_alive)
+        # is the only place this loop learns a cancellation was
+        # requested. If a cancellation is persisted by a
+        # concurrent CancelJobService call after the renewal
+        # thread's last check but before the subprocess finishes
+        # naturally, job (this loop's local copy) never learns
+        # about it: stop_renewing.set() wakes the renewal thread
+        # immediately, with no final check. ADR 0029 already
+        # establishes that the outcome-decision race is
+        # intentional -- a job finishing naturally before its
+        # kill signal arrives correctly resolves to
+        # COMPLETED/FAILED, not CANCELLED. This does not change
+        # that. It only preserves the separate, narrower audit
+        # fact that cancellation was ever requested, which
+        # otherwise gets silently overwritten by this call's own
+        # unconditional save. A direct field assignment, not a
+        # state transition: cancellation_requested_at is a plain
+        # timestamp, not a status this job is moving through.
+        current = self._job_repository.get_by_id(job.id)
+
+        if (
+            current is not None
+            and current.cancellation_requested_at is not None
+            and job.cancellation_requested_at is None
+        ):
+            job.cancellation_requested_at = (
+                current.cancellation_requested_at
+            )
 
         self._job_repository.save(
             job,

@@ -588,3 +588,254 @@ def test_run_once_records_job_cancelled_event() -> None:
     assert len(recorded) == 1
     assert recorded[0].event_type == "JobCancelled"
     assert recorded[0].aggregate_id == str(job.id)
+
+
+def test_run_once_preserves_cancellation_request_lost_by_renewal_thread() -> (
+    None
+):
+    """
+    Reproduces a real gap: cancellation delivery relies
+    entirely on the renewal thread's periodic check
+    (keep_lease_alive), which only runs on each renewal
+    timeout. On shutdown, stop_renewing.set() wakes that
+    thread immediately without a final check, so if a
+    cancellation is persisted to the job repository after
+    the renewal thread's last check but before the
+    subprocess finishes naturally, the loop's local `job`
+    object never learns about it.
+
+    ADR 0029 already establishes that a job completing
+    naturally before its kill signal arrives should resolve
+    to COMPLETED, not be forced to CANCELLED -- that part is
+    correct and not what this test disputes. What this test
+    proves is narrower: the audit fact that cancellation was
+    ever requested (cancellation_requested_at) must survive
+    regardless of which outcome wins, and today it does not
+    -- it is silently overwritten by the loop's unconditional
+    final job_repository.save(job).
+
+    renewal_interval_seconds is set far longer than the
+    command's own runtime so the renewal thread never gets a
+    chance to check for the cancellation before the
+    subprocess exits on its own.
+    """
+    worker, job, node = _make_worker_and_job(
+        command=["python3", "-c", "import time; time.sleep(0.3)"],
+    )
+
+    lease = Lease.create(
+        worker_id=worker.id,
+        job_id=job.id,
+    )
+
+    lease_repository = InMemoryLeaseRepository()
+    lease_repository.save(lease)
+
+    worker_repository = InMemoryWorkerRepository([worker])
+    job_repository = InMemoryJobRepository([job])
+    node_repository = InMemoryNodeRepository([node])
+
+    renew_lease_service = RenewLeaseService(
+        lease_repository=lease_repository,
+    )
+
+    release_lease_service = ReleaseLeaseService(
+        lease_repository=lease_repository,
+        worker_repository=worker_repository,
+    )
+
+    job_execution_service = JobExecutionService(
+        poll_interval=timedelta(seconds=0.05),
+    )
+
+    loop = WorkerExecutionLoop(
+        worker_repository=worker_repository,
+        job_repository=job_repository,
+        node_repository=node_repository,
+        renew_lease_service=renew_lease_service,
+        release_lease_service=release_lease_service,
+        job_execution_service=job_execution_service,
+        # Far longer than the command's 0.3s runtime, so the
+        # renewal thread's periodic check never actually
+        # fires before the subprocess exits on its own.
+        renewal_interval_seconds=10.0,
+    )
+
+    def request_cancellation_soon() -> None:
+        time.sleep(0.1)
+        stored = job_repository.get_by_id(job.id)
+        assert stored is not None
+        stored.request_cancellation()
+        job_repository.save(stored)
+
+    threading.Thread(
+        target=request_cancellation_soon,
+        daemon=True,
+    ).start()
+
+    loop.execute(worker.id)
+
+    saved_job = job_repository.get_by_id(job.id)
+    assert saved_job is not None
+
+    # The outcome-decision race is intentional per ADR 0029:
+    # a job that finishes naturally before its kill signal
+    # arrives resolves to COMPLETED, not CANCELLED.
+    assert saved_job.is_completed()
+
+    # The audit fact that cancellation was requested must
+    # survive regardless of which outcome won. Today it does
+    # not: this assertion is expected to fail, demonstrating
+    # the gap.
+    assert saved_job.cancellation_requested_at is not None
+
+
+def test_run_once_preserves_cancellation_request_against_sqlite_repository() -> (
+    None
+):
+    """
+    Reproduces a real race using a genuinely persistent
+    repository, not InMemoryJobRepository, whose get_by_id
+    hands back the exact same object reference on every
+    call and therefore cannot exhibit this race at all: any
+    "concurrent" mutation in a test built on it is actually
+    mutating the loop's own in-memory job directly.
+
+    SqliteJobRepository reconstructs a fresh Job from a row
+    on every get_by_id call, the same way PostgresJobRepository
+    does, so a genuinely separate connection simulating a
+    concurrent CancelJobService call is a faithful
+    reproduction of two real request-handling threads, each
+    with their own repository instance, racing to persist
+    the same aggregate.
+
+    Cancellation delivery relies entirely on the renewal
+    thread's periodic check (keep_lease_alive), which only
+    runs on each renewal timeout. renewal_interval_seconds
+    is set far longer than the command's own runtime so that
+    check never fires before the subprocess exits on its
+    own. On shutdown, stop_renewing.set() wakes the renewal
+    thread immediately without a final check.
+
+    ADR 0029 already establishes that a job completing
+    naturally before its kill signal arrives should resolve
+    to COMPLETED, not be forced to CANCELLED -- that part is
+    correct and not disputed here. What this test proves is
+    narrower: the audit fact that cancellation was ever
+    requested (cancellation_requested_at) must survive
+    regardless of which outcome wins. Today it does not: the
+    loop's own unconditional final job_repository.save(job)
+    overwrites the database row with its stale, never-
+    cancelled local copy.
+    """
+    import os
+    import tempfile
+
+    from app.infrastructure.repositories.sqlite_connection import (
+        create_connection,
+    )
+    from app.infrastructure.repositories.sqlite_job_repository import (
+        SqliteJobRepository,
+    )
+
+    handle, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(handle)
+
+    try:
+        worker, job, node = _make_worker_and_job(
+            command=["python3", "-c", "import time; time.sleep(0.3)"],
+        )
+
+        setup_connection = create_connection(db_path)
+        setup_repository = SqliteJobRepository(setup_connection)
+        setup_repository.save(job)
+        setup_connection.close()
+
+        lease = Lease.create(
+            worker_id=worker.id,
+            job_id=job.id,
+        )
+
+        lease_repository = InMemoryLeaseRepository()
+        lease_repository.save(lease)
+
+        worker_repository = InMemoryWorkerRepository([worker])
+        node_repository = InMemoryNodeRepository([node])
+
+        loop_connection = create_connection(db_path)
+        loop_job_repository = SqliteJobRepository(loop_connection)
+
+        renew_lease_service = RenewLeaseService(
+            lease_repository=lease_repository,
+        )
+
+        release_lease_service = ReleaseLeaseService(
+            lease_repository=lease_repository,
+            worker_repository=worker_repository,
+        )
+
+        job_execution_service = JobExecutionService(
+            poll_interval=timedelta(seconds=0.05),
+        )
+
+        loop = WorkerExecutionLoop(
+            worker_repository=worker_repository,
+            job_repository=loop_job_repository,
+            node_repository=node_repository,
+            renew_lease_service=renew_lease_service,
+            release_lease_service=release_lease_service,
+            job_execution_service=job_execution_service,
+            # Far longer than the command's 0.3s runtime, so
+            # the renewal thread's periodic check never
+            # actually fires before the subprocess exits on
+            # its own.
+            renewal_interval_seconds=10.0,
+        )
+
+        def request_cancellation_soon() -> None:
+            time.sleep(0.1)
+            # A genuinely separate connection and repository
+            # instance, simulating a real concurrent
+            # CancelJobService call, not the loop's own
+            # in-memory copy.
+            cancel_connection = create_connection(db_path)
+            cancel_repository = SqliteJobRepository(
+                cancel_connection,
+            )
+            stored = cancel_repository.get_by_id(job.id)
+            assert stored is not None
+            stored.request_cancellation()
+            cancel_repository.save(stored)
+            cancel_connection.close()
+
+        threading.Thread(
+            target=request_cancellation_soon,
+            daemon=True,
+        ).start()
+
+        loop.execute(worker.id)
+
+        loop_connection.close()
+
+        # A third, fresh connection, matching this file's
+        # existing round-trip idiom: prove what actually
+        # landed in the database, not what any in-process
+        # object happens to hold.
+        verify_connection = create_connection(db_path)
+        verify_repository = SqliteJobRepository(verify_connection)
+        saved_job = verify_repository.get_by_id(job.id)
+        verify_connection.close()
+
+        assert saved_job is not None
+
+        # The outcome-decision race is intentional per ADR
+        # 0029: a job that finishes naturally before its
+        # kill signal arrives resolves to COMPLETED, not
+        # CANCELLED.
+        assert saved_job.is_completed()
+
+        # The audit fact that cancellation was requested
+        # must survive regardless of which outcome won.
+        assert saved_job.cancellation_requested_at is not None
+    finally:
+        os.remove(db_path)

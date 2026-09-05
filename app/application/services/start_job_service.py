@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from app.application.services.job_execution_support import (
+    persist_job_started,
+)
 from app.domain.entities.worker import Worker
 from app.domain.exceptions.worker_job_mismatch_error import (
     WorkerJobMismatchError,
@@ -72,22 +75,16 @@ class StartJobService:
             worker,
         )
 
-        # worker.start() mutates worker.running_job (the same
-        # Job object) to RUNNING in memory, but never persists
-        # that job on its own -- WorkerRepository.save() only
-        # writes the workers table. Without this, the jobs
-        # table row stays SCHEDULED forever for any backend
-        # that reconstructs Job independently of Worker (real
-        # Postgres/SQLite, not the in-memory repositories that
-        # happen to share object references and mask this).
         # Discovered running a real standalone agent against
         # real Postgres for the first time (ADR 0019, ADR 0030
-        # fleet-scale testing) -- every prior job completion
-        # went through WorkerExecutionLoop's in-process path
-        # instead, which never hits this gap.
-        if worker.running_job is not None:
-            self._job_repository.save(
-                worker.running_job,
-            )
+        # fleet-scale testing): WorkerRepository.save() only
+        # writes the workers table, never the job. See
+        # persist_job_started's docstring and ADR 0033 for the
+        # full reasoning; this same fix is now shared with
+        # WorkerExecutionLoop rather than duplicated.
+        persist_job_started(
+            self._job_repository,
+            worker,
+        )
 
         return worker
