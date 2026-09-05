@@ -1,8 +1,13 @@
+import pytest
+
 from app.application.services.cancel_job_service import (
     CancelJobService,
 )
 from app.domain.entities.job import Job
 from app.domain.enums.job_status import JobStatus
+from app.domain.exceptions.invalid_job_transition import (
+    InvalidJobTransition,
+)
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
@@ -132,3 +137,111 @@ def test_cancel_job_service_returns_none_for_missing_job() -> None:
     )
 
     assert result is None
+
+
+def test_cancel_job_service_raises_for_already_completed_job() -> None:
+    """
+    A job that already reached COMPLETED has a settled,
+    real outcome. Forcing it to CANCELLED here would
+    misreport what actually happened, so this must raise
+    rather than silently succeed (see InvalidJobTransition's
+    409 mapping in the jobs router).
+    """
+    job = Job(
+        id=JobId.new(),
+        resources=ResourceRequirements(
+            cpu_cores=4,
+            memory_mib=4096,
+            vram_mib=2048,
+        ),
+    )
+    job.queue()
+    job.assign_to(NodeId.new())
+    job.start()
+    job.complete()
+
+    repository = InMemoryJobRepository(
+        [
+            job,
+        ],
+    )
+    service = CancelJobService(
+        repository,
+    )
+
+    with pytest.raises(InvalidJobTransition):
+        service.execute(
+            job.id,
+        )
+
+    assert job.status == JobStatus.COMPLETED
+
+
+def test_cancel_job_service_raises_for_already_failed_job() -> None:
+    """
+    Same reasoning as the COMPLETED case: a FAILED job's
+    outcome is already settled and must not be overwritten
+    by a stale or duplicate cancel request.
+    """
+    job = Job(
+        id=JobId.new(),
+        resources=ResourceRequirements(
+            cpu_cores=4,
+            memory_mib=4096,
+            vram_mib=2048,
+        ),
+    )
+    job.queue()
+    job.assign_to(NodeId.new())
+    job.start()
+    job.fail()
+
+    repository = InMemoryJobRepository(
+        [
+            job,
+        ],
+    )
+    service = CancelJobService(
+        repository,
+    )
+
+    with pytest.raises(InvalidJobTransition):
+        service.execute(
+            job.id,
+        )
+
+    assert job.status == JobStatus.FAILED
+
+
+def test_cancel_job_service_raises_for_already_cancelled_job() -> None:
+    """
+    A job already CANCELLED has nothing left to cancel. A
+    duplicate cancel request (e.g. a retried client call)
+    must not be treated as a second, silent success.
+    """
+    job = Job(
+        id=JobId.new(),
+        resources=ResourceRequirements(
+            cpu_cores=4,
+            memory_mib=4096,
+            vram_mib=2048,
+        ),
+    )
+    job.queue()
+    job.cancel()
+
+    repository = InMemoryJobRepository(
+        [
+            job,
+        ],
+    )
+    service = CancelJobService(
+        repository,
+    )
+
+    with pytest.raises(InvalidJobTransition):
+        service.execute(
+            job.id,
+        )
+
+    assert job.status == JobStatus.CANCELLED
