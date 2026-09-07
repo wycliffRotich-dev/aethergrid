@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
@@ -8,6 +10,9 @@ from app.application.services.release_lease_service import (
 )
 from app.domain.entities.job import Job
 from app.domain.entities.worker import Worker
+from app.domain.exceptions.no_active_lease_error import (
+    NoActiveLeaseError,
+)
 from app.domain.exceptions.worker_job_mismatch_error import (
     WorkerJobMismatchError,
 )
@@ -15,6 +20,9 @@ from app.domain.exceptions.worker_not_found_error import (
     WorkerNotFoundError,
 )
 from app.domain.repositories.job_repository import JobRepository
+from app.domain.repositories.lease_repository import (
+    LeaseRepository,
+)
 from app.domain.repositories.node_repository import NodeRepository
 from app.domain.repositories.worker_repository import (
     WorkerRepository,
@@ -46,12 +54,14 @@ class ReportJobOutcomeService:
         worker_repository: WorkerRepository,
         job_repository: JobRepository,
         node_repository: NodeRepository,
+        lease_repository: LeaseRepository,
         release_lease_service: ReleaseLeaseService,
         record_job_events_service: RecordJobEventsService | None = None,
     ) -> None:
         self._worker_repository = worker_repository
         self._job_repository = job_repository
         self._node_repository = node_repository
+        self._lease_repository = lease_repository
         self._release_lease_service = release_lease_service
         self._record_job_events_service = record_job_events_service
 
@@ -78,12 +88,37 @@ class ReportJobOutcomeService:
 
         return worker
 
+    def _current_lease_id(
+        self,
+        worker_id: WorkerId,
+    ) -> UUID:
+        # Captured immediately before _finish() releases the
+        # lease, so release_lease_service can verify this is
+        # still the same lease this call started with, not
+        # just "some lease this worker happens to hold right
+        # now" (ADR 0034). Narrower window than
+        # WorkerExecutionLoop's, since this is one request's
+        # handling time rather than a whole execution's
+        # lifetime, but the same real gap: without this,
+        # a stale or delayed outcome report could delete a
+        # different, legitimately-held lease out from under
+        # whoever actually holds it.
+        lease = self._lease_repository.get_by_worker_id(
+            worker_id,
+        )
+
+        if lease is None:
+            raise NoActiveLeaseError(worker_id)
+
+        return lease.id
+
     def _finish(
         self,
         worker: Worker,
         worker_id: WorkerId,
         job: Job,
         event_type: str,
+        expected_lease_id: UUID,
     ) -> Worker:
         # job is passed in explicitly, captured by the caller
         # before worker.complete()/worker.fail() ran -- both
@@ -98,6 +133,7 @@ class ReportJobOutcomeService:
         # WorkerExecutionLoop.
         self._release_lease_service.execute(
             worker_id,
+            expected_lease_id,
         )
 
         self._worker_repository.save(
@@ -152,6 +188,8 @@ class ReportJobOutcomeService:
             job_id,
         )
 
+        lease_id = self._current_lease_id(worker_id)
+
         job = worker.running_job
 
         worker.complete(
@@ -163,6 +201,7 @@ class ReportJobOutcomeService:
             worker_id,
             job,
             event_type="JobCompleted",
+            expected_lease_id=lease_id,
         )
 
     def fail(
@@ -182,6 +221,8 @@ class ReportJobOutcomeService:
             job_id,
         )
 
+        lease_id = self._current_lease_id(worker_id)
+
         job = worker.running_job
 
         worker.fail(
@@ -193,6 +234,7 @@ class ReportJobOutcomeService:
             worker_id,
             job,
             event_type="JobFailed",
+            expected_lease_id=lease_id,
         )
 
     def cancel(
@@ -213,6 +255,8 @@ class ReportJobOutcomeService:
             job_id,
         )
 
+        lease_id = self._current_lease_id(worker_id)
+
         job = worker.running_job
 
         worker.cancel_job(
@@ -224,4 +268,5 @@ class ReportJobOutcomeService:
             worker_id,
             job,
             event_type="JobCancelled",
+            expected_lease_id=lease_id,
         )

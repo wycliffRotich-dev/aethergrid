@@ -342,6 +342,7 @@ _report_job_outcome_service = ReportJobOutcomeService(
     worker_repository=_worker_repository,
     job_repository=_job_repository,
     node_repository=_node_repository,
+    lease_repository=_lease_repository,
     release_lease_service=_release_lease_service,
     record_job_events_service=_record_job_events_service,
 )
@@ -365,6 +366,7 @@ _worker_execution_loop = WorkerExecutionLoop(
     worker_repository=_worker_repository,
     job_repository=_job_repository,
     node_repository=_node_repository,
+    lease_repository=_lease_repository,
     renew_lease_service=_renew_lease_service,
     release_lease_service=_release_lease_service,
     job_execution_service=_job_execution_service,
