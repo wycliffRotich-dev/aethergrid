@@ -6,6 +6,9 @@ from app.application.services.record_job_events_service import (
 from app.domain.repositories.job_repository import (
     JobRepository,
 )
+from app.domain.repositories.lease_repository import (
+    LeaseRepository,
+)
 from app.domain.repositories.node_repository import (
     NodeRepository,
 )
@@ -23,6 +26,17 @@ class RecoverOfflineNodeService:
     assigned to workers on those nodes is reclaimed,
     consuming a retry attempt, rather than simply
     returned to the queue as-is.
+
+    The job's lease row is deleted here too, before
+    reclaim() runs, mirroring RecoverExpiredLeaseService's
+    exact pattern (ADR 0034 follow-up): without this, a
+    reclaimed job's stale lease survives, and the very next
+    attempt to reschedule it -- AcquireLeaseService checking
+    get_by_job_id() -- finds that stale row and refuses to
+    acquire a new lease, permanently stranding the job. This
+    was independently rediscovered here, the same way the
+    RUNNING-persistence gap (ADR 0033) was found twice in
+    separate execution paths before being fixed at the root.
     """
 
     def __init__(
@@ -30,11 +44,13 @@ class RecoverOfflineNodeService:
         node_repository: NodeRepository,
         worker_repository: WorkerRepository,
         job_repository: JobRepository,
+        lease_repository: LeaseRepository,
         record_job_events_service: RecordJobEventsService | None = None,
     ) -> None:
         self._node_repository = node_repository
         self._worker_repository = worker_repository
         self._job_repository = job_repository
+        self._lease_repository = lease_repository
         self._record_job_events_service = record_job_events_service
 
     def execute(
@@ -67,6 +83,10 @@ class RecoverOfflineNodeService:
 
             if job is None:
                 continue
+
+            self._lease_repository.delete(
+                job.id,
+            )
 
             job.reclaim()
 

@@ -402,6 +402,7 @@ _recover_offline_node_service = RecoverOfflineNodeService(
     node_repository=_node_repository,
     worker_repository=_worker_repository,
     job_repository=_job_repository,
+    lease_repository=_lease_repository,
     record_job_events_service=_record_job_events_service,
 )
 _reconciliation_loop = ReconciliationLoop(
