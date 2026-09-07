@@ -119,6 +119,7 @@ def _build_service(
         worker_repository=worker_repository,
         job_repository=job_repository,
         node_repository=node_repository,
+        lease_repository=lease_repository,
         release_lease_service=release_lease_service,
         record_job_events_service=record_job_events_service,
     )
@@ -291,6 +292,7 @@ def test_complete_raises_worker_job_mismatch_when_worker_holds_no_job() -> None:
         worker_repository=worker_repository,
         job_repository=job_repository,
         node_repository=node_repository,
+        lease_repository=lease_repository,
         release_lease_service=ReleaseLeaseService(
             lease_repository=lease_repository,
             worker_repository=worker_repository,

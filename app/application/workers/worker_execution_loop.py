@@ -19,8 +19,14 @@ from app.application.services.renew_lease_service import (
 )
 from app.domain.entities.lease import DEFAULT_LEASE_DURATION
 from app.domain.exceptions.lease_not_found_error import LeaseNotFoundError
+from app.domain.exceptions.no_active_lease_error import (
+    NoActiveLeaseError,
+)
 from app.domain.repositories.job_repository import (
     JobRepository,
+)
+from app.domain.repositories.lease_repository import (
+    LeaseRepository,
 )
 from app.domain.repositories.node_repository import (
     NodeRepository,
@@ -81,6 +87,7 @@ class WorkerExecutionLoop:
         worker_repository: WorkerRepository,
         job_repository: JobRepository,
         node_repository: NodeRepository,
+        lease_repository: LeaseRepository,
         renew_lease_service: RenewLeaseService,
         release_lease_service: ReleaseLeaseService,
         job_execution_service: JobExecutionService,
@@ -90,6 +97,7 @@ class WorkerExecutionLoop:
         self._worker_repository = worker_repository
         self._job_repository = job_repository
         self._node_repository = node_repository
+        self._lease_repository = lease_repository
         self._renew_lease_service = renew_lease_service
         self._release_lease_service = release_lease_service
         self._job_execution_service = job_execution_service
@@ -115,6 +123,23 @@ class WorkerExecutionLoop:
             return
 
         job = worker.running_job
+
+        # Captured once, up front, before this loop does anything
+        # that assumes it still owns this job's lease. This is the
+        # identity release_lease_service checks against at the end
+        # (ADR 0034) -- without it, release only ever checked
+        # "does this worker hold *a* lease", not "is it still *this*
+        # lease", letting a stale loop steal a different, legitimately
+        # reacquired lease for the same worker out from under whoever
+        # actually holds it now.
+        current_lease = self._lease_repository.get_by_worker_id(
+            worker_id,
+        )
+
+        if current_lease is None:
+            raise NoActiveLeaseError(worker_id)
+
+        lease_id = current_lease.id
 
         # AssignWorkerService may have already started the job at
         # assignment time -- this loop runs every tick for as long as
@@ -265,6 +290,7 @@ class WorkerExecutionLoop:
         #    InvalidJobTransition.
         self._release_lease_service.execute(
             worker_id,
+            lease_id,
         )
 
         self._worker_repository.save(
