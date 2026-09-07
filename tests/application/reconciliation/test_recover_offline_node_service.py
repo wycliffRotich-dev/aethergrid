@@ -3,10 +3,14 @@ from datetime import UTC, datetime, timedelta
 from app.application.reconciliation.recover_offline_node_service import (
     RecoverOfflineNodeService,
 )
+from app.application.services.acquire_lease_service import (
+    AcquireLeaseService,
+)
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
 from app.domain.entities.job import Job
+from app.domain.entities.lease import Lease
 from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
 from app.domain.value_objects.job_id import JobId
@@ -20,6 +24,9 @@ from app.infrastructure.repositories.in_memory_event_repository import (
 )
 from app.infrastructure.repositories.in_memory_job_repository import (
     InMemoryJobRepository,
+)
+from app.infrastructure.repositories.in_memory_lease_repository import (
+    InMemoryLeaseRepository,
 )
 from app.infrastructure.repositories.in_memory_node_repository import (
     InMemoryNodeRepository,
@@ -75,11 +82,13 @@ def test_recover_offline_node_requeues_job_with_retries_remaining() -> None:
     node_repository = InMemoryNodeRepository([node])
     worker_repository = InMemoryWorkerRepository([worker])
     job_repository = InMemoryJobRepository([job])
+    lease_repository = InMemoryLeaseRepository()
 
     service = RecoverOfflineNodeService(
         node_repository=node_repository,
         worker_repository=worker_repository,
         job_repository=job_repository,
+        lease_repository=lease_repository,
     )
 
     service.execute()
@@ -130,11 +139,13 @@ def test_recover_offline_node_fails_job_once_retries_exhausted() -> None:
     node_repository = InMemoryNodeRepository([node])
     worker_repository = InMemoryWorkerRepository([worker])
     job_repository = InMemoryJobRepository([job])
+    lease_repository = InMemoryLeaseRepository()
 
     service = RecoverOfflineNodeService(
         node_repository=node_repository,
         worker_repository=worker_repository,
         job_repository=job_repository,
+        lease_repository=lease_repository,
     )
 
     service.execute()
@@ -147,6 +158,8 @@ def test_recover_offline_node_fails_job_once_retries_exhausted() -> None:
 
     assert recovered_job is not None
     assert recovered_job.is_failed()
+
+
 def test_recover_offline_node_records_job_reclaimed_event() -> None:
     """
     Reclaiming a job assigned to an offline node must
@@ -180,6 +193,7 @@ def test_recover_offline_node_records_job_reclaimed_event() -> None:
     node_repository = InMemoryNodeRepository([node])
     worker_repository = InMemoryWorkerRepository([worker])
     job_repository = InMemoryJobRepository([job])
+    lease_repository = InMemoryLeaseRepository()
 
     events = InMemoryEventRepository()
     record_job_events_service = RecordJobEventsService(
@@ -190,6 +204,7 @@ def test_recover_offline_node_records_job_reclaimed_event() -> None:
         node_repository=node_repository,
         worker_repository=worker_repository,
         job_repository=job_repository,
+        lease_repository=lease_repository,
         record_job_events_service=record_job_events_service,
     )
 
@@ -201,3 +216,90 @@ def test_recover_offline_node_records_job_reclaimed_event() -> None:
     assert recorded[0].event_type == "JobReclaimed"
     assert recorded[0].aggregate_id == str(job.id)
     assert recorded[0].aggregate_type == "Job"
+
+
+def test_recover_offline_node_deletes_lease_so_job_can_be_reacquired() -> (
+    None
+):
+    """
+    Proves the fix for a real gap: RecoverOfflineNodeService now
+    deletes the job's lease row before reclaiming it, mirroring
+    RecoverExpiredLeaseService's exact pattern, so a job
+    recovered through this path can be legitimately rescheduled
+    again. Before this fix, the stale lease survived reclaim,
+    and AcquireLeaseService.execute() would refuse to create a
+    new lease for the "recovered" job, forever, since
+    get_by_job_id() would still find the old one -- verified by
+    a version of this test that passed against the unpatched
+    code, proving the strand actually happened.
+    """
+    node = _make_offline_node()
+
+    worker = Worker(
+        id=WorkerId.new(),
+        node=node,
+    )
+
+    worker.ready()
+
+    job = Job(
+        id=JobId.new(),
+        resources=ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=512,
+            vram_mib=0,
+        ),
+        max_retries=1,
+    )
+
+    job.queue()
+    job.assign_to(node.id)
+
+    worker.accept(job)
+    worker.start()
+
+    lease = Lease.create(
+        worker_id=worker.id,
+        job_id=job.id,
+    )
+
+    lease_repository = InMemoryLeaseRepository()
+    lease_repository.save(lease)
+
+    node_repository = InMemoryNodeRepository([node])
+    worker_repository = InMemoryWorkerRepository([worker])
+    job_repository = InMemoryJobRepository([job])
+
+    service = RecoverOfflineNodeService(
+        node_repository=node_repository,
+        worker_repository=worker_repository,
+        job_repository=job_repository,
+        lease_repository=lease_repository,
+    )
+
+    service.execute()
+
+    recovered_job = job_repository.get_by_id(job.id)
+    assert recovered_job is not None
+    assert recovered_job.is_queued()
+
+    # The old lease must be gone, not just the job's status
+    # changed.
+    assert lease_repository.get_by_job_id(job.id) is None
+
+    # And a fresh lease can now be legitimately acquired for
+    # this recovered job.
+    acquire_lease_service = AcquireLeaseService(
+        lease_repository=lease_repository,
+    )
+
+    new_worker = Worker(
+        id=WorkerId.new(),
+        node=node,
+    )
+    new_worker.ready()
+
+    new_lease = acquire_lease_service.execute(new_worker, recovered_job)
+
+    assert new_lease is not None
+    assert new_lease.job_id == recovered_job.id
