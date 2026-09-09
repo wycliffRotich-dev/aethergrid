@@ -6,6 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.application.services.create_worker_service import (
     CreateWorkerService,
 )
+from app.application.services.get_lease_for_worker_service import (
+    GetLeaseForWorkerService,
+)
 from app.application.services.get_node_service import (
     GetNodeService,
 )
@@ -55,6 +58,7 @@ from app.presentation.auth import (
 )
 from app.presentation.dependencies import (
     get_create_worker_service,
+    get_get_lease_for_worker_service,
     get_get_node_service,
     get_get_worker_service,
     get_list_workers_service,
@@ -90,6 +94,41 @@ router = APIRouter(
         Depends(require_rate_limit),
     ],
 )
+
+
+def _build_worker_response(worker, lease_id: str | None) -> GetWorkerResponse:
+    """
+    Build a GetWorkerResponse for a worker, including its
+    running job if any.
+
+    lease_id (ADR 0036) is threaded in explicitly by each
+    caller rather than looked up here, since only three of
+    six call sites in this router can ever have a non-null
+    value (get_worker, start_job, renew_lease); the other
+    three clear worker.running_job as part of their own
+    domain transition before building a response, and have
+    no lease left to look up by the time they call this.
+    """
+    running_job = None
+
+    if worker.running_job is not None:
+        running_job = RunningJobResponse(
+            id=str(worker.running_job.id),
+            status=worker.running_job.status.name,
+            command=worker.running_job.command,
+            execution_timeout_seconds=(
+                worker.running_job.execution_timeout.total_seconds()
+            ),
+            lease_id=lease_id,
+        )
+
+    return GetWorkerResponse(
+        id=str(worker.id),
+        status=worker.status.name,
+        node_id=str(worker.node.id),
+        last_seen_at=worker.last_seen_at,
+        running_job=running_job,
+    )
 
 
 @router.post(
@@ -192,6 +231,10 @@ def get_worker(
         GetWorkerService,
         Depends(get_get_worker_service),
     ],
+    lease_service: Annotated[
+        GetLeaseForWorkerService,
+        Depends(get_get_lease_for_worker_service),
+    ],
 ) -> GetWorkerResponse:
     """
     Retrieve a single worker, including the job currently
@@ -222,25 +265,13 @@ def get_worker(
             detail="Worker not found.",
         )
 
-    running_job = None
+    lease_id = None
 
     if worker.running_job is not None:
-        running_job = RunningJobResponse(
-            id=str(worker.running_job.id),
-            status=worker.running_job.status.name,
-            command=worker.running_job.command,
-            execution_timeout_seconds=(
-                worker.running_job.execution_timeout.total_seconds()
-            ),
-        )
+        lease = lease_service.execute(worker_id_value)
+        lease_id = str(lease.id) if lease is not None else None
 
-    return GetWorkerResponse(
-        id=str(worker.id),
-        status=worker.status.name,
-        node_id=str(worker.node.id),
-        last_seen_at=worker.last_seen_at,
-        running_job=running_job,
-    )
+    return _build_worker_response(worker, lease_id)
 
 
 @router.post(
@@ -253,6 +284,10 @@ def start_job(
     service: Annotated[
         StartJobService,
         Depends(get_start_job_service),
+    ],
+    lease_service: Annotated[
+        GetLeaseForWorkerService,
+        Depends(get_get_lease_for_worker_service),
     ],
 ) -> GetWorkerResponse:
     """
@@ -299,25 +334,13 @@ def start_job(
             detail=str(exc),
         ) from exc
 
-    running_job = None
+    lease_id = None
 
     if worker.running_job is not None:
-        running_job = RunningJobResponse(
-            id=str(worker.running_job.id),
-            status=worker.running_job.status.name,
-            command=worker.running_job.command,
-            execution_timeout_seconds=(
-                worker.running_job.execution_timeout.total_seconds()
-            ),
-        )
+        lease = lease_service.execute(worker_id_value)
+        lease_id = str(lease.id) if lease is not None else None
 
-    return GetWorkerResponse(
-        id=str(worker.id),
-        status=worker.status.name,
-        node_id=str(worker.node.id),
-        last_seen_at=worker.last_seen_at,
-        running_job=running_job,
-    )
+    return _build_worker_response(worker, lease_id)
 
 
 @router.post(
@@ -387,25 +410,7 @@ def complete_job(
             detail=str(exc),
         ) from exc
 
-    running_job = None
-
-    if worker.running_job is not None:
-        running_job = RunningJobResponse(
-            id=str(worker.running_job.id),
-            status=worker.running_job.status.name,
-            command=worker.running_job.command,
-            execution_timeout_seconds=(
-                worker.running_job.execution_timeout.total_seconds()
-            ),
-        )
-
-    return GetWorkerResponse(
-        id=str(worker.id),
-        status=worker.status.name,
-        node_id=str(worker.node.id),
-        last_seen_at=worker.last_seen_at,
-        running_job=running_job,
-    )
+    return _build_worker_response(worker, lease_id=None)
 
 
 @router.post(
@@ -471,25 +476,7 @@ def fail_job(
             detail=str(exc),
         ) from exc
 
-    running_job = None
-
-    if worker.running_job is not None:
-        running_job = RunningJobResponse(
-            id=str(worker.running_job.id),
-            status=worker.running_job.status.name,
-            command=worker.running_job.command,
-            execution_timeout_seconds=(
-                worker.running_job.execution_timeout.total_seconds()
-            ),
-        )
-
-    return GetWorkerResponse(
-        id=str(worker.id),
-        status=worker.status.name,
-        node_id=str(worker.node.id),
-        last_seen_at=worker.last_seen_at,
-        running_job=running_job,
-    )
+    return _build_worker_response(worker, lease_id=None)
 
 
 @router.post(
@@ -562,25 +549,7 @@ def confirm_job_cancellation(
             detail=str(exc),
         ) from exc
 
-    running_job = None
-
-    if worker.running_job is not None:
-        running_job = RunningJobResponse(
-            id=str(worker.running_job.id),
-            status=worker.running_job.status.name,
-            command=worker.running_job.command,
-            execution_timeout_seconds=(
-                worker.running_job.execution_timeout.total_seconds()
-            ),
-        )
-
-    return GetWorkerResponse(
-        id=str(worker.id),
-        status=worker.status.name,
-        node_id=str(worker.node.id),
-        last_seen_at=worker.last_seen_at,
-        running_job=running_job,
-    )
+    return _build_worker_response(worker, lease_id=None)
 
 
 @router.post(
@@ -596,6 +565,10 @@ def renew_lease(
     renew_lease_service: Annotated[
         RenewLeaseService,
         Depends(get_renew_lease_service),
+    ],
+    lease_for_worker_service: Annotated[
+        GetLeaseForWorkerService,
+        Depends(get_get_lease_for_worker_service),
     ],
 ) -> GetWorkerResponse:
     """
@@ -639,25 +612,13 @@ def renew_lease(
             detail=str(exc),
         ) from exc
 
-    running_job = None
+    lease_id = None
 
     if worker.running_job is not None:
-        running_job = RunningJobResponse(
-            id=str(worker.running_job.id),
-            status=worker.running_job.status.name,
-            command=worker.running_job.command,
-            execution_timeout_seconds=(
-                worker.running_job.execution_timeout.total_seconds()
-            ),
-        )
+        lease = lease_for_worker_service.execute(worker_id_value)
+        lease_id = str(lease.id) if lease is not None else None
 
-    return GetWorkerResponse(
-        id=str(worker.id),
-        status=worker.status.name,
-        node_id=str(worker.node.id),
-        last_seen_at=worker.last_seen_at,
-        running_job=running_job,
-    )
+    return _build_worker_response(worker, lease_id)
 
 
 @router.post(
