@@ -61,6 +61,9 @@ from app.application.services.get_job_history_service import (
 from app.application.services.get_job_service import (
     GetJobService,
 )
+from app.application.services.get_lease_for_worker_service import (
+    GetLeaseForWorkerService,
+)
 from app.application.services.get_node_service import (
     GetNodeService,
 )
@@ -660,6 +663,16 @@ def get_get_worker_service() -> GetWorkerService:
 
     return GetWorkerService(
         worker_repository=_worker_repository,
+    )
+
+
+def get_get_lease_for_worker_service() -> GetLeaseForWorkerService:
+    """
+    Return GetLeaseForWorkerService.
+    """
+
+    return GetLeaseForWorkerService(
+        lease_repository=_lease_repository,
     )
 
 
