@@ -392,6 +392,7 @@ def complete_job(
         worker = service.complete(
             worker_id_value,
             job_id_value,
+            lease_id=request.lease_id,
             exit_code=request.exit_code,
         )
     except WorkerNotFoundError as exc:
@@ -458,6 +459,7 @@ def fail_job(
         worker = service.fail(
             worker_id_value,
             job_id_value,
+            lease_id=request.lease_id,
             exit_code=request.exit_code,
         )
     except WorkerNotFoundError as exc:
@@ -531,6 +533,7 @@ def confirm_job_cancellation(
         worker = service.cancel(
             worker_id_value,
             job_id_value,
+            lease_id=request.lease_id,
             exit_code=request.exit_code,
         )
     except WorkerNotFoundError as exc:
