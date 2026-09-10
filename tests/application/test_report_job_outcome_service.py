@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
 import pytest
 
 from app.application.services.record_job_events_service import (
@@ -97,6 +99,7 @@ def _build_service(
     InMemoryJobRepository,
     InMemoryNodeRepository,
     InMemoryLeaseRepository,
+    Lease,
 ]:
     lease = Lease.create(
         worker_id=worker.id,
@@ -130,19 +133,26 @@ def _build_service(
         job_repository,
         node_repository,
         lease_repository,
+        lease,
     )
 
 
 def test_complete_marks_job_completed_releases_lease_and_node() -> None:
     worker, job, node = _make_running_worker_and_job()
 
-    service, worker_repository, job_repository, node_repository, lease_repository = (
-        _build_service(worker, job, node)
-    )
+    (
+        service,
+        worker_repository,
+        job_repository,
+        node_repository,
+        lease_repository,
+        lease,
+    ) = _build_service(worker, job, node)
 
     service.complete(
         worker.id,
         job.id,
+        lease_id=lease.id,
         exit_code=0,
     )
 
@@ -167,13 +177,19 @@ def test_complete_marks_job_completed_releases_lease_and_node() -> None:
 def test_fail_marks_job_failed_releases_lease_and_node() -> None:
     worker, job, node = _make_running_worker_and_job()
 
-    service, worker_repository, job_repository, node_repository, lease_repository = (
-        _build_service(worker, job, node)
-    )
+    (
+        service,
+        worker_repository,
+        job_repository,
+        node_repository,
+        lease_repository,
+        lease,
+    ) = _build_service(worker, job, node)
 
     service.fail(
         worker.id,
         job.id,
+        lease_id=lease.id,
         exit_code=1,
     )
 
@@ -202,13 +218,14 @@ def test_complete_records_job_completed_event() -> None:
         event_repository=events,
     )
 
-    service, *_ = _build_service(
+    service, *_, lease = _build_service(
         worker, job, node, record_job_events_service,
     )
 
     service.complete(
         worker.id,
         job.id,
+        lease_id=lease.id,
     )
 
     recorded = events.list()
@@ -227,13 +244,14 @@ def test_fail_records_job_failed_event() -> None:
         event_repository=events,
     )
 
-    service, *_ = _build_service(
+    service, *_, lease = _build_service(
         worker, job, node, record_job_events_service,
     )
 
     service.fail(
         worker.id,
         job.id,
+        lease_id=lease.id,
     )
 
     recorded = events.list()
@@ -253,6 +271,7 @@ def test_complete_raises_worker_not_found_error() -> None:
         service.complete(
             WorkerId.new(),
             job.id,
+            lease_id=uuid4(),
         )
 
 
@@ -265,6 +284,7 @@ def test_complete_raises_worker_job_mismatch_when_worker_holds_different_job() -
         service.complete(
             worker.id,
             JobId.new(),
+            lease_id=uuid4(),
         )
 
 
@@ -303,6 +323,7 @@ def test_complete_raises_worker_job_mismatch_when_worker_holds_no_job() -> None:
         service.complete(
             worker.id,
             JobId.new(),
+            lease_id=uuid4(),
         )
 
 
@@ -315,6 +336,7 @@ def test_fail_raises_worker_not_found_error() -> None:
         service.fail(
             WorkerId.new(),
             job.id,
+            lease_id=uuid4(),
         )
 
 
@@ -322,13 +344,19 @@ def test_cancel_marks_job_cancelled_releases_lease_and_node() -> None:
     worker, job, node = _make_running_worker_and_job()
     job.request_cancellation()
 
-    service, worker_repository, job_repository, node_repository, lease_repository = (
-        _build_service(worker, job, node)
-    )
+    (
+        service,
+        worker_repository,
+        job_repository,
+        node_repository,
+        lease_repository,
+        lease,
+    ) = _build_service(worker, job, node)
 
     service.cancel(
         worker.id,
         job.id,
+        lease_id=lease.id,
         exit_code=-15,
     )
 
@@ -359,13 +387,14 @@ def test_cancel_records_job_cancelled_event() -> None:
         event_repository=events,
     )
 
-    service, *_ = _build_service(
+    service, *_, lease = _build_service(
         worker, job, node, record_job_events_service,
     )
 
     service.cancel(
         worker.id,
         job.id,
+        lease_id=lease.id,
     )
 
     recorded = events.list()
@@ -386,6 +415,7 @@ def test_cancel_raises_worker_not_found_error() -> None:
         service.cancel(
             WorkerId.new(),
             job.id,
+            lease_id=uuid4(),
         )
 
 
@@ -399,4 +429,5 @@ def test_cancel_raises_worker_job_mismatch_when_worker_holds_different_job() -> 
         service.cancel(
             worker.id,
             JobId.new(),
+            lease_id=uuid4(),
         )

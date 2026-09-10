@@ -153,6 +153,7 @@ def report_outcome(
     client: httpx.Client,
     worker_id: str,
     job_id: str,
+    lease_id: str,
     result: JobExecutionResult,
 ) -> None:
     """
@@ -160,6 +161,15 @@ def report_outcome(
     failed (ADR 0029). cancelled is checked first, since a
     cancelled result is also not succeeded and would
     otherwise be misreported as a plain failure.
+
+    lease_id (ADR 0036) is the lease this agent believed it
+    held when it started executing this job, captured from
+    the poll response before start_job() was ever called, not
+    re-fetched here. The server fences this report against
+    whatever lease is actually current for this worker;
+    sending a freshly re-fetched value instead would defeat
+    the fencing entirely, since it could never disagree with
+    itself.
     """
     if result.cancelled:
         path = "cancel"
@@ -170,7 +180,7 @@ def report_outcome(
 
     response = client.post(
         f"/workers/{worker_id}/jobs/{job_id}/{path}",
-        json={"exit_code": result.exit_code},
+        json={"exit_code": result.exit_code, "lease_id": lease_id},
     )
 
     if response.status_code == 409:
@@ -190,6 +200,7 @@ def run_job(
 ) -> None:
     job_id = job["id"]
     command = job["command"]
+    lease_id = job["lease_id"]
     timeout = timedelta(
         seconds=job["execution_timeout_seconds"],
     )
@@ -262,6 +273,7 @@ def run_job(
         client,
         worker_id,
         job_id,
+        lease_id,
         result,
     )
 

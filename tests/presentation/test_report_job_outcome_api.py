@@ -1,4 +1,5 @@
 import time
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
@@ -32,7 +33,7 @@ def test_complete_job_for_nonexistent_worker_returns_404() -> None:
         response = client.post(
             "/workers/00000000-0000-0000-0000-000000000000"
             "/jobs/00000000-0000-0000-0000-000000000000/complete",
-            json={},
+            json={"lease_id": str(uuid4())},
         )
 
         assert response.status_code == 404
@@ -66,7 +67,7 @@ def test_complete_job_when_worker_holds_no_job_returns_409() -> None:
         response = client.post(
             f"/workers/{worker_id}/jobs/"
             "00000000-0000-0000-0000-000000000000/complete",
-            json={},
+            json={"lease_id": str(uuid4())},
         )
 
         assert response.status_code == 409
@@ -99,7 +100,7 @@ def test_fail_job_for_nonexistent_worker_returns_404() -> None:
         response = client.post(
             "/workers/00000000-0000-0000-0000-000000000000"
             "/jobs/00000000-0000-0000-0000-000000000000/fail",
-            json={},
+            json={"lease_id": str(uuid4())},
         )
 
         assert response.status_code == 404
@@ -128,7 +129,7 @@ def test_fail_job_when_worker_holds_no_job_returns_409() -> None:
         response = client.post(
             f"/workers/{worker_id}/jobs/"
             "00000000-0000-0000-0000-000000000000/fail",
-            json={},
+            json={"lease_id": str(uuid4())},
         )
 
         assert response.status_code == 409
@@ -216,7 +217,7 @@ def test_complete_job_after_background_loop_already_completed_it_returns_409() -
 
         response = client.post(
             f"/workers/{worker_id}/jobs/{job_id}/complete",
-            json={},
+            json={"lease_id": str(uuid4())},
         )
 
         assert response.status_code == 409

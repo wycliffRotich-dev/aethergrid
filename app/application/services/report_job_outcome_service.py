@@ -10,9 +10,6 @@ from app.application.services.release_lease_service import (
 )
 from app.domain.entities.job import Job
 from app.domain.entities.worker import Worker
-from app.domain.exceptions.no_active_lease_error import (
-    NoActiveLeaseError,
-)
 from app.domain.exceptions.worker_job_mismatch_error import (
     WorkerJobMismatchError,
 )
@@ -88,30 +85,6 @@ class ReportJobOutcomeService:
 
         return worker
 
-    def _current_lease_id(
-        self,
-        worker_id: WorkerId,
-    ) -> UUID:
-        # Captured immediately before _finish() releases the
-        # lease, so release_lease_service can verify this is
-        # still the same lease this call started with, not
-        # just "some lease this worker happens to hold right
-        # now" (ADR 0034). Narrower window than
-        # WorkerExecutionLoop's, since this is one request's
-        # handling time rather than a whole execution's
-        # lifetime, but the same real gap: without this,
-        # a stale or delayed outcome report could delete a
-        # different, legitimately-held lease out from under
-        # whoever actually holds it.
-        lease = self._lease_repository.get_by_worker_id(
-            worker_id,
-        )
-
-        if lease is None:
-            raise NoActiveLeaseError(worker_id)
-
-        return lease.id
-
     def _finish(
         self,
         worker: Worker,
@@ -170,25 +143,33 @@ class ReportJobOutcomeService:
         self,
         worker_id: WorkerId,
         job_id: JobId,
+        lease_id: UUID,
         exit_code: int | None = None,
     ) -> Worker:
         """
         Report that a job completed successfully.
+
+        lease_id (ADR 0036) is the caller's own belief about
+        which lease it holds, not a value this service looks
+        up on the caller's behalf. Fencing only works if the
+        value being checked came from outside; looking it up
+        internally, as this service used to, can never
+        disagree with itself.
 
         Raises:
             WorkerNotFoundError: the worker does not exist.
             WorkerJobMismatchError: the worker does not
                 currently hold job_id as its running_job.
             NoActiveLeaseError, LeaseNotFoundError: lease
-                release failed -- reconciliation already
-                reclaimed this job. Nothing is persisted.
+                release failed -- either reconciliation
+                already reclaimed this job, or the caller's
+                lease_id no longer matches what is actually
+                current (ADR 0036). Nothing is persisted.
         """
         worker = self._get_owning_worker(
             worker_id,
             job_id,
         )
-
-        lease_id = self._current_lease_id(worker_id)
 
         job = worker.running_job
 
@@ -208,6 +189,7 @@ class ReportJobOutcomeService:
         self,
         worker_id: WorkerId,
         job_id: JobId,
+        lease_id: UUID,
         exit_code: int | None = None,
     ) -> Worker:
         """
@@ -220,8 +202,6 @@ class ReportJobOutcomeService:
             worker_id,
             job_id,
         )
-
-        lease_id = self._current_lease_id(worker_id)
 
         job = worker.running_job
 
@@ -241,6 +221,7 @@ class ReportJobOutcomeService:
         self,
         worker_id: WorkerId,
         job_id: JobId,
+        lease_id: UUID,
         exit_code: int | None = None,
     ) -> Worker:
         """
@@ -254,8 +235,6 @@ class ReportJobOutcomeService:
             worker_id,
             job_id,
         )
-
-        lease_id = self._current_lease_id(worker_id)
 
         job = worker.running_job
 
