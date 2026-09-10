@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="#test-coverage"><img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/wycliffRotich-dev/4b35dff5cea5aa68433713c36c3108bb/raw/aethergrid-test-badge.json" alt="Tests"></a>
-  <a href="#engineering-decision-records"><img src="https://img.shields.io/badge/ADRs-35-blueviolet" alt="ADRs"></a>
+  <a href="#engineering-decision-records"><img src="https://img.shields.io/badge/ADRs-36-blueviolet" alt="ADRs"></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
   <a href="#tech-stack"><img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python"></a>
   <a href="#tech-stack"><img src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI"></a>
@@ -34,7 +34,7 @@ AetherGrid was built around one rule: **the domain logic doesn't know or care wh
 
 ## Engineering Decision Records
 
-Every non-obvious decision in this codebase, why a domain rule lives where it does, why an obvious-looking shortcut was rejected, what broke and how it got fixed, is written down at the moment it was made, not reconstructed afterward for a portfolio. 35 ADRs live in [`/docs/adr`](docs/adr). A few worth reading directly if you want to see the reasoning, not just the conclusion:
+Every non-obvious decision in this codebase, why a domain rule lives where it does, why an obvious-looking shortcut was rejected, what broke and how it got fixed, is written down at the moment it was made, not reconstructed afterward for a portfolio. 36 ADRs live in [`/docs/adr`](docs/adr). A few worth reading directly if you want to see the reasoning, not just the conclusion:
 
 - [**ADR 0007 - Reconciliation Loop**](docs/adr/0007-reconciliation-loop.md): how the system detects and repairs state left inconsistent by dead workers and expired leases, instead of assuming the happy path is the only path.
 - [**ADR 0011 - Job Reclaim and Reconciliation Repair**](docs/adr/0011-job-reclaim-and-reconciliation-repair.md): closing a real race condition where a dying worker's lease renewal could land after reconciliation had already started reassigning its work.
@@ -50,6 +50,7 @@ Every non-obvious decision in this codebase, why a domain rule lives where it do
 - [**ADR 0033 - Persist a Job's RUNNING Transition Immediately After worker.start()**](docs/adr/0033-persist-job-started-immediately-after-worker-start.md): closing a gap independently rediscovered twice, WorkerRepository.save() only ever writes the workers table, so a job's own row silently stayed SCHEDULED for its entire real execution unless something separately persisted it, extracting a single shared function instead of patching the second occurrence in isolation.
 - [**ADR 0034 - Fence Lease Release by Lease Identity, Not Just Worker Identity**](docs/adr/0034-fence-lease-release-by-lease-identity.md): closing a gap one level upstream of what ADR 0014 had already named and deferred, releasing a lease checked only that a worker held some lease, not that it was the same one the caller had been renewing, letting a stale caller delete a different, legitimately-held lease out from under whoever actually owned it, verified with a test that proved the unsafe delete happening before any fix landed.
 - [**ADR 0035 - Delete a Job's Lease Before Reclaiming It in RecoverOfflineNodeService**](docs/adr/0035-delete-lease-before-reclaiming-offline-node-jobs.md): the third independent occurrence of the same shape in one session, a sibling service (RecoverExpiredLeaseService) already had the correct pattern, and this one hadn't inherited it, silently stranding every job recovered from an offline node since its stale lease was never deleted, verified with a test that proved the strand before any fix landed.
+- [**ADR 0036 - Fence Standalone-Agent Outcome Reports by Lease Identity**](docs/adr/0036-fence-outcome-reports-by-lease-identity-for-agents.md): closing the one limitation ADR 0034 named rather than claimed to cover, the external HTTP contract a standalone agent uses to report a job's outcome carried no lease identity at all, so a stale report could never be distinguished from a current one. `lease_id` is now a required field, captured by the agent at poll time before execution starts and checked against whatever lease is actually current for the worker, not looked up internally where it could never disagree with itself.
 
 If you're evaluating whether someone can operate at a systems level rather than a feature level, this is the fastest way to check.
 
