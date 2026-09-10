@@ -11,16 +11,43 @@ decision, not an oversight.
 
 Usage:
     python scripts/issue_api_key.py "ci-bootstrap"
-
-Note: this is a new file in a `scripts/` directory that doesn't exist
-in the repo yet -- create the directory when you drop this in.
 """
 
 from __future__ import annotations
 
+import os
 import sys
 
 from app.presentation.dependencies import get_create_api_key_service
+
+
+def _confirm_not_test_database(database_url: str) -> None:
+    """
+    Refuses to issue a real credential against a database whose
+    name suggests it isn't the one the rest of the system reads
+    from.
+
+    This exists because a single stray `export` typed into one
+    terminal, testing something unrelated, can silently shadow
+    the correct NEUROMESH_DATABASE_URL from .bashrc for the rest
+    of that session. The script still runs, still prints a real
+    plaintext key, still looks completely successful -- and that
+    key is valid nowhere the real API, or anything else, ever
+    looks. A script that mints real credentials should never
+    succeed quietly against the wrong database.
+    """
+    database_name = database_url.rsplit("/", 1)[-1]
+    if "test" in database_name.lower():
+        raise RuntimeError(
+            f"NEUROMESH_DATABASE_URL points at '{database_name}', "
+            f"which looks like a test database. Refusing to issue "
+            f"a real credential here.\n\n"
+            f"If this is genuinely what you want, override "
+            f"explicitly for this one command instead of relying "
+            f"on shell state:\n\n"
+            f"    NEUROMESH_DATABASE_URL=... python "
+            f"scripts/issue_api_key.py <label>"
+        )
 
 
 def main() -> None:
@@ -32,6 +59,10 @@ def main() -> None:
         raise SystemExit(1)
 
     label = sys.argv[1]
+
+    database_url = os.getenv("NEUROMESH_DATABASE_URL")
+    if database_url is not None:
+        _confirm_not_test_database(database_url)
 
     service = get_create_api_key_service()
     issued = service.execute(label=label)
