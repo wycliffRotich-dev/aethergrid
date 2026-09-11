@@ -1,4 +1,5 @@
 from datetime import timedelta
+from uuid import uuid4
 
 import pytest
 
@@ -9,6 +10,9 @@ from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
 from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
+from app.domain.exceptions.lease_not_found_error import (
+    LeaseNotFoundError,
+)
 from app.domain.exceptions.no_active_lease_error import (
     NoActiveLeaseError,
 )
@@ -67,6 +71,7 @@ def test_execute_renews_worker_lease() -> None:
 
     service.execute(
         worker.id,
+        expected_lease_id=lease.id,
         duration=timedelta(minutes=5),
     )
 
@@ -92,4 +97,66 @@ def test_execute_raises_when_worker_has_no_active_lease() -> None:
     )
 
     with pytest.raises(NoActiveLeaseError):
-        service.execute(WorkerId.new())
+        service.execute(
+            WorkerId.new(),
+            expected_lease_id=uuid4(),
+        )
+
+
+def test_execute_rejects_renewal_when_lease_reassigned_to_different_job() -> None:
+    """
+    ADR 0038: proves the fenced renewal rejects a stale
+    caller's attempt to renew a lease that has since moved on
+    to a different job. Before this fix, RenewLeaseService
+    resolved "the lease" by worker_id alone, so a stale caller
+    still holding an old lease's identity would have silently
+    renewed whatever lease is currently on record for that
+    worker instead of the one it actually started with.
+    """
+    repository = InMemoryLeaseRepository()
+
+    worker_id = WorkerId.new()
+
+    original_lease = Lease.create(
+        worker_id=worker_id,
+        job_id=JobId.new(),
+        duration=timedelta(minutes=1),
+    )
+    repository.save(original_lease)
+
+    # Reconciliation reclaims the original lease.
+    repository.delete(original_lease.job_id)
+
+    # The same worker is legitimately reassigned a new job,
+    # with its own new lease.
+    replacement_lease = Lease.create(
+        worker_id=worker_id,
+        job_id=JobId.new(),
+        duration=timedelta(minutes=1),
+    )
+    repository.save(replacement_lease)
+
+    replacement_original_expiration = replacement_lease.expires_at
+
+    service = RenewLeaseService(
+        lease_repository=repository,
+    )
+
+    # The stale caller, still believing it holds original_lease,
+    # is rejected: whatever lease is on record for this worker
+    # (replacement_lease) does not match expected_lease_id, so
+    # nothing gets renewed on its behalf (ADR 0038).
+    with pytest.raises(LeaseNotFoundError):
+        service.execute(
+            worker_id,
+            expected_lease_id=original_lease.id,
+            duration=timedelta(minutes=5),
+        )
+
+    # The replacement lease must survive untouched -- not
+    # renewed, not deleted.
+    surviving = repository.get_by_worker_id(worker_id)
+
+    assert surviving is not None
+    assert surviving.id == replacement_lease.id
+    assert surviving.expires_at == replacement_original_expiration

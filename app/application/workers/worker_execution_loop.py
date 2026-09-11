@@ -175,7 +175,10 @@ class WorkerExecutionLoop:
             # actual renew signal
             while not stop_renewing.wait(self._renewal_interval_seconds):
                 try:
-                    self._renew_lease_service.execute(worker_id)
+                    self._renew_lease_service.execute(
+                        worker_id,
+                        expected_lease_id=lease_id,
+                    )
                 except LeaseNotFoundError as exc:
                     lost_lease.append(exc)
                     return
