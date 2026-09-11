@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
 
 from app.application.services.acquire_lease_service import (
@@ -81,6 +83,7 @@ def test_renew_lease_succeeds_while_worker_holds_a_job() -> None:
 
         response = client.post(
             f"/workers/{worker_id}/lease/renew",
+            json={"lease_id": str(lease.id)},
         )
 
         assert response.status_code == 200
@@ -121,6 +124,7 @@ def test_renew_lease_with_no_active_lease_returns_409() -> None:
 
         response = client.post(
             f"/workers/{worker_id}/lease/renew",
+            json={"lease_id": str(uuid4())},
         )
         assert response.status_code == 409
 
@@ -131,6 +135,7 @@ def test_renew_lease_with_nonexistent_worker_returns_404() -> None:
 
         response = client.post(
             f"/workers/{fake_worker_id}/lease/renew",
+            json={"lease_id": str(uuid4())},
         )
         assert response.status_code == 404
 

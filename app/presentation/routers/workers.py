@@ -82,6 +82,9 @@ from app.presentation.schemas.list_workers_response import (
     ListWorkersResponse,
     WorkerSummaryResponse,
 )
+from app.presentation.schemas.renew_lease_request import (
+    RenewLeaseRequest,
+)
 from app.presentation.schemas.report_job_outcome_request import (
     ReportJobOutcomeRequest,
 )
@@ -561,6 +564,7 @@ def confirm_job_cancellation(
 )
 def renew_lease(
     worker_id: str,
+    request: RenewLeaseRequest,
     get_worker_service: Annotated[
         GetWorkerService,
         Depends(get_get_worker_service),
@@ -584,6 +588,12 @@ def renew_lease(
     own, only lease existence, so checking here keeps 404 vs
     409 consistent across every worker-scoped endpoint rather
     than leaking that internal distinction to callers.
+
+    request.lease_id (ADR 0038) is required: the caller must
+    state which lease it believes it is renewing, the same
+    value it received from GetWorkerResponse.lease_id when it
+    last checked in, not have the server look that up on its
+    behalf.
     """
     try:
         worker_id_value = WorkerId(
@@ -608,6 +618,7 @@ def renew_lease(
     try:
         renew_lease_service.execute(
             worker_id_value,
+            expected_lease_id=request.lease_id,
         )
     except (NoActiveLeaseError, LeaseNotFoundError) as exc:
         raise HTTPException(
