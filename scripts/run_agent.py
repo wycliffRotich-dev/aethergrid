@@ -119,6 +119,7 @@ def start_job(client: httpx.Client, worker_id: str, job_id: str) -> None:
 def renew_lease(
     client: httpx.Client,
     worker_id: str,
+    lease_id: str,
 ) -> tuple[bool, str | None]:
     """
     Returns (lease_still_held, job_status).
@@ -135,6 +136,7 @@ def renew_lease(
     """
     response = client.post(
         f"/workers/{worker_id}/lease/renew",
+        json={"lease_id": lease_id},
     )
 
     if response.status_code == 409:
@@ -218,6 +220,7 @@ def run_job(
                 lease_ok, job_status = renew_lease(
                     client,
                     worker_id,
+                    lease_id,
                 )
             except httpx.HTTPError as exc:
                 print(
