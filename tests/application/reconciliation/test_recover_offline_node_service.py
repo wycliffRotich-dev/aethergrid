@@ -303,3 +303,61 @@ def test_recover_offline_node_deletes_lease_so_job_can_be_reacquired() -> (
 
     assert new_lease is not None
     assert new_lease.job_id == recovered_job.id
+def test_recover_offline_node_releases_node_resources() -> None:
+    """
+    Regression test: reclaiming a job assigned to an offline
+    node must release its allocated resources back to the
+    node, not just requeue the job and recover the worker.
+    Before this was fixed, RecoverOfflineNodeService never
+    called node.release(), so a node's advertised capacity
+    would permanently shrink by every reclaimed job's
+    resources even after the job itself correctly returned
+    to QUEUED.
+    """
+    node = _make_offline_node()
+
+    job_resources = ResourceRequirements(
+        cpu_cores=1,
+        memory_mib=512,
+        vram_mib=0,
+    )
+    node.allocate(job_resources)
+
+    worker = Worker(
+        id=WorkerId.new(),
+        node=node,
+    )
+
+    worker.ready()
+
+    job = Job(
+        id=JobId.new(),
+        resources=job_resources,
+        max_retries=1,
+    )
+
+    job.queue()
+    job.assign_to(node.id)
+
+    worker.accept(job)
+    worker.start()
+
+    node_repository = InMemoryNodeRepository([node])
+    worker_repository = InMemoryWorkerRepository([worker])
+    job_repository = InMemoryJobRepository([job])
+    lease_repository = InMemoryLeaseRepository()
+
+    service = RecoverOfflineNodeService(
+        node_repository=node_repository,
+        worker_repository=worker_repository,
+        job_repository=job_repository,
+        lease_repository=lease_repository,
+    )
+
+    service.execute()
+
+    recovered_node = node_repository.get_by_id(node.id)
+
+    assert recovered_node.available.cpu_cores == 8
+    assert recovered_node.available.memory_mib == 16384
+

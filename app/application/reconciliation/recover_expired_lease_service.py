@@ -14,6 +14,9 @@ from app.domain.repositories.job_repository import (
 from app.domain.repositories.lease_repository import (
     LeaseRepository,
 )
+from app.domain.repositories.node_repository import (
+    NodeRepository,
+)
 from app.domain.repositories.worker_repository import (
     WorkerRepository,
 )
@@ -35,11 +38,13 @@ class RecoverExpiredLeaseService:
         worker_repository: WorkerRepository,
         job_repository: JobRepository,
         lease_repository: LeaseRepository,
+        node_repository: NodeRepository,
         record_job_events_service: RecordJobEventsService | None = None,
     ) -> None:
         self._worker_repository = worker_repository
         self._job_repository = job_repository
         self._lease_repository = lease_repository
+        self._node_repository = node_repository
         self._record_job_events_service = record_job_events_service
 
     def execute(
@@ -105,6 +110,16 @@ class RecoverExpiredLeaseService:
 
             if job is not None:
                 was_cancelling = job.is_cancelling()
+
+                if job.assigned_node_id is not None:
+                    node = self._node_repository.get_by_id(
+                        job.assigned_node_id,
+                    )
+                    if node is not None:
+                        node.release(job.resources)
+                        self._node_repository.save(
+                            node,
+                        )
 
                 try:
                     job.reclaim()
