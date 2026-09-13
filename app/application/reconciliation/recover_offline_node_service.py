@@ -74,6 +74,7 @@ class RecoverOfflineNodeService:
                 continue
 
             job = worker.running_job
+            node = worker.node
 
             worker.recover()
 
@@ -86,6 +87,12 @@ class RecoverOfflineNodeService:
 
             self._lease_repository.delete(
                 job.id,
+            )
+
+            node.release(job.resources)
+
+            self._node_repository.save(
+                node,
             )
 
             job.reclaim()

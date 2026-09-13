@@ -27,6 +27,9 @@ from app.infrastructure.repositories.in_memory_job_repository import (
 from app.infrastructure.repositories.in_memory_lease_repository import (
     InMemoryLeaseRepository,
 )
+from app.infrastructure.repositories.in_memory_node_repository import (
+    InMemoryNodeRepository,
+)
 from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
@@ -89,10 +92,13 @@ def test_recover_expired_lease_requeues_job_with_retries_remaining() -> None:
     lease_repository = InMemoryLeaseRepository()
     lease_repository.save(lease)
 
+    node_repository = InMemoryNodeRepository([node])
+
     service = RecoverExpiredLeaseService(
         worker_repository=worker_repository,
         job_repository=job_repository,
         lease_repository=lease_repository,
+        node_repository=node_repository,
     )
 
     service.execute()
@@ -150,10 +156,13 @@ def test_recover_expired_lease_fails_job_once_retries_exhausted() -> None:
     lease_repository = InMemoryLeaseRepository()
     lease_repository.save(lease)
 
+    node_repository = InMemoryNodeRepository([node])
+
     service = RecoverExpiredLeaseService(
         worker_repository=worker_repository,
         job_repository=job_repository,
         lease_repository=lease_repository,
+        node_repository=node_repository,
     )
 
     service.execute()
@@ -212,10 +221,13 @@ def test_recover_expired_lease_records_job_reclaimed_event() -> None:
         event_repository=events,
     )
 
+    node_repository = InMemoryNodeRepository([node])
+
     service = RecoverExpiredLeaseService(
         worker_repository=worker_repository,
         job_repository=job_repository,
         lease_repository=lease_repository,
+        node_repository=node_repository,
         record_job_events_service=record_job_events_service,
     )
 
@@ -269,10 +281,13 @@ def test_recover_expired_lease_finalizes_cancelling_job_as_cancelled() -> None:
     lease_repository = InMemoryLeaseRepository()
     lease_repository.save(lease)
 
+    node_repository = InMemoryNodeRepository([node])
+
     service = RecoverExpiredLeaseService(
         worker_repository=worker_repository,
         job_repository=job_repository,
         lease_repository=lease_repository,
+        node_repository=node_repository,
     )
 
     service.execute()
@@ -338,10 +353,13 @@ def test_recover_expired_lease_records_job_cancelled_event_for_cancelling_job() 
         event_repository=events,
     )
 
+    node_repository = InMemoryNodeRepository([node])
+
     service = RecoverExpiredLeaseService(
         worker_repository=worker_repository,
         job_repository=job_repository,
         lease_repository=lease_repository,
+        node_repository=node_repository,
         record_job_events_service=record_job_events_service,
     )
 
@@ -353,3 +371,66 @@ def test_recover_expired_lease_records_job_cancelled_event_for_cancelling_job() 
     assert recorded[0].event_type == "JobCancelled"
     assert recorded[0].aggregate_id == str(job.id)
     assert recorded[0].aggregate_type == "Job"
+
+
+def test_recover_expired_lease_releases_node_resources() -> None:
+    """
+    Regression test: reclaiming a job whose lease expired
+    must release its allocated resources back to the node,
+    not just requeue the job and recover the worker. Before
+    this was fixed, RecoverExpiredLeaseService never touched
+    NodeRepository at all, so a node's advertised capacity
+    would permanently shrink by every reclaimed job's
+    resources, even though the job itself correctly returned
+    to QUEUED.
+    """
+    node = _make_node()
+
+    job_resources = ResourceRequirements(
+        cpu_cores=1,
+        memory_mib=512,
+        vram_mib=0,
+    )
+    node.allocate(job_resources)
+
+    worker = Worker(
+        id=WorkerId.new(),
+        node=node,
+    )
+
+    worker.ready()
+
+    job = Job(
+        id=JobId.new(),
+        resources=job_resources,
+        max_retries=1,
+    )
+
+    job.queue()
+    job.assign_to(node.id)
+
+    worker.accept(job)
+    worker.start()
+
+    lease = _make_expired_lease(worker, job)
+
+    worker_repository = InMemoryWorkerRepository([worker])
+    job_repository = InMemoryJobRepository([job])
+    lease_repository = InMemoryLeaseRepository()
+    lease_repository.save(lease)
+
+    node_repository = InMemoryNodeRepository([node])
+
+    service = RecoverExpiredLeaseService(
+        worker_repository=worker_repository,
+        job_repository=job_repository,
+        lease_repository=lease_repository,
+        node_repository=node_repository,
+    )
+
+    service.execute()
+
+    recovered_node = node_repository.get_by_id(node.id)
+
+    assert recovered_node.available.cpu_cores == 8
+    assert recovered_node.available.memory_mib == 16384
