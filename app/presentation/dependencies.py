@@ -709,6 +709,9 @@ def get_create_worker_service() -> CreateWorkerService:
 
     return CreateWorkerService(
         worker_repository=_worker_repository,
+        job_repository=_job_repository,
+        lease_repository=_lease_repository,
+        node_repository=_node_repository,
     )
 
 
