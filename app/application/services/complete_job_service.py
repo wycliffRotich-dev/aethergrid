@@ -48,6 +48,7 @@ class CompleteJobService:
         job.complete()
         node.release(job.resources)
 
+        self._node_repository.save(node)
         self._job_repository.save(job)
 
         return job
