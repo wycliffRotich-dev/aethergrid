@@ -55,6 +55,9 @@ class FailJobService:
             job.resources,
         )
 
+        self._node_repository.save(
+            node,
+        )
         self._job_repository.save(
             job,
         )
