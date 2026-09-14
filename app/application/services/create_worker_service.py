@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from app.application.services.job_execution_support import (
+    reclaim_job,
+)
 from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
 from app.domain.enums.worker_management import WorkerManagement
@@ -69,21 +72,14 @@ class CreateWorkerService:
             abandoned_job = existing.running_job
 
             if abandoned_job is not None:
-                self._lease_repository.delete(
-                    abandoned_job.id,
-                )
-
-                node.release(
-                    abandoned_job.resources,
-                )
-                self._node_repository.save(
-                    node,
-                )
-
-                abandoned_job.reclaim()
-                self._job_repository.save(
+                reclaim_job(
                     abandoned_job,
+                    node,
+                    lease_repository=self._lease_repository,
+                    node_repository=self._node_repository,
+                    job_repository=self._job_repository,
                 )
+
 
             existing.recover()
             existing.managed_by = managed_by

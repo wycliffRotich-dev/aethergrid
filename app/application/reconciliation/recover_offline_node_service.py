@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from app.application.services.job_execution_support import (
+    reclaim_job,
+)
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
@@ -85,23 +88,18 @@ class RecoverOfflineNodeService:
             if job is None:
                 continue
 
-            self._lease_repository.delete(
-                job.id,
-            )
-
-            node.release(job.resources)
-
-            self._node_repository.save(
-                node,
-            )
-
-            job.reclaim()
-
-            self._job_repository.save(
+            reclaimed = reclaim_job(
                 job,
+                node,
+                lease_repository=self._lease_repository,
+                node_repository=self._node_repository,
+                job_repository=self._job_repository,
             )
 
-            if self._record_job_events_service is not None:
+            if (
+                reclaimed
+                and self._record_job_events_service is not None
+            ):
                 self._record_job_events_service.record(
                     aggregate_id=str(job.id),
                     event_type="JobReclaimed",

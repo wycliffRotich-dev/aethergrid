@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import logging
 
+from app.application.services.job_execution_support import (
+    reclaim_job,
+)
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
-)
-from app.domain.exceptions.invalid_job_transition import (
-    InvalidJobTransition,
 )
 from app.domain.repositories.job_repository import (
     JobRepository,
@@ -91,10 +91,6 @@ class RecoverExpiredLeaseService:
             if not lease.is_expired():
                 continue
 
-            self._lease_repository.delete(
-                lease.job_id,
-            )
-
             worker = self._worker_repository.get_by_id(
                 lease.worker_id,
             )
@@ -102,54 +98,59 @@ class RecoverExpiredLeaseService:
                 lease.job_id,
             )
 
+            if job is None:
+                self._lease_repository.delete(
+                    lease.job_id,
+                )
+
+                if worker is not None:
+                    worker.recover()
+                    self._worker_repository.save(
+                        worker,
+                    )
+
+                continue
+
             if worker is not None:
                 worker.recover()
                 self._worker_repository.save(
                     worker,
                 )
 
-            if job is not None:
-                was_cancelling = job.is_cancelling()
+            was_cancelling = job.is_cancelling()
 
-                if job.assigned_node_id is not None:
-                    node = self._node_repository.get_by_id(
-                        job.assigned_node_id,
-                    )
-                    if node is not None:
-                        node.release(job.resources)
-                        self._node_repository.save(
-                            node,
-                        )
-
-                try:
-                    job.reclaim()
-                except InvalidJobTransition:
-                    logger.warning(
-                        "Skipping reclaim for job %s: lease expired but "
-                        "job is no longer in a reclaimable state "
-                        "(status=%s). Stale lease row has already been "
-                        "deleted.",
-                        job.id,
-                        job.status,
-                    )
-                    continue
-                self._job_repository.save(
-                    job,
+            node = None
+            if job.assigned_node_id is not None:
+                node = self._node_repository.get_by_id(
+                    job.assigned_node_id,
                 )
 
-                if self._record_job_events_service is not None:
-                    # A job that was CANCELLING is finalized as
-                    # CANCELLED by reclaim() (ADR 0031), not
-                    # retried, so the event recorded should say
-                    # what actually happened to the job, not the
-                    # generic reclaim event used for the
-                    # SCHEDULED/RUNNING retry path.
-                    event_type = (
-                        "JobCancelled"
-                        if was_cancelling
-                        else "JobReclaimed"
-                    )
-                    self._record_job_events_service.record(
-                        aggregate_id=str(job.id),
-                        event_type=event_type,
-                    )
+            reclaimed = reclaim_job(
+                job,
+                node,
+                lease_repository=self._lease_repository,
+                node_repository=self._node_repository,
+                job_repository=self._job_repository,
+            )
+
+            if not reclaimed:
+                logger.warning(
+                    "Skipping reclaim for job %s: lease expired but"
+                    "job is no longer in a reclaimable state "
+                    "(status=%s). Stale lease row has already been "
+                    "deleted.",
+                    job.id,
+                    job.status,
+                )
+                continue
+
+            if self._record_job_events_service is not None:
+                event_type = (
+                    "JobCancelled"
+                    if was_cancelling
+                    else "JobReclaimed"
+                )
+                self._record_job_events_service.record(
+                    aggregate_id=str(job.id),
+                    event_type=event_type,
+                )
