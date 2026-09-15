@@ -21,7 +21,7 @@
 AetherGrid takes workloads, matches them against available compute nodes based on resource requirements and constraints, and manages the full lifecycle: queued, scheduled, running, completed, failed, retried, cancelled. Jobs run through workers registered against nodes, and job execution ownership is enforced through time-bound leases rather than a simple assignment flag. Every route requires API key authentication, including the endpoint that issues keys.
 
 <p align="center">
-  <a href="docs/assets/aethergrid-data-flow.svg">
+  <a href="https://raw.githubusercontent.com/wycliffRotich-dev/aethergrid/main/docs/assets/aethergrid-data-flow.svg" target="_blank">
     <img src="docs/assets/aethergrid-data-flow.svg" alt="AetherGrid cluster-wide data flow" width="100%">
   </a>
 </p>
