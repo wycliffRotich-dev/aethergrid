@@ -33,6 +33,7 @@ from app.application.services.start_job_service import (
 from app.application.services.worker_heartbeat_service import (
     WorkerHeartbeatService,
 )
+from app.domain.entities.lease import Lease
 from app.domain.enums.worker_management import WorkerManagement
 from app.domain.exceptions.lease_not_found_error import (
     LeaseNotFoundError,
@@ -99,18 +100,23 @@ router = APIRouter(
 )
 
 
-def _build_worker_response(worker, lease_id: str | None) -> GetWorkerResponse:
+def _build_worker_response(worker, lease: Lease | None) -> GetWorkerResponse:
     """
     Build a GetWorkerResponse for a worker, including its
     running job if any.
 
-    lease_id (ADR 0036) is threaded in explicitly by each
+    lease (ADR 0036, extended for lease timing) is threaded
+    in as the real Lease object, not just its id, by each
     caller rather than looked up here, since only three of
     six call sites in this router can ever have a non-null
     value (get_worker, start_job, renew_lease); the other
     three clear worker.running_job as part of their own
     domain transition before building a response, and have
     no lease left to look up by the time they call this.
+    Passing the whole object (rather than id plus two more
+    parallel timing params) means lease_id, lease_acquired_at,
+    and lease_expires_at can never be threaded inconsistently
+    by a future call site.
     """
     running_job = None
 
@@ -122,7 +128,13 @@ def _build_worker_response(worker, lease_id: str | None) -> GetWorkerResponse:
             execution_timeout_seconds=(
                 worker.running_job.execution_timeout.total_seconds()
             ),
-            lease_id=lease_id,
+            lease_id=str(lease.id) if lease is not None else None,
+            lease_acquired_at=(
+                lease.acquired_at if lease is not None else None
+            ),
+            lease_expires_at=(
+                lease.expires_at if lease is not None else None
+            ),
         )
 
     return GetWorkerResponse(
@@ -268,13 +280,12 @@ def get_worker(
             detail="Worker not found.",
         )
 
-    lease_id = None
+    lease = None
 
     if worker.running_job is not None:
         lease = lease_service.execute(worker_id_value)
-        lease_id = str(lease.id) if lease is not None else None
 
-    return _build_worker_response(worker, lease_id)
+    return _build_worker_response(worker, lease)
 
 
 @router.post(
@@ -337,13 +348,12 @@ def start_job(
             detail=str(exc),
         ) from exc
 
-    lease_id = None
+    lease = None
 
     if worker.running_job is not None:
         lease = lease_service.execute(worker_id_value)
-        lease_id = str(lease.id) if lease is not None else None
 
-    return _build_worker_response(worker, lease_id)
+    return _build_worker_response(worker, lease)
 
 
 @router.post(
@@ -414,7 +424,7 @@ def complete_job(
             detail=str(exc),
         ) from exc
 
-    return _build_worker_response(worker, lease_id=None)
+    return _build_worker_response(worker, lease=None)
 
 
 @router.post(
@@ -481,7 +491,7 @@ def fail_job(
             detail=str(exc),
         ) from exc
 
-    return _build_worker_response(worker, lease_id=None)
+    return _build_worker_response(worker, lease=None)
 
 
 @router.post(
@@ -555,7 +565,7 @@ def confirm_job_cancellation(
             detail=str(exc),
         ) from exc
 
-    return _build_worker_response(worker, lease_id=None)
+    return _build_worker_response(worker, lease=None)
 
 
 @router.post(
@@ -626,13 +636,12 @@ def renew_lease(
             detail=str(exc),
         ) from exc
 
-    lease_id = None
+    lease = None
 
     if worker.running_job is not None:
         lease = lease_for_worker_service.execute(worker_id_value)
-        lease_id = str(lease.id) if lease is not None else None
 
-    return _build_worker_response(worker, lease_id)
+    return _build_worker_response(worker, lease)
 
 
 @router.post(

@@ -98,6 +98,29 @@ def test_renew_lease_succeeds_while_worker_holds_a_job() -> None:
         assert body["status"] == "BUSY"
         assert body["running_job"]["id"] == str(job.id)
 
+        # lease_expires_at in the response must reflect the
+        # renewal that already happened, not the pre-renewal
+        # expiry captured in original_expiry. This exercises the
+        # router's real ordering: renew_lease_service.execute()
+        # runs, then lease_for_worker_service.execute() re-reads
+        # the lease, so the response is built from post-renewal
+        # state. lease_acquired_at must stay fixed across the
+        # renewal -- renewing extends expires_at, it never
+        # changes when the lease was originally acquired.
+        from datetime import datetime
+
+        response_acquired_at = datetime.fromisoformat(
+            body["running_job"]["lease_acquired_at"],
+        )
+        response_expires_at = datetime.fromisoformat(
+            body["running_job"]["lease_expires_at"],
+        )
+
+        assert body["running_job"]["lease_id"] == str(lease.id)
+        assert response_acquired_at == lease.acquired_at
+        assert response_expires_at == renewed_lease.expires_at
+        assert response_expires_at > original_expiry
+
 
 def test_renew_lease_with_no_active_lease_returns_409() -> None:
     """

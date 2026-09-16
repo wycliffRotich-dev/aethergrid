@@ -33,6 +33,17 @@ class RunningJobResponse(BaseModel):
     command: list[str] | None
     execution_timeout_seconds: float
     lease_id: str | None
+    lease_acquired_at: datetime | None = None
+    lease_expires_at: datetime | None = None
+    """
+    Real lease timing (ADR 0005/0014), added so a viewer can
+    see how long a worker has actually held this job and when
+    its next renewal is due, not just that a lease exists.
+    Populated whenever lease_id is, from the same Lease object
+    the router already resolved for fencing -- never looked up
+    separately, so these three fields can never disagree with
+    each other.
+    """
 
 
 class GetWorkerResponse(BaseModel):
