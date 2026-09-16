@@ -87,6 +87,24 @@ export interface WorkerResponse {
 export interface ListWorkersResponse {
   workers: WorkerResponse[];
 }
+
+export interface RunningJobDetail {
+  id: string;
+  status: string;
+  command: string[] | null;
+  execution_timeout_seconds: number;
+  lease_id: string | null;
+  lease_acquired_at: string | null;
+  lease_expires_at: string | null;
+}
+
+export interface GetWorkerResponse {
+  id: string;
+  status: WorkerStatus;
+  node_id: string;
+  last_seen_at: string;
+  running_job: RunningJobDetail | null;
+}
 export interface CreateNodeRequest {
   cpu_cores: number;
   memory_mib: number;
