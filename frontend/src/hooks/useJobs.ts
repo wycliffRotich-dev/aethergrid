@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 import { listJobs } from "../api/jobs";
 import type { JobSummaryResponse } from "../api/types";
 
+const POLL_INTERVAL_MS = 3000;
+
 export function useJobs() {
   const [jobs, setJobs] = useState<JobSummaryResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -10,12 +12,10 @@ export function useJobs() {
 
   const refresh = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
-
       const response = await listJobs();
 
       setJobs(response.jobs);
+      setError(null);
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
@@ -29,6 +29,12 @@ export function useJobs() {
 
   useEffect(() => {
     void refresh();
+
+    const interval = setInterval(() => {
+      void refresh();
+    }, POLL_INTERVAL_MS);
+
+    return () => clearInterval(interval);
   }, [refresh]);
 
   return {
