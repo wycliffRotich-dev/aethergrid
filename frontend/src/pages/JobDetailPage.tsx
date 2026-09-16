@@ -23,21 +23,27 @@ const EVENT_STYLES: Record<string, string> = {
   JobReclaimed: "bg-rose-400",
 };
 
+function actionErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : "Something went wrong.";
+}
+
 export default function JobDetailPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const { job, history, loading, error, refresh } = useJobDetail(jobId ?? "");
   const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   async function handleCancel() {
     if (!jobId) return;
 
     setActionLoading(true);
+    setActionError(null);
 
     try {
       await cancelJob(jobId);
       await refresh();
     } catch (err) {
-      alert(err);
+      setActionError(actionErrorMessage(err));
     } finally {
       setActionLoading(false);
     }
@@ -47,12 +53,13 @@ export default function JobDetailPage() {
     if (!jobId) return;
 
     setActionLoading(true);
+    setActionError(null);
 
     try {
       await retryJob(jobId);
       await refresh();
     } catch (err) {
-      alert(err);
+      setActionError(actionErrorMessage(err));
     } finally {
       setActionLoading(false);
     }
@@ -132,25 +139,40 @@ export default function JobDetailPage() {
       </section>
 
       {(canCancel || canRetry) && (
-        <div className="mb-8 flex gap-3">
-          {canCancel && (
-            <button
-              onClick={handleCancel}
-              disabled={actionLoading}
-              className="rounded bg-rose-600 px-5 py-2 font-medium text-white hover:bg-rose-500 disabled:opacity-50"
-            >
-              {actionLoading ? "Working..." : "Cancel Job"}
-            </button>
-          )}
+        <div className="mb-8">
+          <div className="flex gap-3">
+            {canCancel && (
+              <button
+                onClick={handleCancel}
+                disabled={actionLoading}
+                className="rounded bg-rose-600 px-5 py-2 font-medium text-white hover:bg-rose-500 disabled:opacity-50"
+              >
+                {actionLoading ? "Working..." : "Cancel Job"}
+              </button>
+            )}
 
-          {canRetry && (
-            <button
-              onClick={handleRetry}
-              disabled={actionLoading}
-              className="rounded bg-indigo-600 px-5 py-2 font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-            >
-              {actionLoading ? "Working..." : "Retry Job"}
-            </button>
+            {canRetry && (
+              <button
+                onClick={handleRetry}
+                disabled={actionLoading}
+                className="rounded bg-indigo-600 px-5 py-2 font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+              >
+                {actionLoading ? "Working..." : "Retry Job"}
+              </button>
+            )}
+          </div>
+
+          {actionError !== null && (
+            <div className="mt-3 flex items-center justify-between rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-400">
+              <span>{actionError}</span>
+              <button
+                onClick={() => setActionError(null)}
+                className="ml-4 text-rose-400 hover:text-rose-300"
+                aria-label="Dismiss error"
+              >
+                {"\u00d7"}
+              </button>
+            </div>
           )}
         </div>
       )}
