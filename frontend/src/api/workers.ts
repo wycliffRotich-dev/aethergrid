@@ -2,11 +2,16 @@ import { api } from "./client";
 import type {
   CreateWorkerRequest,
   CreateWorkerResponse,
+  GetWorkerResponse,
   ListWorkersResponse,
 } from "./types";
 
 export function listWorkers() {
   return api<ListWorkersResponse>("/workers");
+}
+
+export function getWorker(workerId: string) {
+  return api<GetWorkerResponse>(`/workers/${workerId}`);
 }
 
 export function createWorker(worker: CreateWorkerRequest) {

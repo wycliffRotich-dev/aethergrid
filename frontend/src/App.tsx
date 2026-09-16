@@ -5,6 +5,8 @@ import DashboardPage from "./pages/DashboardPage";
 import NodesPage from "./pages/NodesPage";
 import JobsPage from "./pages/JobsPage";
 import JobDetailPage from "./pages/JobDetailPage";
+import WorkersPage from "./pages/WorkersPage";
+import WorkerDetailPage from "./pages/WorkerDetailPage";
 import { useWorkerHeartbeatKeeper } from "./hooks/useWorkerHeartbeatKeeper";
 
 export default function App() {
@@ -17,6 +19,8 @@ export default function App() {
           <Route path="/nodes" element={<NodesPage />} />
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/jobs/:jobId" element={<JobDetailPage />} />
+          <Route path="/workers" element={<WorkersPage />} />
+          <Route path="/workers/:workerId" element={<WorkerDetailPage />} />
         </Routes>
       </Shell>
     </AuthGate>

@@ -24,6 +24,10 @@ export function Sidebar() {
         <NavLink to="/jobs" className={linkClassName}>
           Jobs
         </NavLink>
+
+        <NavLink to="/workers" className={linkClassName}>
+          Workers
+        </NavLink>
       </nav>
     </aside>
   );

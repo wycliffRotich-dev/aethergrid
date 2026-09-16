@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 import type { WorkerResponse, WorkerStatus } from "../../api/types";
 import { StatusBadge } from "../common/StatusBadge";
 
@@ -84,8 +86,13 @@ export function WorkerTable({ workers }: Props) {
                 key={worker.id}
                 className="border-t border-slate-800 transition-colors hover:bg-slate-800/40"
               >
-                <td className="px-6 py-4 font-mono text-sm text-white">
-                  {shortId(worker.id)}
+                <td className="px-6 py-4 font-mono text-sm">
+                  <Link
+                    to={`/workers/${worker.id}`}
+                    className="text-white hover:text-indigo-400 hover:underline"
+                  >
+                    {shortId(worker.id)}
+                  </Link>
                 </td>
 
                 <td>
