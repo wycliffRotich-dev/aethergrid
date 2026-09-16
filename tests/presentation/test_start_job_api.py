@@ -64,11 +64,21 @@ def test_start_job_transitions_job_to_running() -> None:
             )
 
         assert worker_body["running_job"]["id"] == job_id
+        assert worker_body["running_job"]["lease_id"] is not None
+        assert worker_body["running_job"]["lease_acquired_at"] is not None
+        assert worker_body["running_job"]["lease_expires_at"] is not None
 
         start_response = client.post(
             f"/workers/{worker_id}/jobs/{job_id}/start",
         )
         assert start_response.status_code == 200
+
+        started_body = start_response.json()
+        assert started_body["running_job"]["lease_id"] == (
+            worker_body["running_job"]["lease_id"]
+        )
+        assert started_body["running_job"]["lease_acquired_at"] is not None
+        assert started_body["running_job"]["lease_expires_at"] is not None
 
         job_after_start = client.get(f"/jobs/{job_id}")
         assert job_after_start.status_code == 200
