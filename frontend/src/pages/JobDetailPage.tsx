@@ -1,4 +1,4 @@
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import { cancelJob, retryJob } from "../api/jobs";
 import { useJobDetail } from "../hooks/useJobDetail";
@@ -79,7 +79,14 @@ export default function JobDetailPage() {
 
   return (
     <main className="flex-1 bg-slate-950 p-8">
-      <h1 className="mb-2 text-3xl font-bold text-white">
+      <Link
+        to="/jobs"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-slate-400 hover:text-indigo-400"
+      >
+        {"\u2190"} Back to Jobs
+      </Link>
+
+      <h1 className="mb-2 mt-4 text-3xl font-bold text-white">
         Job {shortId(job.id)}
       </h1>
 

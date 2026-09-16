@@ -1,4 +1,4 @@
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import { useWorker } from "../hooks/useWorker";
 
@@ -34,7 +34,14 @@ export default function WorkerDetailPage() {
 
   return (
     <main className="flex-1 bg-slate-950 p-8">
-      <h1 className="mb-2 text-3xl font-bold text-white">
+      <Link
+        to="/workers"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-slate-400 hover:text-indigo-400"
+      >
+        {"\u2190"} Back to Workers
+      </Link>
+
+      <h1 className="mb-2 mt-4 text-3xl font-bold text-white">
         Worker {shortId(worker.id)}
       </h1>
 
