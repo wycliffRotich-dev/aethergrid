@@ -76,7 +76,7 @@ function formatDuration(seconds: number): string {
 }
 
 function useTicker(enabled: boolean): number {
-  const [, setTick] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     if (!enabled) {
@@ -84,13 +84,13 @@ function useTicker(enabled: boolean): number {
     }
 
     const interval = setInterval(() => {
-      setTick((current) => current + 1);
+      setNow(Date.now());
     }, 1000);
 
     return () => clearInterval(interval);
   }, [enabled]);
 
-  return Date.now();
+  return now;
 }
 
 function JobDuration({ job }: { job: JobSummaryResponse }) {
