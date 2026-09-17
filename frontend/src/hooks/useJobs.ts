@@ -1,44 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
-
 import { listJobs } from "../api/jobs";
-import type { JobSummaryResponse } from "../api/types";
+import { useAsyncResource } from "./useAsyncResource";
 
 const POLL_INTERVAL_MS = 3000;
 
 export function useJobs() {
-  const [jobs, setJobs] = useState<JobSummaryResponse[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    try {
-      const response = await listJobs();
-
-      setJobs(response.jobs);
-      setError(null);
-    } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Unknown error");
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-
-    const interval = setInterval(() => {
-      void refresh();
-    }, POLL_INTERVAL_MS);
-
-    return () => clearInterval(interval);
-  }, [refresh]);
+  const { data, loading, error, refresh } = useAsyncResource(listJobs, [], {
+    pollIntervalMs: POLL_INTERVAL_MS,
+    resetLoadingOnRefresh: false,
+  });
 
   return {
-    jobs,
+    jobs: data?.jobs ?? [],
     loading,
     error,
     refresh,
