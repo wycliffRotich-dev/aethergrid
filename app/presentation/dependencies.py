@@ -416,9 +416,17 @@ _reconciliation_loop = ReconciliationLoop(
 )
 
 
+# capacity is the burst allowance: enough tokens for a caller to act
+# freely after being idle. refill_rate_per_second must exceed the
+# dashboard's own sustained polling draw, or the bucket drains
+# indefinitely no matter how large capacity is, regardless of who
+# else is calling the API. The dashboard alone polls 4 endpoints
+# (jobs, events, nodes, workers) every 3 seconds, ~1.33 requests/sec
+# per open tab; 10/sec leaves headroom for several tabs plus manual
+# actions on top.
 _rate_limiter_service = RateLimiterService(
     capacity=60,
-    refill_rate_per_second=1.0,
+    refill_rate_per_second=10.0,
 )
 
 
