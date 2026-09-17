@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ActivityFeed } from "../components/dashboard/ActivityFeed";
 import { ClusterHealth } from "../components/dashboard/ClusterHealth";
 import { Gauge } from "../components/dashboard/gauge/Gauge";
@@ -57,13 +57,15 @@ export default function DashboardPage() {
   // job would tear down and rebuild the entire page, which is what
   // caused the scroll position to jump back to the top on every
   // action.
+  // Setting state directly in the render body (rather than in an effect)
+  // is the documented React pattern for a one-way latch like this: it is
+  // conditional, so it does not loop, and it avoids the extra commit an
+  // effect-driven version would cause.
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
-  useEffect(() => {
-    if (!loading && !clusterStatsLoading && !hasLoadedOnce) {
-      setHasLoadedOnce(true);
-    }
-  }, [loading, clusterStatsLoading, hasLoadedOnce]);
+  if (!loading && !clusterStatsLoading && !hasLoadedOnce) {
+    setHasLoadedOnce(true);
+  }
 
   function refreshAll() {
     refresh();
