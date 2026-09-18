@@ -1,4 +1,5 @@
 import { WorkerTable } from "../components/workers/WorkerTable";
+import { TableSkeleton } from "../components/common/TableSkeleton";
 import { useWorkers } from "../hooks/useWorkers";
 
 export default function WorkersPage() {
@@ -10,8 +11,11 @@ export default function WorkersPage() {
 
   if (loading) {
     return (
-      <main className="flex-1 bg-slate-950 p-8 text-white">
-        Loading workers...
+      <main className="flex-1 bg-slate-950 p-8">
+        <h1 className="mb-8 text-3xl font-bold text-white">
+          Workers
+        </h1>
+        <TableSkeleton rows={3} columns={5} />
       </main>
     );
   }

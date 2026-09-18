@@ -1,5 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 
+import { DetailPageSkeleton } from "../components/common/DetailPageSkeleton";
 import { useWorker } from "../hooks/useWorker";
 
 function shortId(id: string): string {
@@ -16,8 +17,8 @@ export default function WorkerDetailPage() {
 
   if (loading) {
     return (
-      <main className="flex-1 bg-slate-950 p-8 text-white">
-        Loading worker...
+      <main className="flex-1 bg-slate-950 p-8">
+        <DetailPageSkeleton />
       </main>
     );
   }

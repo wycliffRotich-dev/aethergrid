@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { Skeleton } from "../common/Skeleton";
 import { useEvents } from "../../hooks/useEvents";
 import { SectionCard } from "./SectionCard";
 
@@ -78,9 +79,11 @@ export function ActivityFeed() {
       subtitle="Live cluster events"
     >
       {loading ? (
-        <p className="text-sm text-slate-500">
-          Loading events...
-        </p>
+        <div className="space-y-2">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Skeleton key={index} className="h-11 w-full rounded-lg" />
+          ))}
+        </div>
       ) : error ? (
         <p className="text-sm text-rose-400">
           {error}

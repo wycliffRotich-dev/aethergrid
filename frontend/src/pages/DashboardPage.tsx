@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { ActivityFeed } from "../components/dashboard/ActivityFeed";
+import { Skeleton } from "../components/common/Skeleton";
+import { TableSkeleton } from "../components/common/TableSkeleton";
 import { ClusterHealth } from "../components/dashboard/ClusterHealth";
 import { Gauge } from "../components/dashboard/gauge/Gauge";
 import { SectionCard } from "../components/dashboard/SectionCard";
@@ -76,8 +78,18 @@ export default function DashboardPage() {
 
   if ((loading || clusterStatsLoading) && !hasLoadedOnce) {
     return (
-      <main className="flex-1 bg-slate-950 p-8 text-white">
-        Loading cluster...
+      <main className="flex-1 bg-slate-950 p-8">
+        <Skeleton className="mb-8 h-9 w-48" />
+
+        <div className="mb-8 h-32 rounded-2xl border border-slate-800 bg-slate-900" />
+
+        <div className="mb-8 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Skeleton key={index} className="h-24 rounded-2xl" />
+          ))}
+        </div>
+
+        <TableSkeleton rows={3} columns={6} />
       </main>
     );
   }
@@ -100,8 +112,9 @@ export default function DashboardPage() {
 
   if (health === null || capacity === null || utilization === null) {
     return (
-      <main className="flex-1 bg-slate-950 p-8 text-white">
-        Loading cluster...
+      <main className="flex-1 bg-slate-950 p-8">
+        <Skeleton className="mb-8 h-9 w-48" />
+        <TableSkeleton rows={3} columns={6} />
       </main>
     );
   }
