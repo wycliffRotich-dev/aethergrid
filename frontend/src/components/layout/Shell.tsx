@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 
+import { CommandPalette } from "../common/CommandPalette";
 import { Header } from "./Header";
 import { Sidebar } from "./Sidebar";
+import { useCommandPalette } from "../../hooks/useCommandPalette";
 
 interface ShellProps {
   children: ReactNode;
@@ -10,6 +12,8 @@ interface ShellProps {
 export function Shell({
   children,
 }: ShellProps) {
+  const { isOpen, close } = useCommandPalette();
+
   return (
     <div className="min-h-screen bg-slate-950">
 
@@ -24,6 +28,8 @@ export function Shell({
         </main>
 
       </div>
+
+      <CommandPalette isOpen={isOpen} onClose={close} />
 
     </div>
   );
