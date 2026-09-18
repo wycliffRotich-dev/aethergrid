@@ -20,18 +20,24 @@ function healthLabel(node: NodeResponse): "Healthy" | "Draining" | "Offline" {
   return "Healthy";
 }
 
+function actionErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Something went wrong.";
+}
+
 export function NodeTable({ nodes, onChanged }: Props) {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [drainingId, setDrainingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   async function handleRemove(nodeId: string) {
     setRemovingId(nodeId);
+    setActionError(null);
 
     try {
       await removeOfflineNode(nodeId);
       onChanged();
     } catch (error) {
-      alert(error);
+      setActionError(actionErrorMessage(error));
     } finally {
       setRemovingId(null);
     }
@@ -39,12 +45,13 @@ export function NodeTable({ nodes, onChanged }: Props) {
 
   async function handleDrain(nodeId: string) {
     setDrainingId(nodeId);
+    setActionError(null);
 
     try {
       await drainNode(nodeId);
       onChanged();
     } catch (error) {
-      alert(error);
+      setActionError(actionErrorMessage(error));
     } finally {
       setDrainingId(null);
     }
@@ -67,6 +74,19 @@ export function NodeTable({ nodes, onChanged }: Props) {
           {nodes.length} Nodes
         </div>
       </div>
+
+      {actionError !== null && (
+        <div className="mx-6 mt-4 flex items-center justify-between rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-400">
+          <span>{actionError}</span>
+          <button
+            onClick={() => setActionError(null)}
+            className="ml-4 text-rose-400 hover:text-rose-300"
+            aria-label="Dismiss error"
+          >
+            {"\u00d7"}
+          </button>
+        </div>
+      )}
 
       <table className="w-full">
         <thead className="bg-slate-800/60 text-left text-xs uppercase tracking-wider text-slate-400">

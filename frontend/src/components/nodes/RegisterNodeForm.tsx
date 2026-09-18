@@ -7,6 +7,10 @@ type Props = {
   onCreated: () => void;
 };
 
+function actionErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Something went wrong.";
+}
+
 export function RegisterNodeForm({
   onCreated,
 }: Props) {
@@ -15,6 +19,7 @@ export function RegisterNodeForm({
   const [vram, setVram] = useState(8192);
 
   const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   async function submit(
     event: React.FormEvent,
@@ -22,6 +27,7 @@ export function RegisterNodeForm({
     event.preventDefault();
 
     setLoading(true);
+    setSubmitError(null);
 
     try {
       const node = await createNode({
@@ -41,7 +47,7 @@ export function RegisterNodeForm({
 
       onCreated();
     } catch (error) {
-      alert(error);
+      setSubmitError(actionErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -101,6 +107,20 @@ export function RegisterNodeForm({
             className="w-full rounded border border-slate-700 bg-slate-800 p-2 text-white"
           />
         </div>
+
+        {submitError !== null && (
+          <div className="flex items-center justify-between rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-400">
+            <span>{submitError}</span>
+            <button
+              type="button"
+              onClick={() => setSubmitError(null)}
+              className="ml-4 text-rose-400 hover:text-rose-300"
+              aria-label="Dismiss error"
+            >
+              {"\u00d7"}
+            </button>
+          </div>
+        )}
 
         <button
           disabled={loading}

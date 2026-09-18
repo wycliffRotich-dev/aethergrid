@@ -133,17 +133,23 @@ function ExitCode({ job }: { job: JobSummaryResponse }) {
   );
 }
 
+function actionErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Something went wrong.";
+}
+
 export function RecentJobs({ jobs, onChanged }: Props) {
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   async function handleCancel(jobId: string) {
     setCancellingId(jobId);
+    setActionError(null);
 
     try {
       await cancelJob(jobId);
       onChanged();
     } catch (error) {
-      alert(error);
+      setActionError(actionErrorMessage(error));
     } finally {
       setCancellingId(null);
     }
@@ -160,6 +166,19 @@ export function RecentJobs({ jobs, onChanged }: Props) {
           {jobs.length} shown
         </span>
       </div>
+
+      {actionError !== null && (
+        <div className="mx-6 mt-4 flex items-center justify-between rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-400">
+          <span>{actionError}</span>
+          <button
+            onClick={() => setActionError(null)}
+            className="ml-4 text-rose-400 hover:text-rose-300"
+            aria-label="Dismiss error"
+          >
+            {"\u00d7"}
+          </button>
+        </div>
+      )}
 
       {jobs.length === 0 ? (
         <div className="px-6 py-16 text-center">
