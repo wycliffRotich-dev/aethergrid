@@ -57,11 +57,20 @@ function shortId(id: string): string {
   return id.slice(0, 8);
 }
 
+function formatFullTimestamp(occurredAt: string): string {
+  return new Date(occurredAt).toLocaleString();
+}
+
 export function ActivityFeed() {
   const { events, loading, error } = useEvents();
   const now = useNow();
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const recent = events.slice(-25).reverse();
+
+  function toggleExpanded(eventId: string) {
+    setExpandedId((current) => (current === eventId ? null : eventId));
+  }
 
   return (
     <SectionCard
@@ -82,28 +91,93 @@ export function ActivityFeed() {
         </p>
       ) : (
         <div className="max-h-96 space-y-2 overflow-y-auto">
-          {recent.map((event) => (
-            <div
-              key={event.id}
-              className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950 px-4 py-3"
-            >
-              <span className="flex items-center gap-2 text-sm text-white">
-                <span
-                  className={`h-1.5 w-1.5 rounded-full ${
-                    EVENT_STYLES[event.event_type] ?? "bg-slate-500"
-                  }`}
-                />
-                {event.event_type}
-                <span className="font-mono text-xs text-slate-500">
-                  {shortId(event.aggregate_id)}
-                </span>
-              </span>
+          {recent.map((event) => {
+            const isExpanded = expandedId === event.id;
+            const payloadEntries = Object.entries(event.payload);
 
-              <span className="text-xs text-slate-500">
-                {formatRelativeTime(event.occurred_at, now)}
-              </span>
-            </div>
-          ))}
+            return (
+              <div
+                key={event.id}
+                className="rounded-lg border border-slate-800 bg-slate-950"
+              >
+                <button
+                  onClick={() => toggleExpanded(event.id)}
+                  className="flex w-full items-center justify-between px-4 py-3 text-left"
+                  aria-expanded={isExpanded}
+                >
+                  <span className="flex items-center gap-2 text-sm text-white">
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        EVENT_STYLES[event.event_type] ?? "bg-slate-500"
+                      }`}
+                    />
+                    {event.event_type}
+                    <span className="font-mono text-xs text-slate-500">
+                      {shortId(event.aggregate_id)}
+                    </span>
+                  </span>
+
+                  <span className="flex items-center gap-2 text-xs text-slate-500">
+                    {formatRelativeTime(event.occurred_at, now)}
+                    <span
+                      className={`transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                    >
+                      {"\u203a"}
+                    </span>
+                  </span>
+                </button>
+
+                {isExpanded && (
+                  <div className="border-t border-slate-800 px-4 py-3 text-xs">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      <div>
+                        <p className="uppercase tracking-wider text-slate-500">
+                          Aggregate Type
+                        </p>
+                        <p className="mt-1 text-slate-300">
+                          {event.aggregate_type}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="uppercase tracking-wider text-slate-500">
+                          Aggregate Id
+                        </p>
+                        <p className="mt-1 font-mono text-slate-300">
+                          {event.aggregate_id}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="uppercase tracking-wider text-slate-500">
+                          Occurred At
+                        </p>
+                        <p className="mt-1 text-slate-300">
+                          {formatFullTimestamp(event.occurred_at)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {payloadEntries.length > 0 && (
+                      <div className="mt-3 border-t border-slate-800 pt-3">
+                        <p className="uppercase tracking-wider text-slate-500">
+                          Payload
+                        </p>
+                        <div className="mt-2 space-y-1">
+                          {payloadEntries.map(([key, value]) => (
+                            <div key={key} className="flex gap-2 font-mono">
+                              <span className="text-slate-500">{key}:</span>
+                              <span className="text-slate-300">{value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </SectionCard>
