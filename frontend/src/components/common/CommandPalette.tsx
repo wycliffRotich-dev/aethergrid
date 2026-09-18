@@ -50,17 +50,28 @@ export function CommandPalette({ isOpen, onClose }: Props) {
     );
   }, [query]);
 
-  useEffect(() => {
+  const [previousIsOpen, setPreviousIsOpen] = useState(isOpen);
+
+  if (isOpen !== previousIsOpen) {
+    setPreviousIsOpen(isOpen);
     if (isOpen) {
       setQuery("");
       setSelectedIndex(0);
+    }
+  }
+
+  useEffect(() => {
+    if (isOpen) {
       inputRef.current?.focus();
     }
   }, [isOpen]);
 
-  useEffect(() => {
+  const [previousQuery, setPreviousQuery] = useState(query);
+
+  if (query !== previousQuery) {
+    setPreviousQuery(query);
     setSelectedIndex(0);
-  }, [query]);
+  }
 
   function selectItem(item: CommandItem) {
     navigate(item.path);
