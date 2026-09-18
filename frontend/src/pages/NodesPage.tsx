@@ -1,5 +1,6 @@
 import { NodeTable } from "../components/nodes/NodeTable";
 import { RegisterNodeForm } from "../components/nodes/RegisterNodeForm";
+import { TableSkeleton } from "../components/common/TableSkeleton";
 import { useNodes } from "../hooks/useNodes";
 
 export default function NodesPage() {
@@ -12,8 +13,11 @@ export default function NodesPage() {
 
   if (loading) {
     return (
-      <main className="flex-1 bg-slate-950 p-8 text-white">
-        Loading nodes...
+      <main className="flex-1 bg-slate-950 p-8">
+        <h1 className="mb-8 text-3xl font-bold text-white">
+          Nodes
+        </h1>
+        <TableSkeleton rows={3} columns={7} />
       </main>
     );
   }

@@ -1,5 +1,6 @@
 import { RecentJobs } from "../components/jobs/RecentJobs";
 import { SubmitJobForm } from "../components/jobs/SubmitJobForm";
+import { TableSkeleton } from "../components/common/TableSkeleton";
 import { useJobs } from "../hooks/useJobs";
 
 export default function JobsPage() {
@@ -12,8 +13,11 @@ export default function JobsPage() {
 
   if (loading) {
     return (
-      <main className="flex-1 bg-slate-950 p-8 text-white">
-        Loading jobs...
+      <main className="flex-1 bg-slate-950 p-8">
+        <h1 className="mb-8 text-3xl font-bold text-white">
+          Jobs
+        </h1>
+        <TableSkeleton rows={4} columns={6} />
       </main>
     );
   }

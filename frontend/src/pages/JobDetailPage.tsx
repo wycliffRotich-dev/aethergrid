@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 
 import { cancelJob, retryJob } from "../api/jobs";
+import { DetailPageSkeleton } from "../components/common/DetailPageSkeleton";
 import { useJobDetail } from "../hooks/useJobDetail";
 import { useState } from "react";
 
@@ -67,8 +68,8 @@ export default function JobDetailPage() {
 
   if (loading) {
     return (
-      <main className="flex-1 bg-slate-950 p-8 text-white">
-        Loading job...
+      <main className="flex-1 bg-slate-950 p-8">
+        <DetailPageSkeleton />
       </main>
     );
   }
