@@ -6,6 +6,10 @@ type Props = {
   onSubmitted: () => void;
 };
 
+function actionErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : "Something went wrong.";
+}
+
 export function SubmitJobForm({
   onSubmitted,
 }: Props) {
@@ -16,6 +20,7 @@ export function SubmitJobForm({
 
   const [loading, setLoading] =
     useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   async function submit(
     e: React.FormEvent,
@@ -23,6 +28,7 @@ export function SubmitJobForm({
     e.preventDefault();
 
     setLoading(true);
+    setSubmitError(null);
 
     try {
       const trimmedCommand = command.trim();
@@ -38,7 +44,7 @@ export function SubmitJobForm({
 
       onSubmitted();
     } catch (err) {
-      alert(err);
+      setSubmitError(actionErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -121,6 +127,20 @@ export function SubmitJobForm({
             for a no-op job.
           </p>
         </div>
+
+        {submitError !== null && (
+          <div className="flex items-center justify-between rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-400">
+            <span>{submitError}</span>
+            <button
+              type="button"
+              onClick={() => setSubmitError(null)}
+              className="ml-4 text-rose-400 hover:text-rose-300"
+              aria-label="Dismiss error"
+            >
+              {"\u00d7"}
+            </button>
+          </div>
+        )}
 
         <button
           disabled={loading}
