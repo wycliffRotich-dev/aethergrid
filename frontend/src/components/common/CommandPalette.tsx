@@ -104,6 +104,9 @@ export function CommandPalette({ isOpen, onClose }: Props) {
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 pt-32"
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Command palette"
     >
       <div
         className="w-full max-w-lg overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl"
@@ -115,6 +118,7 @@ export function CommandPalette({ isOpen, onClose }: Props) {
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Jump to..."
+          aria-label="Jump to a page"
           className="w-full border-b border-slate-800 bg-transparent px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none"
         />
 
