@@ -41,8 +41,28 @@ class Worker:
     ) -> None:
         """
         Record that this worker is alive.
+
+        If the worker had gone OFFLINE from a lapsed heartbeat but
+        was never carrying a job when that happened, a heartbeat
+        arriving now is unambiguous proof it is back, so it is
+        returned directly to IDLE. This is deliberately narrower
+        than recover(): an OFFLINE worker that still holds a
+        running_job is left untouched here, since reconciliation
+        (RecoverOfflineNodeService) may already be reassigning that
+        exact job to a different worker by the time this heartbeat
+        arrives. Flipping status back without resolving that
+        ownership question first would let this worker believe it
+        can accept new work while a stale job reference still hangs
+        off it -- the same shape of race ADR 0034/0036/0038 closed
+        for lease identity, one layer up at the worker level.
         """
         self.last_seen_at = utc_now()
+
+        if (
+            self.status is WorkerStatus.OFFLINE
+            and self.running_job is None
+        ):
+            self.status = WorkerStatus.IDLE
 
     def is_alive(
         self,
