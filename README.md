@@ -84,7 +84,8 @@ If you're evaluating whether someone can operate at a systems level rather than 
 - **Domain event recording**: every lifecycle transition a job goes through, `JobCreated`, `JobScheduled`, `WorkerAssigned`, `LeaseAcquired`, `LeaseReleased`, `JobCompleted`/`JobFailed`, and `JobReclaimed`, is persisted as an immutable event at the exact point it happens
 - **Live cluster-wide event feed**: `GET /events` and a real-time Activity Feed on the dashboard, polling every 3 seconds, so the story an individual job tells on its own detail page is also visible as it happens across the whole cluster
 - **Worker visibility**: a dedicated Workers table showing every registered worker, its status, the node it belongs to, what it's running, and when it was last seen
-- **Multi-page dashboard**: real client-side routing (`/`, `/nodes`, `/jobs`, `/jobs/{id}`) instead of a single page, with active-route highlighting in the sidebar
+- **Idempotent worker re-registration per node**: an agent restarting after a crash reclaims its existing worker identity instead of leaving a dead row behind, using the same reclaim sequence reconciliation already trusts, lease deletion, resource release, job reclaim, so an abandoned job is fully cleaned up before the worker is recovered rather than silently discarded (see ADR 0030, ADR 0039)
+- **Multi-page dashboard**: real client-side routing (`/`, `/nodes`, `/jobs`, `/jobs/{id}`, `/workers`, `/workers/{id}`) instead of a single page, with active-route highlighting in the sidebar and a global command palette (Cmd+K / Ctrl+K) for jumping between top-level views without touching the mouse
 
 ---
 
