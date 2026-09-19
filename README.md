@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="#test-coverage"><img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/wycliffRotich-dev/4b35dff5cea5aa68433713c36c3108bb/raw/aethergrid-test-badge.json" alt="Tests"></a>
-  <a href="#engineering-decision-records"><img src="https://img.shields.io/badge/ADRs-40-blueviolet" alt="ADRs"></a>
+  <a href="#engineering-decision-records"><img src="https://img.shields.io/badge/ADRs-41-blueviolet" alt="ADRs"></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
   <a href="#tech-stack"><img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python"></a>
   <a href="#tech-stack"><img src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI"></a>
@@ -41,7 +41,7 @@ AetherGrid was built around one rule: **the domain logic doesn't know or care wh
 
 ## Engineering Decision Records
 
-Every non-obvious decision in this codebase, why a domain rule lives where it does, why an obvious-looking shortcut was rejected, what broke and how it got fixed, is written down at the moment it was made, not reconstructed afterward for a portfolio. 40 ADRs live in [`/docs/adr`](docs/adr). A few worth reading directly if you want to see the reasoning, not just the conclusion:
+Every non-obvious decision in this codebase, why a domain rule lives where it does, why an obvious-looking shortcut was rejected, what broke and how it got fixed, is written down at the moment it was made, not reconstructed afterward for a portfolio. 41 ADRs live in [`/docs/adr`](docs/adr). A few worth reading directly if you want to see the reasoning, not just the conclusion:
 
 - [**ADR 0007 - Reconciliation Loop**](docs/adr/0007-reconciliation-loop.md): how the system detects and repairs state left inconsistent by dead workers and expired leases, instead of assuming the happy path is the only path.
 - [**ADR 0011 - Job Reclaim and Reconciliation Repair**](docs/adr/0011-job-reclaim-and-reconciliation-repair.md): closing a real race condition where a dying worker's lease renewal could land after reconciliation had already started reassigning its work.
@@ -62,6 +62,7 @@ Every non-obvious decision in this codebase, why a domain rule lives where it do
 - [**ADR 0038 - Fence Lease Renewal by Lease Identity, Not Just Worker Identity**](docs/adr/0038-fence-lease-renewal-by-lease-identity.md): the third and final lease-mutating operation to close this gap, after release (ADR 0034) and outcome reporting (ADR 0036). `RenewLeaseService` resolved the current lease by worker_id alone and renewed whatever it found, with no check that the caller's belief about which lease it held still matched reality. Unlike release, a mismatch here is silent rather than destructive: a stale caller renews the wrong lease with no error, potentially masking a real reconciliation failure. Closes both the internal WorkerExecutionLoop path and the external `POST /workers/{worker_id}/lease/renew` contract in the same change, since renewal is the standalone agent's repeated heartbeat mechanism, not a one-time terminal call like release.
 - [**ADR 0039 - Fully Reclaim an Abandoned Job on Worker Re-registration**](docs/adr/0039-fully-reclaim-abandoned-job-on-worker-reregistration.md): ADR 0030 accepted, at the time, that reclaiming a worker on agent restart would silently discard its abandoned job, calling that a mirror of reconciliation's own recovery behavior. That mirror stopped being accurate the moment reconciliation was fixed to always release a node's resources and delete a stale lease before recovering a worker, a pairing worker re-registration never inherited. Left alone, this wasn't only a resource leak: since lease acquisition fences by job identity, not worker identity, and a recovered worker goes idle immediately, it could be reassigned a new job before the old one's lease expired, and that old lease's eventual expiry would then corrupt the new job's tracking instead. Fixed by reusing reconciliation's exact reclaim sequence, lease deletion, resource release, job reclaim, before recovering the worker, verified the same way as the gap it closed: a test proving the corruption before any fix landed.
 - [**ADR 0040 - Shared useAsyncResource Hook Closes a Stale-Response Race Present in Seven Hooks**](docs/adr/0040-shared-async-resource-hook-closes-stale-response-race.md): seven frontend hooks each independently reimplemented fetch, error, and loading handling, none of them guarding against a response resolving after a newer fetch had already started, a real race for any hook whose fetch depends on an id or that polls. Closed by extracting one shared hook where refresh() and the automatic fetch share the exact same guarded effect run, rather than two implementations that could quietly drift apart.
+- [**ADR 0041 - Recover a Worker from OFFLINE on Heartbeat, Only When It Holds No Job**](docs/adr/0041-recover-worker-from-offline-on-heartbeat-when-idle.md): an idle worker whose heartbeat lapsed had no path back to IDLE at all, every existing recovery route was triggered exclusively by job-recovery services that never fire for a worker with no job to reclaim, observed live when a dashboard tab's heartbeat keeper went idle overnight. Fixed narrowly: heartbeat recovers status only when the worker holds no running job, since an OFFLINE worker still holding one may already be mid-reassignment by reconciliation, the same shape of race ADR 0034, ADR 0036, and ADR 0038 closed for lease identity, one layer up here at the worker level.
 
 If you're evaluating whether someone can operate at a systems level rather than a feature level, this is the fastest way to check.
 
@@ -121,7 +122,7 @@ The pattern holds throughout: build it right, prove it works, name the risk befo
 
 ## Test Coverage
 
-348 tests across domain, application, infrastructure, and API layers, all passing:
+353 tests across domain, application, infrastructure, and API layers, all passing:
 
 - Full domain logic coverage: job lifecycle, retry policy, constraint matching, node and worker liveness, lease semantics, node draining and the scheduler's exclusion of draining nodes, and API key issuance, revocation, and usage tracking
 - Contract tests proving every repository's in-memory, SQLite (where implemented), and PostgreSQL implementations behave identically, including foreign-key-enforced aggregates such as `Worker` and `Lease`, and specifically that lease renewal fails rather than resurrects a lease already reclaimed by reconciliation
