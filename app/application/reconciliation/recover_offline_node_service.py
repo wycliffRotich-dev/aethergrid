@@ -77,6 +77,15 @@ class RecoverOfflineNodeService:
                 continue
 
             job = worker.running_job
+
+            # A worker with no job has nothing to recover here.
+            # Resetting it would overwrite the OFFLINE status
+            # MarkDeadWorkersService just set for a stale
+            # heartbeat. ADR 0041 leaves a jobless OFFLINE
+            # worker OFFLINE until a heartbeat proves it is back.
+            if job is None:
+                continue
+
             node = worker.node
 
             worker.recover()
@@ -84,9 +93,6 @@ class RecoverOfflineNodeService:
             self._worker_repository.save(
                 worker,
             )
-
-            if job is None:
-                continue
 
             reclaimed = reclaim_job(
                 job,
