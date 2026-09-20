@@ -124,13 +124,15 @@ The pattern holds throughout: build it right, prove it works, name the risk befo
 
 ## Test Coverage
 
-355 tests across domain, application, infrastructure, and API layers, all passing:
+357 tests across domain, application, infrastructure, and API layers, all passing:
 
 - Full domain logic coverage: job lifecycle, retry policy, constraint matching, node and worker liveness, lease semantics, node draining and the scheduler's exclusion of draining nodes, and API key issuance, revocation, and usage tracking
 - Contract tests proving every repository's in-memory, SQLite (where implemented), and PostgreSQL implementations behave identically, including foreign-key-enforced aggregates such as `Worker` and `Lease`, and specifically that lease renewal fails rather than resurrects a lease already reclaimed by reconciliation
 - Application service tests for every use case, including lease acquisition, renewal, release, reconciliation repair (both the requeue-with-retries-remaining path and the fail-outright-once-exhausted path), real subprocess execution (including tests that genuinely kill a process that ignores `SIGTERM`, forcing `SIGKILL`, on both the timeout path and the cancellation path), and the full API key lifecycle from issuance through revocation
 - Event recording tests proving every lifecycle event fires at the correct point, in the correct order, across the full job lifecycle, scheduling, assignment, lease acquisition and release, completion, failure, and reconciliation reclaim
 - API-level tests against real FastAPI endpoints, including the cluster-wide event feed, per-job history, and every route's auth requirement, verified through a real end-to-end request, not mocked
+
+Separately, a Playwright end-to-end test drives the real dashboard against the real API and Postgres, not mocked, reproducing the ADR 0041/0042 worker-recovery incident through an actual browser (`frontend/e2e`). It is verified locally and in this PR's own CI run, not yet part of the standing CI workflow on every push, that wiring is a deliberate, separate follow-up.
 
 ```bash
 pytest
