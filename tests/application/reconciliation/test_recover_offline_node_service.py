@@ -361,3 +361,42 @@ def test_recover_offline_node_releases_node_resources() -> None:
     assert recovered_node.available.cpu_cores == 8
     assert recovered_node.available.memory_mib == 16384
 
+
+
+def test_recover_offline_node_keeps_jobless_worker_offline() -> None:
+    """
+    A worker with no running job that MarkDeadWorkersService
+    already marked OFFLINE must stay OFFLINE when its node is
+    also offline. Only a worker holding a job has anything to
+    recover here. Resetting a jobless one to IDLE overwrites
+    the OFFLINE status on every reconciliation cycle, so the
+    state is never observable (ADR 0041).
+    """
+    node = _make_offline_node()
+
+    worker = Worker(
+        id=WorkerId.new(),
+        node=node,
+    )
+
+    worker.ready()
+    worker.offline()
+
+    node_repository = InMemoryNodeRepository([node])
+    worker_repository = InMemoryWorkerRepository([worker])
+    job_repository = InMemoryJobRepository([])
+    lease_repository = InMemoryLeaseRepository()
+
+    service = RecoverOfflineNodeService(
+        node_repository=node_repository,
+        worker_repository=worker_repository,
+        job_repository=job_repository,
+        lease_repository=lease_repository,
+    )
+
+    service.execute()
+
+    stored_worker = worker_repository.get_by_id(worker.id)
+
+    assert stored_worker is not None
+    assert stored_worker.status.value == "OFFLINE"
