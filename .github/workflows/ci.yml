@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -64,7 +65,7 @@ jobs:
           fi
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
       - name: Update live test count badge
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch'
         uses: schneegans/dynamic-badges-action@v1.7.0
         with:
           auth: ${{ secrets.GIST_SECRET }}
@@ -98,3 +99,141 @@ jobs:
         run: npm run test -- --run
       - name: Build
         run: npm run build
+
+  e2e:
+    # Runs on push to main (not on every PR: this suite
+    # deliberately waits out the real 60s HEARTBEAT_TIMEOUT to prove
+    # ADR 0041/0042's worker recovery through an actual browser, not
+    # mocked timing -- that correctness guarantee is worth ~70s once
+    # per merge to main, not worth taxing every PR's feedback loop
+    # with the same cost), or manually via workflow_dispatch for
+    # verifying this job itself before it can run on main.
+    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    needs: [test, frontend]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: neuromesh
+          POSTGRES_PASSWORD: neuromesh
+          # Deliberately NOT named with "test" in it: issue_api_key.py
+          # refuses to issue a real credential against any database
+          # whose name contains "test" (see _confirm_not_test_database),
+          # and this job needs a real, working key. A separate name
+          # also fully isolates this job's data from the pytest job's
+          # neuromesh_test database, rather than sharing state between
+          # two conceptually different test runs.
+          POSTGRES_DB: neuromesh_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U neuromesh -d neuromesh_e2e"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      NEUROMESH_DATABASE_URL: postgresql://neuromesh:neuromesh@localhost:5432/neuromesh_e2e
+      NEUROMESH_STORAGE_BACKEND: postgres
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Create database schema
+        run: |
+          PGPASSWORD=neuromesh psql \
+            -h localhost \
+            -U neuromesh \
+            -d neuromesh_e2e \
+            -f app/infrastructure/repositories/schema.sql
+
+      - name: Start backend API in the background
+        run: |
+          nohup python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 \
+            > backend.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/docs > /dev/null; then
+              echo "Backend is up."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Backend never became reachable on port 8000."
+          cat backend.log
+          exit 1
+
+      - name: Issue an e2e API key
+        id: issue_key
+        run: |
+          KEY_OUTPUT=$(python scripts/issue_api_key.py "e2e-ci")
+          KEY=$(echo "$KEY_OUTPUT" | grep -A1 "Issued API key" | tail -1)
+          if [ -z "$KEY" ]; then
+            echo "::error::Could not parse an API key from issue_api_key.py output."
+            echo "$KEY_OUTPUT"
+            exit 1
+          fi
+          echo "::add-mask::$KEY"
+          echo "api_key=$KEY" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Install Playwright's Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Start frontend preview server in the background
+        working-directory: frontend
+        run: |
+          nohup npm run preview -- --port 5173 > frontend.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:5173 > /dev/null; then
+              echo "Frontend is up."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Frontend never became reachable on port 5173."
+          cat frontend.log
+          exit 1
+
+      - name: Run Playwright e2e suite
+        working-directory: frontend
+        env:
+          PLAYWRIGHT_API_KEY: ${{ steps.issue_key.outputs.api_key }}
+        run: npx playwright test
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
