@@ -32,8 +32,14 @@ with capped exponential backoff and full jitter, honoring
 Retry-After. Failures that retrying cannot fix (401, 404 on
 registration, 422) stop the agent with a clear message.
 
+Credentials: issue one API key per agent, not one shared across
+the fleet (ADR 0045). Rate limiting is per key (ADR 0021), so a
+shared key caps the whole fleet at roughly 14 concurrent agents;
+a key per agent removes that ceiling with no code changes.
+
 Usage:
-    export AETHERGRID_API_KEY="<key from scripts/issue_api_key.py>"
+    python scripts/issue_api_key.py "agent-<node-id>"
+    export AETHERGRID_API_KEY="<key printed above>"
     python scripts/run_agent.py <node-id>
 
 The node must already be registered (via the API or dashboard)
