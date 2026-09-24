@@ -80,7 +80,7 @@ text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,san
 }
 </style>
 <rect class="grp" x="40" y="378" width="1680" height="732" rx="14"/>
-<text class="grplbl" x="56" y="404" font-size="13">ClusterTickService - background asyncio task, api.py lifespan, ticks every 1.0s</text>
+<text class="grplbl" x="56" y="390" font-size="13">ClusterTickService - background asyncio task, api.py lifespan, ticks every 1.0s</text>
 <line class="arrow" x1="270" y1="272" x2="270" y2="300" marker-end="url(#arrow)"/>
 <line class="arrow" x1="1490" y1="272" x2="1490" y2="300" marker-end="url(#arrow)"/>
 <line class="arrow" x1="280" y1="482" x2="280" y2="500" marker-end="url(#arrow)"/>
