@@ -108,6 +108,38 @@ def _configure_logging() -> None:
 _configure_logging()
 
 
+async def _run_cluster_tick(
+    cluster_tick_service,
+    reconciliation_loop,
+) -> None:
+    """
+    Run one cluster tick: a scheduling/execution pass
+    followed by one reconciliation pass.
+
+    Each phase is isolated in its own try/except so a
+    failure in one can't prevent the other from running
+    this tick, or prevent the next tick from running at
+    all. Extracted from _run_cluster_loop so this failure
+    isolation is directly testable without a while-loop
+    or a sleep.
+    """
+    try:
+        await asyncio.to_thread(
+            cluster_tick_service.execute,
+        )
+    except Exception:
+        logger.exception(
+            "Unexpected error running cluster tick.",
+        )
+
+    try:
+        reconciliation_loop.execute()
+    except Exception:
+        logger.exception(
+            "Unexpected error running reconciliation.",
+        )
+
+
 async def _run_cluster_loop() -> None:
     """
     Repeatedly drive the cluster forward: schedule queued
@@ -116,13 +148,8 @@ async def _run_cluster_loop() -> None:
     workers, expired leases, or offline nodes.
 
     Runs as a background asyncio task for the lifetime of
-    the application. A tick's own internal errors are
-    already isolated per-worker by ClusterTickService; this
-    outer try/except exists only as a last line of defense
-    so a truly unexpected exception can't silently kill the
-    loop without a trace. Reconciliation is isolated the
-    same way, in its own try/except, so a failure there
-    can't prevent the next cluster tick from running either.
+    the application. See _run_cluster_tick for the
+    per-phase failure isolation this loop relies on.
 
     ClusterTickService.execute() now runs on a worker thread via
     asyncio.to_thread (ADR 0032), since it may execute a
@@ -143,21 +170,10 @@ async def _run_cluster_loop() -> None:
     reconciliation_loop = get_reconciliation_loop()
 
     while True:
-        try:
-            await asyncio.to_thread(
-                cluster_tick_service.execute,
-            )
-        except Exception:
-            logger.exception(
-                "Unexpected error running cluster tick.",
-            )
-
-        try:
-            reconciliation_loop.execute()
-        except Exception:
-            logger.exception(
-                "Unexpected error running reconciliation.",
-            )
+        await _run_cluster_tick(
+            cluster_tick_service,
+            reconciliation_loop,
+        )
 
         await asyncio.sleep(TICK_INTERVAL_SECONDS)
 
