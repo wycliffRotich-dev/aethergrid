@@ -497,12 +497,13 @@ def run_job(
             command=command,
             timeout=timeout,
             cancel_event=cancel_event,
+            lease_lost_event=lost_lease,
         )
     finally:
         stop_renewing.set()
         renewal_thread.join()
 
-    if lost_lease.is_set():
+    if result.lease_lost or lost_lease.is_set():
         print(
             f"Job {job_id}: lease lost during execution. "
             f"Result computed but not reported."
