@@ -107,6 +107,13 @@ either side, so agents started together drift apart.
   job can still run to completion on the agent. That gap is
   unchanged and is left to a separate decision.
 
+  **Resolved (2026-09-25):** `JobExecutionService.execute()` now
+  accepts a `lease_lost_event`, polled on the same cadence as
+  `cancel_event`, and preempts the subprocess via the existing
+  SIGTERM-then-SIGKILL escalation the moment a lease loss is
+  detected, instead of only after the subprocess exits. See the
+  `fix/agent-preempts-subprocess-on-lease-loss` PR.
+
 ## Alternatives Considered
 
 ### Bounded retries, then exit
