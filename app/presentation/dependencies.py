@@ -215,6 +215,7 @@ def _build_repositories() -> tuple[
     EventRepository,
     LeaseRepository,
     ApiKeyRepository,
+    ConnectionPool | None,
 ]:
     """
     Choose the repository backend.
@@ -272,6 +273,7 @@ def _build_repositories() -> tuple[
             PostgresEventRepository(pool),
             PostgresLeaseRepository(pool),
             PostgresApiKeyRepository(pool),
+            pool,
         )
 
     if backend == "sqlite":
@@ -297,6 +299,7 @@ def _build_repositories() -> tuple[
             ),
             InMemoryLeaseRepository(),
             InMemoryApiKeyRepository(),
+            None,
         )
 
     return (
@@ -306,6 +309,7 @@ def _build_repositories() -> tuple[
         InMemoryEventRepository(),
         InMemoryLeaseRepository(),
         InMemoryApiKeyRepository(),
+        None,
     )
 
 
@@ -316,6 +320,7 @@ def _build_repositories() -> tuple[
     _event_repository,
     _lease_repository,
     _api_key_repository,
+    _connection_pool,
 ) = _build_repositories()
 
 
@@ -453,6 +458,17 @@ def get_node_repository() -> NodeRepository:
     is actually reachable, not just that the process is up).
     """
     return _node_repository
+
+def get_connection_pool() -> ConnectionPool | None:
+    """
+    Return the shared postgres ConnectionPool, or None under
+    sqlite/memory (see ADR 0046). Deliberately not routed
+    through NodeRepository: the health endpoint needs to fail
+    fast on its own short timeout, not inherit the pool's
+    general-purpose default (30s, see ADR 0046's Context),
+    which every other caller correctly relies on.
+    """
+    return _connection_pool
 
 def get_rate_limiter_service() -> RateLimiterService:
     """
