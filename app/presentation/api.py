@@ -9,11 +9,11 @@ from typing import Annotated
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
+from psycopg_pool import ConnectionPool
 
-from app.domain.repositories.node_repository import NodeRepository
 from app.presentation.dependencies import (
     get_cluster_tick_service,
-    get_node_repository,
+    get_connection_pool,
     get_reconciliation_loop,
     get_request_logging_service,
 )
@@ -247,34 +247,50 @@ def root() -> dict[str, str]:
     }
 
 
+HEALTH_CHECK_TIMEOUT_SECONDS = 2.0
+
+
 @app.get("/health")
 def health(
-    node_repository: Annotated[
-        NodeRepository,
-        Depends(get_node_repository),
+    pool: Annotated[
+        ConnectionPool | None,
+        Depends(get_connection_pool),
     ],
 ) -> Response:
     """
     Real health check: proves the configured storage backend
-    (postgres, sqlite, or memory) is actually reachable, not
-    just that the process is up. list() is a cheap, read-only
-    call already implemented by every backend, so this works
-    identically regardless of which one is configured.
+    is actually reachable, not just that the process is up.
+
+    Deliberately does not go through NodeRepository (see ADR
+    0046): the shared pool's default connection timeout is 30
+    seconds, correct for normal request handling but far too
+    slow for a health check, which needs to fail fast on its
+    own short timeout instead of inheriting one meant for
+    patient, latency-tolerant callers.
+
+    Under sqlite or memory, pool is None -- there is no
+    network round-trip to hang on, so those backends are
+    trivially healthy as long as the process is running at
+    all.
 
     Returns 503, not a raised exception, on failure -- a
     healthcheck consumer (Docker, an external monitor) expects
     a status code to poll, not a stack trace.
     """
-    try:
-        node_repository.list()
-    except Exception as exc:
-        return JSONResponse(
-            status_code=503,
-            content={
-                "status": "unhealthy",
-                "error": type(exc).__name__,
-            },
-        )
+    if pool is not None:
+        try:
+            with pool.connection(
+                timeout=HEALTH_CHECK_TIMEOUT_SECONDS,
+            ) as conn:
+                conn.execute("SELECT 1")
+        except Exception as exc:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "unhealthy",
+                    "error": type(exc).__name__,
+                },
+            )
 
     return JSONResponse(
         status_code=200,
