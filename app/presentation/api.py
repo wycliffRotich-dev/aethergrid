@@ -184,6 +184,10 @@ async def _run_cluster_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    pool = get_connection_pool()
+    if pool is not None:
+        await asyncio.to_thread(pool.wait, timeout=30.0)
+
     task = asyncio.create_task(_run_cluster_loop())
 
     yield

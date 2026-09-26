@@ -101,19 +101,46 @@ achieves the same fast-fail behavior with no duplicate resource.
   `/health` request under a stopped Postgres took approximately 28.86
   seconds to return, matching the pool's original 30-second default
   rather than the requested 2-second override. Two subsequent, similarly-
-  constructed trials (including one capturing full application logs
-  during the failure window) both completed in the expected ~2001ms,
-  and the pool's own internal stats, checked directly against the same
-  live singleton pool object, confirmed the 2-second timeout is
-  correctly enforced by `psycopg_pool` at every layer traced (`getconn`,
+  constructed trials both completed in the expected ~2001ms, and the
+  pool's own internal stats confirmed the 2-second timeout is correctly
+  enforced by `psycopg_pool` at every layer traced (`getconn`,
   `_getconn_with_check_loop`, `_get_ready_connection`, `AttemptWithBackoff`).
-  The anomaly's root cause is not confirmed. The most plausible
-  explanation, unverified, is a one-time cold-start cost the first time
-  the pool attempted to grow or reconnect after a fresh container
-  build, distinct from steady-state behavior. This is recorded as a
-  known, unresolved observation rather than a confirmed limitation,
-  since it has not been reproduced despite deliberate attempts to do
-  so.
+
+  **Root cause, since confirmed by reproduction:** the official
+  Postgres Docker image performs a two-phase startup on a fresh
+  volume -- a temporary instance runs `initdb` and the init scripts,
+  then shuts down completely before the real, final instance starts.
+  `pg_isready`, and therefore Compose's `depends_on: condition:
+  service_healthy`, can report healthy against that temporary
+  instance. `neuromesh`'s container was observed starting during this
+  window; the pool's first connection attempts landed in the gap
+  between the temporary instance's shutdown and the real instance's
+  startup, triggering `psycopg_pool`'s internal retry/backoff
+  (`AddConnection` tasks, `WARNING`-level `error connecting in
+  'pool-1'`) until the real instance came up. Reproduced directly with
+  debug-level pool logging across a genuine cold volume/container
+  rebuild: the gap measured ~5.2 seconds in one run (temporary-instance
+  shutdown at 06:30:02.229, real instance ready at 06:30:07.458),
+  producing a single `/health` request at ~906ms instead of the usual
+  ~1.7ms -- the same mechanism as the original ~28.86s observation, at
+  a smaller magnitude consistent with a warmer disk cache on that
+  particular rebuild (the shutdown checkpoint's own `sync=4.442s` in
+  that run's logs shows this phase is disk-bound and will vary).
+
+  **Fix:** `lifespan()` (`app/presentation/api.py`) now calls
+  `pool.wait(timeout=30.0)` via `asyncio.to_thread` before starting the
+  cluster tick task and yielding control to Uvicorn. The application no
+  longer reports `Application startup complete` -- and therefore never
+  accepts a single request, including Docker's own healthcheck -- until
+  the pool has a confirmed, live connection. This does not fix
+  Postgres's two-phase startup, which is upstream image behavior, not
+  ours to change; it fixes the actual defect on this side, which was
+  trusting Compose's `service_healthy` as sufficient proof of
+  readiness for this specific image. Verified by re-running the same
+  cold-start reproduction: `Application startup complete` now logs
+  only after `database system is ready to accept connections`, and the
+  first `/health` request returns in ~56ms (one real connection
+  handshake) rather than racing the outage.
 - The background cluster tick loop (`app/presentation/api.py`,
   `TICK_INTERVAL_SECONDS = 1.0`) shares the same pool and correctly
   continues to use its 30-second default timeout, since it should
