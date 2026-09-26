@@ -444,6 +444,16 @@ def get_reconciliation_loop() -> ReconciliationLoop:
     """
     return _reconciliation_loop
 
+def get_node_repository() -> NodeRepository:
+    """
+    Return the NodeRepository, the single shared instance
+    used to check real storage-backend connectivity for the
+    health endpoint (a cheap, read-only list() call proves
+    the configured backend -- postgres, sqlite, or memory --
+    is actually reachable, not just that the process is up).
+    """
+    return _node_repository
+
 def get_rate_limiter_service() -> RateLimiterService:
     """
     Return the RateLimiterService, a single shared instance

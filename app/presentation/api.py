@@ -4,12 +4,16 @@ import asyncio
 import json
 import logging
 from contextlib import asynccontextmanager
+from typing import Annotated
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, Response
 
+from app.domain.repositories.node_repository import NodeRepository
 from app.presentation.dependencies import (
     get_cluster_tick_service,
+    get_node_repository,
     get_reconciliation_loop,
     get_request_logging_service,
 )
@@ -238,9 +242,41 @@ app.include_router(
 
 @app.get("/")
 def root() -> dict[str, str]:
-    """
-    Health endpoint.
-    """
     return {
         "message": "Welcome to NeuroMesh API",
     }
+
+
+@app.get("/health")
+def health(
+    node_repository: Annotated[
+        NodeRepository,
+        Depends(get_node_repository),
+    ],
+) -> Response:
+    """
+    Real health check: proves the configured storage backend
+    (postgres, sqlite, or memory) is actually reachable, not
+    just that the process is up. list() is a cheap, read-only
+    call already implemented by every backend, so this works
+    identically regardless of which one is configured.
+
+    Returns 503, not a raised exception, on failure -- a
+    healthcheck consumer (Docker, an external monitor) expects
+    a status code to poll, not a stack trace.
+    """
+    try:
+        node_repository.list()
+    except Exception as exc:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "error": type(exc).__name__,
+            },
+        )
+
+    return JSONResponse(
+        status_code=200,
+        content={"status": "healthy"},
+    )
