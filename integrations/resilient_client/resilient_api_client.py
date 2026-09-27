@@ -1,11 +1,13 @@
 """
-Resilient client for talking to third-party (e.g. government) HTTP APIs.
+Resilient client for talking to third-party HTTP APIs that are slow,
+rate-limited, or unreliable, government agencies, banks, legacy
+enterprise systems, or any external system you don't control.
 
 Design goals, based on the real-world constraints of integrating with
-government / regulated infrastructure:
+infrastructure you don't operate and can't fully see into:
 
   * Auth: supports mTLS (client cert + key) and/or OAuth2 client-credentials,
-    since both patterns are common with government gateways.
+    since both patterns are common across regulated and enterprise gateways.
   * Resilience: exponential backoff with jitter on transient failures,
     honoring a server-supplied Retry-After header when present, plus a
     circuit breaker so we stop hammering a dead endpoint and fail fast
@@ -36,30 +38,30 @@ from typing import Any
 
 import httpx
 
-logger = logging.getLogger("gov_api_client")
+logger = logging.getLogger("resilient_api_client")
 
 
 # --------------------------------------------------------------------------
 # Exceptions
 # --------------------------------------------------------------------------
 
-class GovAPIError(Exception):
-    """Base class for all errors raised by GovAPIClient."""
+class ResilientAPIError(Exception):
+    """Base class for all errors raised by ResilientAPIClient."""
 
 
-class AuthError(GovAPIError):
+class AuthError(ResilientAPIError):
     """Raised when authentication/token acquisition fails."""
 
 
-class CircuitOpenError(GovAPIError):
+class CircuitOpenError(ResilientAPIError):
     """Raised when a call is rejected because the circuit breaker is open."""
 
 
-class ConfigError(GovAPIError):
-    """Raised at construction time when GovAPIClientConfig is invalid."""
+class ConfigError(ResilientAPIError):
+    """Raised at construction time when ResilientClientConfig is invalid."""
 
 
-class ClientError(GovAPIError):
+class ClientError(ResilientAPIError):
     """
     Raised immediately (no retry) for a non-retryable 4xx response, e.g.
     404 or 400. This is a client-side mistake, not the endpoint being
@@ -72,7 +74,7 @@ class ClientError(GovAPIError):
         self.response_body = response_body
 
 
-class RateLimitError(GovAPIError):
+class RateLimitError(ResilientAPIError):
     """
     Raised when all retry attempts against a 429 response are exhausted.
     Carries the last Retry-After value seen, if the server sent one, so
@@ -84,7 +86,7 @@ class RateLimitError(GovAPIError):
         self.retry_after_s = retry_after_s
 
 
-class ServerError(GovAPIError):
+class ServerError(ResilientAPIError):
     """
     Raised when all retry attempts against a 5xx response are exhausted.
     Distinct from RetryExhaustedError so callers can tell "their server
@@ -96,7 +98,7 @@ class ServerError(GovAPIError):
         self.status_code = status_code
 
 
-class RetryExhaustedError(GovAPIError):
+class RetryExhaustedError(ResilientAPIError):
     """
     Raised when all retry attempts are used up due to a transport-level
     error (timeout, connection refused, DNS failure) rather than an HTTP
@@ -219,7 +221,7 @@ class OAuth2Config:
 
 
 @dataclass
-class GovAPIClientConfig:
+class ResilientClientConfig:
     base_url: str
     timeout_s: float = 10.0
     mtls: MTLSConfig | None = None
@@ -229,7 +231,7 @@ class GovAPIClientConfig:
     default_headers: dict[str, str] = field(default_factory=dict)
 
 
-def _validate_config(config: GovAPIClientConfig) -> None:
+def _validate_config(config: ResilientClientConfig) -> None:
     """
     Raise ConfigError with every problem found, rather than the first
     one, so a misconfigured client fails once with a complete list
@@ -242,7 +244,7 @@ def _validate_config(config: GovAPIClientConfig) -> None:
     elif not (config.base_url.startswith("https://") or "localhost" in config.base_url
               or "127.0.0.1" in config.base_url):
         errors.append(
-            f"base_url should use https:// for a government endpoint, got: {config.base_url!r}"
+            f"base_url should use https:// for a production endpoint, got: {config.base_url!r}"
         )
 
     if config.timeout_s <= 0:
@@ -287,7 +289,7 @@ def _validate_config(config: GovAPIClientConfig) -> None:
 
     if errors:
         bullet_list = "\n".join(f"  - {e}" for e in errors)
-        raise ConfigError(f"Invalid GovAPIClientConfig:\n{bullet_list}")
+        raise ConfigError(f"Invalid ResilientClientConfig:\n{bullet_list}")
 
 
 # --------------------------------------------------------------------------
@@ -313,7 +315,7 @@ def _parse_retry_after(response: httpx.Response, max_retry_after_s: float) -> fl
             target_dt = parsedate_to_datetime(raw)
             seconds = (target_dt - target_dt.now(target_dt.tzinfo)).total_seconds()
         except (TypeError, ValueError):
-            logger.warning("gov_api_client: unparseable Retry-After header: %r", raw)
+            logger.warning("resilient_api_client: unparseable Retry-After header: %r", raw)
             return None
 
     if seconds is None:
@@ -325,20 +327,20 @@ def _parse_retry_after(response: httpx.Response, max_retry_after_s: float) -> fl
 # Client
 # --------------------------------------------------------------------------
 
-class GovAPIClient:
+class ResilientAPIClient:
     """
     Usage:
 
-        config = GovAPIClientConfig(
-            base_url="https://sandbox.example.gov/api",
+        config = ResilientClientConfig(
+            base_url="https://api.example-partner.com",
             mtls=MTLSConfig(cert_path="client.crt", key_path="client.key"),
             oauth2=OAuth2Config(
-                token_url="https://sandbox.example.gov/oauth/token",
+                token_url="https://api.example-partner.com/oauth/token",
                 client_id="...",
                 client_secret="...",
             ),
         )
-        client = GovAPIClient(config)
+        client = ResilientAPIClient(config)
         data = client.get("/v1/citizens/12345")
 
     Raises ConfigError immediately at construction if the config is
@@ -346,7 +348,7 @@ class GovAPIClient:
     fields), rather than failing confusingly on first use.
     """
 
-    def __init__(self, config: GovAPIClientConfig, transport: httpx.BaseTransport | None = None):
+    def __init__(self, config: ResilientClientConfig, transport: httpx.BaseTransport | None = None):
         _validate_config(config)
 
         self.config = config
@@ -373,7 +375,7 @@ class GovAPIClient:
     def close(self) -> None:
         self._http.close()
 
-    def __enter__(self) -> GovAPIClient:
+    def __enter__(self) -> ResilientAPIClient:
         return self
 
     def __exit__(self, *exc_info: Any) -> None:
@@ -402,7 +404,7 @@ class GovAPIClient:
             return self._token
 
         oauth = self.config.oauth2
-        logger.info("gov_api_client: fetching new OAuth2 token")
+        logger.info("resilient_api_client: fetching new OAuth2 token")
         try:
             resp = self._http.post(
                 oauth.token_url,
@@ -443,7 +445,7 @@ class GovAPIClient:
 
         for attempt in range(1, retry_cfg.max_attempts + 1):
             try:
-                logger.info("gov_api_client: %s %s (attempt %d/%d)",
+                logger.info("resilient_api_client: %s %s (attempt %d/%d)",
                             method, path, attempt, retry_cfg.max_attempts)
                 resp = self._http.request(method, path, headers=headers, **kwargs)
 
@@ -451,7 +453,7 @@ class GovAPIClient:
                 last_transport_exc = exc
                 is_last_attempt = attempt == retry_cfg.max_attempts
                 logger.warning(
-                    "gov_api_client: attempt %d/%d transport error: %s",
+                    "resilient_api_client: attempt %d/%d transport error: %s",
                     attempt, retry_cfg.max_attempts, exc,
                 )
                 if is_last_attempt:
@@ -483,7 +485,7 @@ class GovAPIClient:
             # Retry-After if the server sent one.
             is_last_attempt = attempt == retry_cfg.max_attempts
             logger.warning(
-                "gov_api_client: attempt %d/%d got retryable status %d",
+                "resilient_api_client: attempt %d/%d got retryable status %d",
                 attempt, retry_cfg.max_attempts, resp.status_code,
             )
             if is_last_attempt:

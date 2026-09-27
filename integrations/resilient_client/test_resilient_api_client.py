@@ -1,5 +1,5 @@
 """
-Tests for GovAPIClient. Run with: pytest test_gov_api_client.py -v
+Tests for ResilientAPIClient. Run with: pytest test_resilient_api_client.py -v
 
 Uses respx to mock the HTTP layer, so no real network/gov endpoint needed.
 """
@@ -7,27 +7,27 @@ Uses respx to mock the HTTP layer, so no real network/gov endpoint needed.
 import httpx
 import pytest
 import respx
-from gov_api_client import (
+from resilient_api_client import (
     CircuitBreaker,
     CircuitOpenError,
     CircuitState,
     ClientError,
     ConfigError,
-    GovAPIClient,
-    GovAPIClientConfig,
     MTLSConfig,
     OAuth2Config,
     RateLimitError,
+    ResilientAPIClient,
+    ResilientClientConfig,
     RetryConfig,
     RetryExhaustedError,
     ServerError,
 )
 
-BASE_URL = "https://sandbox.example.gov/api"
+BASE_URL = "https://api.example-partner.com"
 
 
-def make_client(**overrides) -> GovAPIClient:
-    config = GovAPIClientConfig(
+def make_client(**overrides) -> ResilientAPIClient:
+    config = ResilientClientConfig(
         base_url=BASE_URL,
         timeout_s=2.0,
         retry=overrides.pop("retry", RetryConfig(max_attempts=3, base_delay_s=0.01,
@@ -37,7 +37,7 @@ def make_client(**overrides) -> GovAPIClient:
         )),
         **overrides,
     )
-    return GovAPIClient(config)
+    return ResilientAPIClient(config)
 
 
 # -- basic success / retry / exhaustion --------------------------------
@@ -232,7 +232,7 @@ def test_oauth2_token_is_fetched_and_reused():
         return_value=httpx.Response(200, json={"secure": True})
     )
 
-    config = GovAPIClientConfig(
+    config = ResilientClientConfig(
         base_url=BASE_URL,
         oauth2=OAuth2Config(
             token_url=f"{BASE_URL}/oauth/token",
@@ -241,7 +241,7 @@ def test_oauth2_token_is_fetched_and_reused():
         ),
         retry=RetryConfig(max_attempts=1),
     )
-    client = GovAPIClient(config)
+    client = ResilientAPIClient(config)
 
     client.get("/v1/secure")
     client.get("/v1/secure")  # second call should reuse cached token
@@ -255,55 +255,55 @@ def test_oauth2_token_is_fetched_and_reused():
 # -- config validation -----------------------------------------------------
 
 def test_rejects_missing_mtls_cert_file():
-    config = GovAPIClientConfig(
+    config = ResilientClientConfig(
         base_url=BASE_URL,
         mtls=MTLSConfig(cert_path="/does/not/exist.crt", key_path="/does/not/exist.key"),
     )
     with pytest.raises(ConfigError) as exc_info:
-        GovAPIClient(config)
+        ResilientAPIClient(config)
     assert "cert_path" in str(exc_info.value)
     assert "key_path" in str(exc_info.value)
 
 
 def test_rejects_incomplete_oauth2_config():
-    config = GovAPIClientConfig(
+    config = ResilientClientConfig(
         base_url=BASE_URL,
         oauth2=OAuth2Config(token_url="", client_id="", client_secret="secret"),
     )
     with pytest.raises(ConfigError) as exc_info:
-        GovAPIClient(config)
+        ResilientAPIClient(config)
     assert "token_url" in str(exc_info.value)
     assert "client_id" in str(exc_info.value)
 
 
 def test_rejects_nonsensical_retry_config():
-    config = GovAPIClientConfig(
+    config = ResilientClientConfig(
         base_url=BASE_URL,
         retry=RetryConfig(max_attempts=0, base_delay_s=1.0, max_delay_s=0.5),
     )
     with pytest.raises(ConfigError) as exc_info:
-        GovAPIClient(config)
+        ResilientAPIClient(config)
     message = str(exc_info.value)
     assert "max_attempts" in message
     assert "max_delay_s" in message
 
 
 def test_rejects_non_https_base_url():
-    config = GovAPIClientConfig(base_url="http://sandbox.example.gov/api")
+    config = ResilientClientConfig(base_url="http://api.example-partner.com")
     with pytest.raises(ConfigError) as exc_info:
-        GovAPIClient(config)
+        ResilientAPIClient(config)
     assert "https://" in str(exc_info.value)
 
 
 def test_allows_http_localhost_for_local_testing():
     # Should not raise: localhost is exempt from the https:// requirement
     # so the client can be exercised against a local mock server.
-    config = GovAPIClientConfig(base_url="http://localhost:8080/api")
-    client = GovAPIClient(config)
+    config = ResilientClientConfig(base_url="http://localhost:8080/api")
+    client = ResilientAPIClient(config)
     client.close()
 
 
 def test_valid_config_constructs_without_error():
-    config = GovAPIClientConfig(base_url=BASE_URL)
-    client = GovAPIClient(config)
+    config = ResilientClientConfig(base_url=BASE_URL)
+    client = ResilientAPIClient(config)
     client.close()
