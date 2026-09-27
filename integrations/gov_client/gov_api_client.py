@@ -7,12 +7,18 @@ government / regulated infrastructure:
   * Auth: supports mTLS (client cert + key) and/or OAuth2 client-credentials,
     since both patterns are common with government gateways.
   * Resilience: exponential backoff with jitter on transient failures,
-    plus a circuit breaker so we stop hammering a dead endpoint and fail
-    fast instead of piling up latency.
+    honoring a server-supplied Retry-After header when present, plus a
+    circuit breaker so we stop hammering a dead endpoint and fail fast
+    instead of piling up latency.
+  * Precise failure signaling: client mistakes (4xx), rate limiting (429),
+    and server-side degradation (5xx/transport errors) are raised as
+    distinct exception types, so callers can handle each appropriately
+    instead of catching one generic error.
+  * Fail loud, fail early: config is validated at construction time
+    (cert paths exist, retry values are sane, OAuth2 fields are present)
+    rather than failing confusingly on the first real request.
   * Observability: every request/retry/circuit-state-change is logged
     with structured fields so it's debuggable when their side misbehaves.
-  * No surprises: explicit timeouts everywhere, explicit exceptions,
-    nothing swallowed silently.
 
 This is intentionally dependency-light: only `httpx` is required at runtime.
 """
@@ -23,7 +29,9 @@ import logging
 import random
 import time
 from dataclasses import dataclass, field
+from email.utils import parsedate_to_datetime
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -47,8 +55,54 @@ class CircuitOpenError(GovAPIError):
     """Raised when a call is rejected because the circuit breaker is open."""
 
 
+class ConfigError(GovAPIError):
+    """Raised at construction time when GovAPIClientConfig is invalid."""
+
+
+class ClientError(GovAPIError):
+    """
+    Raised immediately (no retry) for a non-retryable 4xx response, e.g.
+    404 or 400. This is a client-side mistake, not the endpoint being
+    unhealthy, so it does not count as a circuit breaker failure.
+    """
+
+    def __init__(self, message: str, status_code: int, response_body: str | None = None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.response_body = response_body
+
+
+class RateLimitError(GovAPIError):
+    """
+    Raised when all retry attempts against a 429 response are exhausted.
+    Carries the last Retry-After value seen, if the server sent one, so
+    the caller can decide how long to wait before trying again.
+    """
+
+    def __init__(self, message: str, retry_after_s: float | None = None):
+        super().__init__(message)
+        self.retry_after_s = retry_after_s
+
+
+class ServerError(GovAPIError):
+    """
+    Raised when all retry attempts against a 5xx response are exhausted.
+    Distinct from RetryExhaustedError so callers can tell "their server
+    is down" apart from "the network itself is unreachable".
+    """
+
+    def __init__(self, message: str, status_code: int):
+        super().__init__(message)
+        self.status_code = status_code
+
+
 class RetryExhaustedError(GovAPIError):
-    """Raised when all retry attempts are used up without success."""
+    """
+    Raised when all retry attempts are used up due to a transport-level
+    error (timeout, connection refused, DNS failure) rather than an HTTP
+    status code. Kept as a distinct type from ServerError/RateLimitError
+    since there was no response at all to inspect.
+    """
 
     def __init__(self, message: str, last_exception: Exception | None = None):
         super().__init__(message)
@@ -75,6 +129,10 @@ class CircuitBreaker:
     - After `reset_timeout_s`, moves to HALF_OPEN and allows one trial call.
     - A successful trial call closes the circuit again.
     - A failed trial call reopens it and restarts the timeout.
+
+    Only server-side or transport-level failures count toward the
+    threshold. A client-side mistake (4xx other than 429) never touches
+    the breaker, since it says nothing about the endpoint's health.
     """
 
     failure_threshold: int = 5
@@ -137,6 +195,9 @@ class RetryConfig:
     # Status codes worth retrying (transient/server-side); 4xx besides 429
     # are treated as non-retryable client errors.
     retryable_statuses: tuple[int, ...] = (429, 500, 502, 503, 504)
+    # Cap how long we'll ever honor a server-supplied Retry-After for,
+    # so a misbehaving server can't stall a caller indefinitely.
+    max_retry_after_s: float = 60.0
 
 
 @dataclass
@@ -168,6 +229,98 @@ class GovAPIClientConfig:
     default_headers: dict[str, str] = field(default_factory=dict)
 
 
+def _validate_config(config: GovAPIClientConfig) -> None:
+    """
+    Raise ConfigError with every problem found, rather than the first
+    one, so a misconfigured client fails once with a complete list
+    instead of round-tripping through fixes one at a time.
+    """
+    errors: list[str] = []
+
+    if not config.base_url:
+        errors.append("base_url is required")
+    elif not (config.base_url.startswith("https://") or "localhost" in config.base_url
+              or "127.0.0.1" in config.base_url):
+        errors.append(
+            f"base_url should use https:// for a government endpoint, got: {config.base_url!r}"
+        )
+
+    if config.timeout_s <= 0:
+        errors.append(f"timeout_s must be positive, got: {config.timeout_s}")
+
+    if config.mtls:
+        if not Path(config.mtls.cert_path).is_file():
+            errors.append(f"mtls.cert_path not found: {config.mtls.cert_path!r}")
+        if not Path(config.mtls.key_path).is_file():
+            errors.append(f"mtls.key_path not found: {config.mtls.key_path!r}")
+        if config.mtls.ca_bundle_path and not Path(config.mtls.ca_bundle_path).is_file():
+            errors.append(f"mtls.ca_bundle_path not found: {config.mtls.ca_bundle_path!r}")
+
+    if config.oauth2:
+        if not config.oauth2.token_url:
+            errors.append("oauth2.token_url is required")
+        if not config.oauth2.client_id:
+            errors.append("oauth2.client_id is required")
+        if not config.oauth2.client_secret:
+            errors.append("oauth2.client_secret is required")
+
+    if config.retry.max_attempts < 1:
+        errors.append(f"retry.max_attempts must be >= 1, got: {config.retry.max_attempts}")
+    if config.retry.base_delay_s <= 0:
+        errors.append(f"retry.base_delay_s must be positive, got: {config.retry.base_delay_s}")
+    if config.retry.max_delay_s < config.retry.base_delay_s:
+        errors.append(
+            "retry.max_delay_s must be >= retry.base_delay_s, got: "
+            f"max_delay_s={config.retry.max_delay_s}, base_delay_s={config.retry.base_delay_s}"
+        )
+
+    if config.circuit_breaker.failure_threshold < 1:
+        errors.append(
+            "circuit_breaker.failure_threshold must be >= 1, got: "
+            f"{config.circuit_breaker.failure_threshold}"
+        )
+    if config.circuit_breaker.reset_timeout_s <= 0:
+        errors.append(
+            "circuit_breaker.reset_timeout_s must be positive, got: "
+            f"{config.circuit_breaker.reset_timeout_s}"
+        )
+
+    if errors:
+        bullet_list = "\n".join(f"  - {e}" for e in errors)
+        raise ConfigError(f"Invalid GovAPIClientConfig:\n{bullet_list}")
+
+
+# --------------------------------------------------------------------------
+# Retry-After parsing
+# --------------------------------------------------------------------------
+
+def _parse_retry_after(response: httpx.Response, max_retry_after_s: float) -> float | None:
+    """
+    Parse a Retry-After header per RFC 9110: either an integer number of
+    seconds, or an HTTP-date. Returns None if the header is absent or
+    unparseable. Result is clamped to [0, max_retry_after_s] so a
+    misbehaving or malicious server can't stall a caller indefinitely.
+    """
+    raw = response.headers.get("Retry-After")
+    if not raw:
+        return None
+
+    seconds: float | None = None
+    try:
+        seconds = float(raw)
+    except ValueError:
+        try:
+            target_dt = parsedate_to_datetime(raw)
+            seconds = (target_dt - target_dt.now(target_dt.tzinfo)).total_seconds()
+        except (TypeError, ValueError):
+            logger.warning("gov_api_client: unparseable Retry-After header: %r", raw)
+            return None
+
+    if seconds is None:
+        return None
+    return max(0.0, min(seconds, max_retry_after_s))
+
+
 # --------------------------------------------------------------------------
 # Client
 # --------------------------------------------------------------------------
@@ -187,9 +340,15 @@ class GovAPIClient:
         )
         client = GovAPIClient(config)
         data = client.get("/v1/citizens/12345")
+
+    Raises ConfigError immediately at construction if the config is
+    invalid (bad cert paths, nonsensical retry values, missing OAuth2
+    fields), rather than failing confusingly on first use.
     """
 
     def __init__(self, config: GovAPIClientConfig, transport: httpx.BaseTransport | None = None):
+        _validate_config(config)
+
         self.config = config
         self._token: str | None = None
         self._token_expiry: float = 0.0
@@ -280,7 +439,7 @@ class GovAPIClient:
         if self.config.oauth2:
             headers["Authorization"] = f"Bearer {self._get_access_token()}"
 
-        last_exc: Exception | None = None
+        last_transport_exc: Exception | None = None
 
         for attempt in range(1, retry_cfg.max_attempts + 1):
             try:
@@ -288,39 +447,82 @@ class GovAPIClient:
                             method, path, attempt, retry_cfg.max_attempts)
                 resp = self._http.request(method, path, headers=headers, **kwargs)
 
-                if resp.status_code in retry_cfg.retryable_statuses:
-                    raise httpx.HTTPStatusError(
-                        f"Retryable status {resp.status_code}",
-                        request=resp.request,
-                        response=resp,
-                    )
-
-                resp.raise_for_status()
-                breaker.on_success()
-                return resp.json() if resp.content else None
-
-            except (httpx.TransportError, httpx.HTTPStatusError) as exc:
-                last_exc = exc
+            except httpx.TransportError as exc:
+                last_transport_exc = exc
                 is_last_attempt = attempt == retry_cfg.max_attempts
                 logger.warning(
-                    "gov_api_client: attempt %d/%d failed: %s",
+                    "gov_api_client: attempt %d/%d transport error: %s",
                     attempt, retry_cfg.max_attempts, exc,
                 )
                 if is_last_attempt:
-                    break
+                    breaker.on_failure()
+                    raise RetryExhaustedError(
+                        f"{method} {path} failed after {retry_cfg.max_attempts} attempts "
+                        "due to transport errors",
+                        last_exception=last_transport_exc,
+                    ) from exc
+                self._sleep_before_retry(attempt, retry_cfg, retry_after_s=None)
+                continue
 
-                delay = min(
-                    retry_cfg.base_delay_s * (2 ** (attempt - 1)),
-                    retry_cfg.max_delay_s,
+            # Success.
+            if resp.status_code < 400:
+                breaker.on_success()
+                return resp.json() if resp.content else None
+
+            # Non-retryable client mistake: fail fast, don't touch the
+            # breaker, since this says nothing about the endpoint's health.
+            if resp.status_code not in retry_cfg.retryable_statuses:
+                body = resp.text[:500] if resp.text else None
+                raise ClientError(
+                    f"{method} {path} returned non-retryable status {resp.status_code}",
+                    status_code=resp.status_code,
+                    response_body=body,
                 )
-                delay += random.uniform(0, retry_cfg.jitter_s)
-                time.sleep(delay)
 
-        # The whole request (all attempts) counts as a single failure from
-        # the circuit breaker's point of view — it trips on consecutive
-        # *requests* failing, not consecutive low-level attempts.
-        breaker.on_failure()
+            # Retryable (429 or 5xx): retry with backoff, honoring
+            # Retry-After if the server sent one.
+            is_last_attempt = attempt == retry_cfg.max_attempts
+            logger.warning(
+                "gov_api_client: attempt %d/%d got retryable status %d",
+                attempt, retry_cfg.max_attempts, resp.status_code,
+            )
+            if is_last_attempt:
+                breaker.on_failure()
+                if resp.status_code == 429:
+                    retry_after = _parse_retry_after(resp, retry_cfg.max_retry_after_s)
+                    raise RateLimitError(
+                        f"{method} {path} still rate limited after "
+                        f"{retry_cfg.max_attempts} attempts",
+                        retry_after_s=retry_after,
+                    )
+                raise ServerError(
+                    f"{method} {path} failed after {retry_cfg.max_attempts} attempts "
+                    f"with status {resp.status_code}",
+                    status_code=resp.status_code,
+                )
+
+            retry_after = _parse_retry_after(resp, retry_cfg.max_retry_after_s)
+            self._sleep_before_retry(attempt, retry_cfg, retry_after_s=retry_after)
+
+        # Unreachable in practice (the loop always returns or raises above),
+        # kept only as a defensive fallback.
         raise RetryExhaustedError(
             f"{method} {path} failed after {retry_cfg.max_attempts} attempts",
-            last_exception=last_exc,
+            last_exception=last_transport_exc,
         )
+
+    @staticmethod
+    def _sleep_before_retry(
+        attempt: int, retry_cfg: RetryConfig, retry_after_s: float | None
+    ) -> None:
+        if retry_after_s is not None:
+            # The server told us explicitly how long to wait; honor that
+            # over our own backoff guess.
+            delay = retry_after_s
+        else:
+            delay = min(
+                retry_cfg.base_delay_s * (2 ** (attempt - 1)),
+                retry_cfg.max_delay_s,
+            )
+            delay += random.uniform(0, retry_cfg.jitter_s)
+        time.sleep(delay)

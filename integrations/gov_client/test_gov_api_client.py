@@ -11,11 +11,16 @@ from gov_api_client import (
     CircuitBreaker,
     CircuitOpenError,
     CircuitState,
+    ClientError,
+    ConfigError,
     GovAPIClient,
     GovAPIClientConfig,
+    MTLSConfig,
     OAuth2Config,
+    RateLimitError,
     RetryConfig,
     RetryExhaustedError,
+    ServerError,
 )
 
 BASE_URL = "https://sandbox.example.gov/api"
@@ -34,6 +39,8 @@ def make_client(**overrides) -> GovAPIClient:
     )
     return GovAPIClient(config)
 
+
+# -- basic success / retry / exhaustion --------------------------------
 
 @respx.mock
 def test_successful_get_returns_json():
@@ -60,33 +67,110 @@ def test_retries_on_transient_5xx_then_succeeds():
 
 
 @respx.mock
-def test_exhausts_retries_and_raises():
+def test_exhausts_retries_and_raises_server_error():
     respx.get(f"{BASE_URL}/v1/always-down").mock(
         return_value=httpx.Response(503)
     )
     client = make_client(retry=RetryConfig(max_attempts=2, base_delay_s=0.01,
                                             max_delay_s=0.02, jitter_s=0.0))
-    with pytest.raises(RetryExhaustedError):
+    with pytest.raises(ServerError) as exc_info:
         client.get("/v1/always-down")
+    assert exc_info.value.status_code == 503
 
 
 @respx.mock
-def test_non_retryable_4xx_fails_fast_without_retry():
-    route = respx.get(f"{BASE_URL}/v1/not-found").mock(
-        return_value=httpx.Response(404)
+def test_transport_error_exhaustion_raises_retry_exhausted():
+    respx.get(f"{BASE_URL}/v1/unreachable").mock(
+        side_effect=httpx.ConnectError("connection refused")
     )
-    client = make_client(retry=RetryConfig(max_attempts=5, base_delay_s=0.01,
+    client = make_client(retry=RetryConfig(max_attempts=2, base_delay_s=0.01,
                                             max_delay_s=0.02, jitter_s=0.0))
     with pytest.raises(RetryExhaustedError):
-        client.get("/v1/not-found")
-    # 404 isn't in retryable_statuses, so raise_for_status fires immediately
-    # inside attempt 1, then attempt loop still runs out max_attempts since
-    # HTTPStatusError is caught generically — verify it didn't silently
-    # succeed, and that it was in fact called (behavior documented, not
-    # optimized away, so devs are aware 4xx currently retries like 5xx
-    # unless explicitly excluded).
-    assert route.call_count >= 1
+        client.get("/v1/unreachable")
 
+
+# -- structured client errors, no retry, no breaker impact --------------
+
+@respx.mock
+def test_non_retryable_4xx_fails_fast_as_client_error():
+    route = respx.get(f"{BASE_URL}/v1/not-found").mock(
+        return_value=httpx.Response(404, text="not found")
+    )
+    breaker = CircuitBreaker(failure_threshold=2, reset_timeout_s=10)
+    client = make_client(
+        retry=RetryConfig(max_attempts=5, base_delay_s=0.01, max_delay_s=0.02, jitter_s=0.0),
+        circuit_breaker=breaker,
+    )
+    with pytest.raises(ClientError) as exc_info:
+        client.get("/v1/not-found")
+
+    assert exc_info.value.status_code == 404
+    assert route.call_count == 1, "a client error should never be retried"
+    assert breaker.state == CircuitState.CLOSED, (
+        "a 404 is a client mistake, not endpoint degradation, and must not "
+        "count toward tripping the circuit breaker"
+    )
+
+
+@respx.mock
+def test_repeated_404s_never_trip_the_breaker():
+    respx.get(f"{BASE_URL}/v1/missing").mock(return_value=httpx.Response(404))
+    breaker = CircuitBreaker(failure_threshold=2, reset_timeout_s=10)
+    client = make_client(circuit_breaker=breaker)
+
+    for _ in range(5):
+        with pytest.raises(ClientError):
+            client.get("/v1/missing")
+
+    assert breaker.state == CircuitState.CLOSED
+
+
+# -- rate limiting and Retry-After ---------------------------------------
+
+@respx.mock
+def test_honors_retry_after_seconds_header():
+    route = respx.get(f"{BASE_URL}/v1/limited")
+    route.side_effect = [
+        httpx.Response(429, headers={"Retry-After": "0.02"}),
+        httpx.Response(200, json={"ok": True}),
+    ]
+    client = make_client(retry=RetryConfig(max_attempts=2, base_delay_s=5.0,
+                                            max_delay_s=5.0, jitter_s=0.0))
+    start = __import__("time").monotonic()
+    result = client.get("/v1/limited")
+    elapsed = __import__("time").monotonic() - start
+
+    assert result == {"ok": True}
+    # Should have waited ~0.02s (the header), not ~5s (the configured backoff)
+    assert elapsed < 1.0
+
+
+@respx.mock
+def test_rate_limit_exhaustion_raises_rate_limit_error_with_retry_after():
+    respx.get(f"{BASE_URL}/v1/limited").mock(
+        return_value=httpx.Response(429, headers={"Retry-After": "3"})
+    )
+    client = make_client(retry=RetryConfig(max_attempts=2, base_delay_s=0.01,
+                                            max_delay_s=0.02, jitter_s=0.0))
+    with pytest.raises(RateLimitError) as exc_info:
+        client.get("/v1/limited")
+    assert exc_info.value.retry_after_s == 3.0
+
+
+@respx.mock
+def test_retry_after_is_clamped_to_max():
+    respx.get(f"{BASE_URL}/v1/limited").mock(
+        return_value=httpx.Response(429, headers={"Retry-After": "999999"})
+    )
+    client = make_client(retry=RetryConfig(max_attempts=1, base_delay_s=0.01,
+                                            max_delay_s=0.02, jitter_s=0.0,
+                                            max_retry_after_s=5.0))
+    with pytest.raises(RateLimitError) as exc_info:
+        client.get("/v1/limited")
+    assert exc_info.value.retry_after_s == 5.0
+
+
+# -- circuit breaker (unchanged behavior, still covered) -----------------
 
 @respx.mock
 def test_circuit_breaker_opens_after_threshold_and_blocks_calls():
@@ -97,15 +181,13 @@ def test_circuit_breaker_opens_after_threshold_and_blocks_calls():
         circuit_breaker=breaker,
     )
 
-    # First two calls fail and trip the breaker.
-    with pytest.raises(RetryExhaustedError):
+    with pytest.raises(ServerError):
         client.get("/v1/down")
-    with pytest.raises(RetryExhaustedError):
+    with pytest.raises(ServerError):
         client.get("/v1/down")
 
     assert breaker.state == CircuitState.OPEN
 
-    # Third call should fail fast without hitting the network at all.
     with pytest.raises(CircuitOpenError):
         client.get("/v1/down")
 
@@ -124,9 +206,9 @@ def test_circuit_breaker_half_opens_and_recovers():
         circuit_breaker=breaker,
     )
 
-    with pytest.raises(RetryExhaustedError):
+    with pytest.raises(ServerError):
         client.get("/v1/recovering")
-    with pytest.raises(RetryExhaustedError):
+    with pytest.raises(ServerError):
         client.get("/v1/recovering")
     assert breaker.state == CircuitState.OPEN
 
@@ -138,6 +220,8 @@ def test_circuit_breaker_half_opens_and_recovers():
     assert result == {"ok": True}
     assert breaker.state == CircuitState.CLOSED
 
+
+# -- oauth2 --------------------------------------------------------------
 
 @respx.mock
 def test_oauth2_token_is_fetched_and_reused():
@@ -166,3 +250,60 @@ def test_oauth2_token_is_fetched_and_reused():
     assert data_route.call_count == 2
     sent_auth_header = data_route.calls[0].request.headers["Authorization"]
     assert sent_auth_header == "Bearer abc123"
+
+
+# -- config validation -----------------------------------------------------
+
+def test_rejects_missing_mtls_cert_file():
+    config = GovAPIClientConfig(
+        base_url=BASE_URL,
+        mtls=MTLSConfig(cert_path="/does/not/exist.crt", key_path="/does/not/exist.key"),
+    )
+    with pytest.raises(ConfigError) as exc_info:
+        GovAPIClient(config)
+    assert "cert_path" in str(exc_info.value)
+    assert "key_path" in str(exc_info.value)
+
+
+def test_rejects_incomplete_oauth2_config():
+    config = GovAPIClientConfig(
+        base_url=BASE_URL,
+        oauth2=OAuth2Config(token_url="", client_id="", client_secret="secret"),
+    )
+    with pytest.raises(ConfigError) as exc_info:
+        GovAPIClient(config)
+    assert "token_url" in str(exc_info.value)
+    assert "client_id" in str(exc_info.value)
+
+
+def test_rejects_nonsensical_retry_config():
+    config = GovAPIClientConfig(
+        base_url=BASE_URL,
+        retry=RetryConfig(max_attempts=0, base_delay_s=1.0, max_delay_s=0.5),
+    )
+    with pytest.raises(ConfigError) as exc_info:
+        GovAPIClient(config)
+    message = str(exc_info.value)
+    assert "max_attempts" in message
+    assert "max_delay_s" in message
+
+
+def test_rejects_non_https_base_url():
+    config = GovAPIClientConfig(base_url="http://sandbox.example.gov/api")
+    with pytest.raises(ConfigError) as exc_info:
+        GovAPIClient(config)
+    assert "https://" in str(exc_info.value)
+
+
+def test_allows_http_localhost_for_local_testing():
+    # Should not raise: localhost is exempt from the https:// requirement
+    # so the client can be exercised against a local mock server.
+    config = GovAPIClientConfig(base_url="http://localhost:8080/api")
+    client = GovAPIClient(config)
+    client.close()
+
+
+def test_valid_config_constructs_without_error():
+    config = GovAPIClientConfig(base_url=BASE_URL)
+    client = GovAPIClient(config)
+    client.close()
