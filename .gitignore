@@ -18,3 +18,4 @@ htmlcov/
 neuromesh.egg-info/
 test-results/
 frontend/test-results/
+*.sh
