@@ -1,0 +1,3 @@
+httpx>=0.27
+respx>=0.21
+pytest>=8.0
