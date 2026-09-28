@@ -142,7 +142,8 @@ Read these before wiring it into anything important.
   reaches the server but the response is lost, a retried POST can
   perform its side effect twice. For non idempotent writes, send an
   idempotency key if the partner supports one, or lower
-  `max_attempts` to 1 for those calls.
+  `max_attempts` to 1 for those calls. A characterization test pins
+  this behavior: `test_known_limitation_retried_post_repeats_its_side_effect`.
 - **It is synchronous.** It uses blocking `httpx.Client` and
   `time.sleep`. Calling it directly inside an `async def` FastAPI
   route will block the event loop during retries. Use a plain `def`
@@ -152,10 +153,21 @@ Read these before wiring it into anything important.
 
 ## Testing your integration
 
-Inject a mocked transport, or use `respx`, so tests need no network
-and no real credentials. The suite in
-`test_resilient_api_client.py` is a working reference for mocking
-success, retries, rate limiting, and each breaker state.
+There are two layers of tests, and neither needs real credentials.
+
+- `test_resilient_api_client.py` mocks the HTTP layer with `respx`. It
+  is fast and precise, and a working reference for mocking success,
+  retries, rate limiting, and each breaker state.
+- `test_resilient_client_e2e.py` runs the real client against
+  `mock_partner_server.py` over real HTTP on localhost. It covers what
+  a transport mock cannot: real read timeouts, refused connections,
+  and header handling on the wire.
+
+To poke the mock partner by hand, run it standalone on port 8099:
+
+```
+python integrations/resilient_client/mock_partner_server.py
+```
 
 ```
 python -m pytest integrations/resilient_client/ -v
