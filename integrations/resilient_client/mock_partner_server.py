@@ -22,7 +22,10 @@ Scenarios:
   POST /oauth/token                OAuth2 client credentials grant
   GET  /v1/secure                  requires a valid bearer token
   POST /v1/payments                applies its side effect BEFORE possibly
-                                   failing, like a response lost in transit
+                                   failing or stalling, like a response lost
+                                   in transit. Honors an Idempotency-Key
+                                   header: a repeated key is replayed, not
+                                   applied again.
 
 Run it standalone for manual poking:
 
@@ -31,6 +34,7 @@ Run it standalone for manual poking:
 
 import asyncio
 import threading
+import time
 import uuid
 from collections import defaultdict
 from urllib.parse import parse_qs
@@ -57,6 +61,7 @@ class MockState:
             self.valid_tokens: set[str] = set()
             self.tokens_issued = 0
             self.payments_applied = 0
+            self.idempotent_results: dict[str, int] = {}
 
     def record_hit(self, path: str) -> None:
         with self._lock:
@@ -75,10 +80,19 @@ class MockState:
             self.valid_tokens.add(token)
             return token
 
-    def apply_payment(self) -> int:
+    def apply_payment(self, idempotency_key: str | None = None) -> tuple[int, bool]:
+        """
+        Apply a payment. Returns (payment_id, replayed). A repeated
+        idempotency key returns the original result without applying
+        the side effect again.
+        """
         with self._lock:
+            if idempotency_key is not None and idempotency_key in self.idempotent_results:
+                return self.idempotent_results[idempotency_key], True
             self.payments_applied += 1
-            return self.payments_applied
+            if idempotency_key is not None:
+                self.idempotent_results[idempotency_key] = self.payments_applied
+            return self.payments_applied, False
 
     def snapshot(self) -> dict:
         with self._lock:
@@ -160,14 +174,17 @@ def create_app() -> tuple[FastAPI, MockState]:
         return {"secure": True}
 
     @app.post("/v1/payments")
-    def payments(key: str = "default", fail_first: int = 0):
-        # The side effect happens first, then the response may "get lost".
+    def payments(request: Request, key: str = "default", fail_first: int = 0, delay: float = 0):
+        # The side effect happens first, then the response may "get lost"
+        # (a 503, or a stall long enough to hit the client's read timeout).
         # This is what makes a retried POST dangerous in real systems.
-        payment_number = state.apply_payment()
+        payment_id, replayed = state.apply_payment(request.headers.get("idempotency-key"))
         call_number = state.next_call(f"payments:{key}")
+        if delay:
+            time.sleep(delay)
         if call_number <= fail_first:
             return JSONResponse({"error": "gateway timeout"}, status_code=503)
-        return {"payment_id": payment_number}
+        return {"payment_id": payment_id, "replayed": replayed}
 
     # Handy when running standalone.
     @app.get("/_stats")

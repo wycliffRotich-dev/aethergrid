@@ -280,25 +280,68 @@ def test_wrong_client_secret_raises_auth_error(server):
     assert server.state.hits["/v1/secure"] == 0, "must not call the API without a token"
 
 
-# -- known limitation, pinned so it cannot change silently --------------------
+# -- retry safety for non idempotent requests --------------------------------
+#
+# The server applies a payment BEFORE the response goes wrong, so any replay of
+# the same POST is a duplicate charge. These tests prove the client no longer
+# replays it unless doing so is provably safe.
 
 
-def test_known_limitation_retried_post_repeats_its_side_effect(server):
-    """
-    CHARACTERIZATION TEST. This pins current behavior that is documented
-    as a known limitation in the README, it is not an endorsement of it.
+def test_post_is_not_replayed_after_a_5xx_and_says_the_outcome_is_unknown(server):
+    key = unique_key()
 
-    The server applies the payment, then loses the response. The client
-    sees a 503, retries, and the payment is applied a second time. The
-    caller receives a clean success and never learns it was charged twice.
+    with make_client(server.base_url) as client, pytest.raises(ServerError) as exc_info:
+        client.post(f"/v1/payments?key={key}&fail_first=1", json={"amount": 100})
 
-    When idempotency key support or per-call retry control lands, this
-    test should be rewritten to assert exactly ONE payment is applied.
-    """
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.outcome_unknown is True
+    assert server.state.hits["/v1/payments"] == 1, "a POST must not be replayed"
+    assert server.state.payments_applied == 1, "exactly one charge, never two"
+
+
+def test_post_read_timeout_is_not_replayed(server):
+    key = unique_key()
+
+    with make_client(server.base_url, timeout_s=0.1) as client:
+        with pytest.raises(RetryExhaustedError) as exc_info:
+            client.post(f"/v1/payments?key={key}&delay=0.5", json={"amount": 100})
+
+    assert isinstance(exc_info.value.last_exception, httpx.TimeoutException)
+    assert exc_info.value.outcome_unknown is True
+    # The server did act on the request that timed out, and only that once.
+    assert server.state.payments_applied == 1
+
+
+def test_post_with_idempotency_key_is_retried_and_applied_exactly_once(server):
     key = unique_key()
 
     with make_client(server.base_url) as client:
-        result = client.post(f"/v1/payments?key={key}&fail_first=1", json={"amount": 100})
+        result = client.post(
+            f"/v1/payments?key={key}&fail_first=1",
+            json={"amount": 100},
+            idempotency_key=f"order-{key}",
+        )
 
-    assert result["payment_id"] == 2
-    assert server.state.payments_applied == 2
+    # First attempt: applied, then the response was lost (503). The retry
+    # carried the same key, so the server replayed the result instead of
+    # charging again.
+    assert result == {"payment_id": 1, "replayed": True}
+    assert server.state.hits["/v1/payments"] == 2
+    assert server.state.payments_applied == 1
+
+
+def test_post_that_never_reached_the_server_is_still_retried():
+    dead_url = f"http://127.0.0.1:{_free_port()}"  # nothing is listening here
+    breaker = CircuitBreaker(failure_threshold=99, reset_timeout_s=30)
+
+    with make_client(dead_url, circuit_breaker=breaker) as client:
+        started = time.monotonic()
+        with pytest.raises(RetryExhaustedError) as exc_info:
+            client.post("/v1/payments", json={"amount": 100})
+        elapsed = time.monotonic() - started
+
+    assert isinstance(exc_info.value.last_exception, httpx.ConnectError)
+    assert exc_info.value.outcome_unknown is False, "a refused connection provably sent nothing"
+    # FAST_RETRY makes 4 attempts with 0.01s, 0.02s, 0.04s backoff. A single
+    # attempt would return almost instantly, so this proves it did retry.
+    assert elapsed >= 0.06

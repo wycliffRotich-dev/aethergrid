@@ -8,7 +8,9 @@ types, and config validation on top of `httpx`.
 Background: [ADR 0047](../../docs/adr/0047-resilient-gov-api-client.md)
 explains why it was built, and
 [ADR 0048](../../docs/adr/0048-generalize-gov-client-to-resilient-api-client.md)
-explains why it is named and located as a general purpose client.
+explains why it is named and located as a general purpose client, and
+[ADR 0049](../../docs/adr/0049-resilient-client-replays-only-safe-requests.md)
+explains why it only retries requests that are safe to replay.
 
 ## Quick start
 
@@ -27,9 +29,11 @@ with ResilientAPIClient(config) as client:
 Run from the repo root. There is no `__init__.py`, so `integrations`
 works as a namespace package only when the root is on the import path.
 
-`get`, `post`, `put`, and `delete` return the parsed JSON body, or
-`None` if the response body is empty. Extra keyword arguments such as
-`json=`, `params=`, and `headers=` pass straight through to `httpx`.
+`get`, `post`, `put`, `patch`, and `delete` return the parsed JSON
+body, or `None` if the response body is empty. Extra keyword arguments
+such as `json=`, `params=`, and `headers=` pass straight through to
+`httpx`. Every call also accepts `idempotency_key=`, covered under
+Retry safety below.
 
 ## Adding auth
 
@@ -70,8 +74,8 @@ different thing, so catch them separately.
 | --- | --- | --- | --- |
 | `ClientError` | Non retryable 4xx such as 400 or 404. Carries `status_code` and `response_body`. | No | No |
 | `RateLimitError` | 429 persisted through every attempt. Carries `retry_after_s`. | Yes | Yes |
-| `ServerError` | 5xx persisted through every attempt. Carries `status_code`. | Yes | Yes |
-| `RetryExhaustedError` | Transport failure (timeout, refused connection, DNS) through every attempt. No response existed. | Yes | Yes |
+| `ServerError` | 5xx that ended the request. Carries `status_code` and `outcome_unknown`. | Only if safe to replay | Yes |
+| `RetryExhaustedError` | Transport failure (timeout, refused connection, DNS) that ended the request. No response existed. Carries `outcome_unknown`. | Only if safe to replay | Yes |
 | `CircuitOpenError` | Breaker is open, so the call failed fast without touching the network. | n/a | n/a |
 | `AuthError` | OAuth2 token could not be acquired. | No | No |
 | `ConfigError` | Invalid config, raised at construction. | n/a | n/a |
@@ -89,6 +93,47 @@ except (ServerError, RetryExhaustedError, CircuitOpenError):
     # Their side is unhealthy. Degrade gracefully.
     return cached_or_default()
 ```
+
+## Retry safety
+
+Retrying is only safe when it cannot repeat a side effect. If a server
+processes a request but the response is lost, replaying a POST can
+charge a card twice while the caller sees a clean success. So the
+client decides per request:
+
+| Situation | Retried? | Why |
+| --- | --- | --- |
+| GET, HEAD, OPTIONS, PUT, DELETE, any transient failure | Yes | Idempotent by definition, replaying changes nothing. |
+| Any method, request never left (refused connection, connect timeout) | Yes | The server cannot have acted on it. |
+| Any method, 429 | Yes | The server declined it before acting. |
+| POST or PATCH, 5xx or read timeout, no key | No | It may have been processed. A replay could repeat it. |
+| POST or PATCH with `idempotency_key` | Yes | The partner can deduplicate the replay. |
+
+When a failure leaves it genuinely unknown whether the request took
+effect, `outcome_unknown` is `True` on `ServerError` and
+`RetryExhaustedError`. Reconcile with the partner instead of sending it
+again blindly.
+
+```python
+try:
+    client.post("/v1/payments", json=payload, idempotency_key=f"order-{order.id}")
+except (ServerError, RetryExhaustedError) as exc:
+    if exc.outcome_unknown:
+        # It may have gone through. Look it up before trying again.
+        reconcile(order)
+    else:
+        raise
+```
+
+Only pass `idempotency_key` when the partner honors it. Sending a key
+to a server that ignores it does not make a replay safe.
+
+Two knobs for partners with different rules:
+
+- `ResilientClientConfig(idempotency_header="X-Request-Id")` changes
+  the header the key is sent in. The default is `Idempotency-Key`.
+- `RetryConfig(retryable_methods=("GET", "POST"))` marks methods as safe
+  to replay for a partner known to deduplicate everything.
 
 ## Tuning
 
@@ -138,12 +183,6 @@ long (clamped to `max_retry_after_s`) instead of its own backoff.
 
 Read these before wiring it into anything important.
 
-- **It retries every HTTP method, including POST.** If a request
-  reaches the server but the response is lost, a retried POST can
-  perform its side effect twice. For non idempotent writes, send an
-  idempotency key if the partner supports one, or lower
-  `max_attempts` to 1 for those calls. A characterization test pins
-  this behavior: `test_known_limitation_retried_post_repeats_its_side_effect`.
 - **It is synchronous.** It uses blocking `httpx.Client` and
   `time.sleep`. Calling it directly inside an `async def` FastAPI
   route will block the event loop during retries. Use a plain `def`
@@ -157,7 +196,7 @@ There are two layers of tests, and neither needs real credentials.
 
 - `test_resilient_api_client.py` mocks the HTTP layer with `respx`. It
   is fast and precise, and a working reference for mocking success,
-  retries, rate limiting, and each breaker state.
+  retries, rate limiting, retry safety, and each breaker state.
 - `test_resilient_client_e2e.py` runs the real client against
   `mock_partner_server.py` over real HTTP on localhost. It covers what
   a transport mock cannot: real read timeouts, refused connections,
