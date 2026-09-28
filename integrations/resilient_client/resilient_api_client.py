@@ -12,6 +12,10 @@ infrastructure you don't operate and can't fully see into:
     honoring a server-supplied Retry-After header when present, plus a
     circuit breaker so we stop hammering a dead endpoint and fail fast
     instead of piling up latency.
+  * Replay safety: a request is only retried when replaying it cannot repeat
+    a side effect. Idempotent methods, requests that never left the client,
+    and 429s are retried. A POST that hit a 5xx or a read timeout is not,
+    unless the caller supplies an idempotency key. See ADR 0049.
   * Precise failure signaling: client mistakes (4xx), rate limiting (429),
     and server-side degradation (5xx/transport errors) are raised as
     distinct exception types, so callers can handle each appropriately
@@ -88,27 +92,45 @@ class RateLimitError(ResilientAPIError):
 
 class ServerError(ResilientAPIError):
     """
-    Raised when all retry attempts against a 5xx response are exhausted.
+    Raised when a 5xx response ends the request, either because every
+    retry attempt was used or because the method is not safe to replay.
     Distinct from RetryExhaustedError so callers can tell "their server
     is down" apart from "the network itself is unreachable".
+
+    `outcome_unknown` is True when the request may have been processed
+    and the method is not safe to replay (a POST without an idempotency
+    key). The caller should reconcile with the partner instead of
+    blindly sending it again.
     """
 
-    def __init__(self, message: str, status_code: int):
+    def __init__(self, message: str, status_code: int, outcome_unknown: bool = False):
         super().__init__(message)
         self.status_code = status_code
+        self.outcome_unknown = outcome_unknown
 
 
 class RetryExhaustedError(ResilientAPIError):
     """
-    Raised when all retry attempts are used up due to a transport-level
-    error (timeout, connection refused, DNS failure) rather than an HTTP
-    status code. Kept as a distinct type from ServerError/RateLimitError
-    since there was no response at all to inspect.
+    Raised when a transport-level error (timeout, connection refused,
+    DNS failure) ends the request, rather than an HTTP status code. Kept
+    as a distinct type from ServerError/RateLimitError since there was
+    no response at all to inspect.
+
+    `outcome_unknown` is True when the request may have reached the
+    server and the method is not safe to replay, so the caller cannot
+    know whether it took effect. A refused connection is never
+    outcome_unknown, because the request provably never left.
     """
 
-    def __init__(self, message: str, last_exception: Exception | None = None):
+    def __init__(
+        self,
+        message: str,
+        last_exception: Exception | None = None,
+        outcome_unknown: bool = False,
+    ):
         super().__init__(message)
         self.last_exception = last_exception
+        self.outcome_unknown = outcome_unknown
 
 
 # --------------------------------------------------------------------------
@@ -197,6 +219,12 @@ class RetryConfig:
     # Status codes worth retrying (transient/server-side); 4xx besides 429
     # are treated as non-retryable client errors.
     retryable_statuses: tuple[int, ...] = (429, 500, 502, 503, 504)
+    # Methods that are safe to replay when the outcome is ambiguous (a 5xx
+    # or a read timeout, where the server may already have acted). These
+    # are the idempotent methods per RFC 9110. POST and PATCH are left
+    # out on purpose: replaying them can repeat a side effect. A call
+    # that passes an idempotency_key is also treated as safe to replay.
+    retryable_methods: tuple[str, ...] = ("GET", "HEAD", "OPTIONS", "PUT", "DELETE")
     # Cap how long we'll ever honor a server-supplied Retry-After for,
     # so a misbehaving server can't stall a caller indefinitely.
     max_retry_after_s: float = 60.0
@@ -229,6 +257,8 @@ class ResilientClientConfig:
     retry: RetryConfig = field(default_factory=RetryConfig)
     circuit_breaker: CircuitBreaker = field(default_factory=CircuitBreaker)
     default_headers: dict[str, str] = field(default_factory=dict)
+    # Header used to send a per-call idempotency_key to the partner.
+    idempotency_header: str = "Idempotency-Key"
 
 
 def _validate_config(config: ResilientClientConfig) -> None:
@@ -265,6 +295,9 @@ def _validate_config(config: ResilientClientConfig) -> None:
             errors.append("oauth2.client_id is required")
         if not config.oauth2.client_secret:
             errors.append("oauth2.client_secret is required")
+
+    if not config.idempotency_header.strip():
+        errors.append("idempotency_header must not be empty")
 
     if config.retry.max_attempts < 1:
         errors.append(f"retry.max_attempts must be >= 1, got: {config.retry.max_attempts}")
@@ -326,6 +359,18 @@ def _parse_retry_after(response: httpx.Response, max_retry_after_s: float) -> fl
 # --------------------------------------------------------------------------
 # Client
 # --------------------------------------------------------------------------
+
+# Transport errors raised before any request bytes are sent, so the server
+# cannot have acted on the request. Retrying these is always safe, even
+# for POST. Anything else (a read timeout, a dropped connection mid
+# response) leaves it unknown whether the server processed the request.
+_REQUEST_NEVER_SENT = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
+_NOT_REPLAYED_NOTE = (
+    "; not retried because the request may have been processed and this "
+    "call is not safe to replay (pass idempotency_key if the partner "
+    "supports it)"
+)
+
 
 class ResilientAPIClient:
     """
@@ -392,6 +437,9 @@ class ResilientAPIClient:
     def put(self, path: str, **kwargs: Any) -> Any:
         return self._request("PUT", path, **kwargs)
 
+    def patch(self, path: str, **kwargs: Any) -> Any:
+        return self._request("PATCH", path, **kwargs)
+
     def delete(self, path: str, **kwargs: Any) -> Any:
         return self._request("DELETE", path, **kwargs)
 
@@ -437,13 +485,26 @@ class ResilientAPIClient:
 
         breaker.before_call()
 
+        idempotency_key: str | None = kwargs.pop("idempotency_key", None)
         headers = kwargs.pop("headers", {}) or {}
         if self.config.oauth2:
             headers["Authorization"] = f"Bearer {self._get_access_token()}"
+        if idempotency_key is not None:
+            headers[self.config.idempotency_header] = idempotency_key
+
+        # Safe to replay when the outcome is ambiguous: the method is
+        # idempotent by definition, or the caller supplied a key that lets
+        # the partner deduplicate. Without either, a retry after a 5xx or
+        # a read timeout could repeat a side effect the server already made.
+        replay_safe = (
+            idempotency_key is not None
+            or method.upper() in {m.upper() for m in retry_cfg.retryable_methods}
+        )
 
         last_transport_exc: Exception | None = None
 
         for attempt in range(1, retry_cfg.max_attempts + 1):
+            is_last_attempt = attempt == retry_cfg.max_attempts
             try:
                 logger.info("resilient_api_client: %s %s (attempt %d/%d)",
                             method, path, attempt, retry_cfg.max_attempts)
@@ -451,17 +512,20 @@ class ResilientAPIClient:
 
             except httpx.TransportError as exc:
                 last_transport_exc = exc
-                is_last_attempt = attempt == retry_cfg.max_attempts
+                may_have_been_processed = not isinstance(exc, _REQUEST_NEVER_SENT)
+                outcome_unknown = may_have_been_processed and not replay_safe
                 logger.warning(
                     "resilient_api_client: attempt %d/%d transport error: %s",
                     attempt, retry_cfg.max_attempts, exc,
                 )
-                if is_last_attempt:
+                if is_last_attempt or outcome_unknown:
                     breaker.on_failure()
                     raise RetryExhaustedError(
-                        f"{method} {path} failed after {retry_cfg.max_attempts} attempts "
-                        "due to transport errors",
-                        last_exception=last_transport_exc,
+                        f"{method} {path} failed after {attempt} attempt(s) "
+                        "due to transport errors"
+                        + (_NOT_REPLAYED_NOTE if outcome_unknown else ""),
+                        last_exception=exc,
+                        outcome_unknown=outcome_unknown,
                     ) from exc
                 self._sleep_before_retry(attempt, retry_cfg, retry_after_s=None)
                 continue
@@ -481,26 +545,29 @@ class ResilientAPIClient:
                     response_body=body,
                 )
 
-            # Retryable (429 or 5xx): retry with backoff, honoring
-            # Retry-After if the server sent one.
-            is_last_attempt = attempt == retry_cfg.max_attempts
+            # Retryable status. A 429 means the server declined the request
+            # before acting on it, so replaying is always safe. A 5xx is
+            # ambiguous: only replay it when the method is replay safe.
+            is_rate_limited = resp.status_code == 429
+            outcome_unknown = not is_rate_limited and not replay_safe
             logger.warning(
                 "resilient_api_client: attempt %d/%d got retryable status %d",
                 attempt, retry_cfg.max_attempts, resp.status_code,
             )
-            if is_last_attempt:
+            if is_last_attempt or outcome_unknown:
                 breaker.on_failure()
-                if resp.status_code == 429:
+                if is_rate_limited:
                     retry_after = _parse_retry_after(resp, retry_cfg.max_retry_after_s)
                     raise RateLimitError(
-                        f"{method} {path} still rate limited after "
-                        f"{retry_cfg.max_attempts} attempts",
+                        f"{method} {path} still rate limited after {attempt} attempt(s)",
                         retry_after_s=retry_after,
                     )
                 raise ServerError(
-                    f"{method} {path} failed after {retry_cfg.max_attempts} attempts "
-                    f"with status {resp.status_code}",
+                    f"{method} {path} failed after {attempt} attempt(s) "
+                    f"with status {resp.status_code}"
+                    + (_NOT_REPLAYED_NOTE if outcome_unknown else ""),
                     status_code=resp.status_code,
+                    outcome_unknown=outcome_unknown,
                 )
 
             retry_after = _parse_retry_after(resp, retry_cfg.max_retry_after_s)

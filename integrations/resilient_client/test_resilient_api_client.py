@@ -307,3 +307,165 @@ def test_valid_config_constructs_without_error():
     config = ResilientClientConfig(base_url=BASE_URL)
     client = ResilientAPIClient(config)
     client.close()
+
+
+# -- retry safety: only replay when it cannot repeat a side effect --------------
+
+NO_DELAY = RetryConfig(max_attempts=3, base_delay_s=0.01, max_delay_s=0.02, jitter_s=0.0)
+
+
+@respx.mock
+def test_post_5xx_is_not_retried_and_flags_unknown_outcome():
+    route = respx.post(f"{BASE_URL}/v1/pay").mock(return_value=httpx.Response(503))
+    client = make_client(retry=NO_DELAY)
+
+    with pytest.raises(ServerError) as exc_info:
+        client.post("/v1/pay", json={"amount": 1})
+
+    assert route.call_count == 1
+    assert exc_info.value.outcome_unknown is True
+
+
+@respx.mock
+def test_post_5xx_with_idempotency_key_is_retried_and_sends_the_key():
+    route = respx.post(f"{BASE_URL}/v1/pay")
+    route.side_effect = [httpx.Response(503), httpx.Response(200, json={"ok": True})]
+    client = make_client(retry=NO_DELAY)
+
+    result = client.post("/v1/pay", json={"amount": 1}, idempotency_key="order-42")
+
+    assert result == {"ok": True}
+    assert route.call_count == 2
+    for call in route.calls:
+        assert call.request.headers["Idempotency-Key"] == "order-42"
+
+
+@respx.mock
+def test_idempotency_header_name_is_configurable():
+    route = respx.post(f"{BASE_URL}/v1/pay").mock(return_value=httpx.Response(200, json={}))
+    client = make_client(idempotency_header="X-Request-Id")
+
+    client.post("/v1/pay", idempotency_key="abc")
+
+    assert route.calls[0].request.headers["X-Request-Id"] == "abc"
+    assert "Idempotency-Key" not in route.calls[0].request.headers
+
+
+@respx.mock
+def test_post_429_is_always_retried_because_the_server_declined_it():
+    route = respx.post(f"{BASE_URL}/v1/pay")
+    route.side_effect = [
+        httpx.Response(429, headers={"Retry-After": "0"}),
+        httpx.Response(200, json={"ok": True}),
+    ]
+    client = make_client(retry=NO_DELAY)
+
+    assert client.post("/v1/pay", json={}) == {"ok": True}
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_post_connect_error_is_retried_because_nothing_was_sent():
+    route = respx.post(f"{BASE_URL}/v1/pay")
+    route.side_effect = [httpx.ConnectError("refused"), httpx.Response(200, json={"ok": True})]
+    client = make_client(retry=NO_DELAY)
+
+    assert client.post("/v1/pay", json={}) == {"ok": True}
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_post_read_timeout_is_not_retried_and_flags_unknown_outcome():
+    route = respx.post(f"{BASE_URL}/v1/pay").mock(side_effect=httpx.ReadTimeout("slow"))
+    client = make_client(retry=NO_DELAY)
+
+    with pytest.raises(RetryExhaustedError) as exc_info:
+        client.post("/v1/pay", json={})
+
+    assert route.call_count == 1
+    assert exc_info.value.outcome_unknown is True
+
+
+@respx.mock
+def test_get_read_timeout_is_retried_because_get_is_idempotent():
+    route = respx.get(f"{BASE_URL}/v1/read")
+    route.side_effect = [httpx.ReadTimeout("slow"), httpx.Response(200, json={"ok": True})]
+    client = make_client(retry=NO_DELAY)
+
+    assert client.get("/v1/read") == {"ok": True}
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_put_and_delete_5xx_are_retried_because_they_are_idempotent():
+    put_route = respx.put(f"{BASE_URL}/v1/item")
+    put_route.side_effect = [httpx.Response(503), httpx.Response(200, json={"ok": True})]
+    delete_route = respx.delete(f"{BASE_URL}/v1/item")
+    delete_route.side_effect = [httpx.Response(502), httpx.Response(200, json={"ok": True})]
+    client = make_client(retry=NO_DELAY)
+
+    assert client.put("/v1/item", json={}) == {"ok": True}
+    assert client.delete("/v1/item") == {"ok": True}
+    assert put_route.call_count == 2
+    assert delete_route.call_count == 2
+
+
+@respx.mock
+def test_patch_is_not_retried_by_default():
+    route = respx.patch(f"{BASE_URL}/v1/item").mock(return_value=httpx.Response(503))
+    client = make_client(retry=NO_DELAY)
+
+    with pytest.raises(ServerError) as exc_info:
+        client.patch("/v1/item", json={})
+
+    assert exc_info.value.outcome_unknown is True
+
+    assert route.call_count == 1
+
+
+@respx.mock
+def test_exhausted_get_does_not_flag_unknown_outcome():
+    respx.get(f"{BASE_URL}/v1/down").mock(return_value=httpx.Response(503))
+    client = make_client(retry=NO_DELAY)
+
+    with pytest.raises(ServerError) as exc_info:
+        client.get("/v1/down")
+
+    assert exc_info.value.outcome_unknown is False
+
+
+@respx.mock
+def test_retryable_methods_can_be_widened_for_a_partner_that_deduplicates():
+    route = respx.post(f"{BASE_URL}/v1/pay")
+    route.side_effect = [httpx.Response(503), httpx.Response(200, json={"ok": True})]
+    retry = RetryConfig(
+        max_attempts=3, base_delay_s=0.01, max_delay_s=0.02, jitter_s=0.0,
+        retryable_methods=("GET", "POST"),
+    )
+    client = make_client(retry=retry)
+
+    assert client.post("/v1/pay", json={}) == {"ok": True}
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_unsafe_post_failure_still_counts_toward_the_breaker_exactly_once():
+    respx.post(f"{BASE_URL}/v1/pay").mock(return_value=httpx.Response(503))
+    breaker = CircuitBreaker(failure_threshold=2, reset_timeout_s=10)
+    client = make_client(retry=NO_DELAY, circuit_breaker=breaker)
+
+    with pytest.raises(ServerError):
+        client.post("/v1/pay", json={})
+    assert breaker.state == CircuitState.CLOSED
+    with pytest.raises(ServerError):
+        client.post("/v1/pay", json={})
+    assert breaker.state == CircuitState.OPEN
+
+
+def test_rejects_empty_idempotency_header():
+    config = ResilientClientConfig(base_url=BASE_URL, idempotency_header="  ")
+
+    with pytest.raises(ConfigError) as exc_info:
+        ResilientAPIClient(config)
+
+    assert "idempotency_header" in str(exc_info.value)
