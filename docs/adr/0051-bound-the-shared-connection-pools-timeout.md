@@ -110,9 +110,9 @@ production code paths, not only the isolated construction test.
   the same factor as the timeout reduction. A sustained outage with
   enough concurrent request volume could still exhaust the default
   thread pool inside 5-second windows rather than 30-second ones.
-  Tracked as issue #261; worth a dedicated pass, likely a bounded or
-  dedicated executor, if sustained outages in practice turn out
-  frequent enough to matter.
+  Closed as issue #261. A dedicated pass, likely a bounded or
+  dedicated executor, remains worth reopening if sustained outages
+  in practice turn out frequent enough to matter.
 - Does not change recovery latency once the database returns. A
   reproduction spanning a real Postgres restart measured roughly 15
   seconds from `docker compose start postgres` to the first successful
