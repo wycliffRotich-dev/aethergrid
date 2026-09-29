@@ -12,6 +12,8 @@ from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
 from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
+from app.domain.enums.job_status import JobStatus
+from app.domain.enums.worker_status import WorkerStatus
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
@@ -116,6 +118,96 @@ def test_recover_expired_lease_requeues_job_with_retries_remaining() -> None:
     assert (
         lease_repository.get_by_worker_id(worker.id) is None
     )
+
+
+def test_recover_expired_lease_skips_a_job_whose_lease_was_renewed_mid_pass() -> None:
+    """
+    ADR-0034-style race, applied to reconciliation's own reclaim
+    path (never covered by ADR 0034-0038, which fenced release,
+    renewal, and outcome-reporting, but not reconciliation's own
+    delete): execute() reads a snapshot of all leases via
+    list(), then decides what to reclaim based on that snapshot.
+    If a worker's background renewal thread successfully renews
+    a lease after that snapshot was read, but before this pass
+    gets to delete it, the lease is no longer actually expired
+    by the time delete_if_expired() runs.
+
+    Simulates that exact interleaving directly: the lease is
+    created already expired, saved, then renewed via the same
+    repository instance the service will use -- representing
+    the renewal thread winning the race -- before execute() is
+    called. The job must be left entirely untouched: still
+    RUNNING, not requeued, not failed, retry_count unchanged,
+    worker not recovered, and the lease itself must still exist,
+    since it was legitimately renewed and deleting it would
+    steal it out from under its current, legitimate owner.
+    """
+    node = _make_node()
+
+    worker = Worker(
+        id=WorkerId.new(),
+        node=node,
+    )
+
+    worker.ready()
+
+    job = Job(
+        id=JobId.new(),
+        resources=ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=512,
+            vram_mib=0,
+        ),
+        max_retries=1,
+    )
+
+    job.queue()
+    job.assign_to(node.id)
+
+    worker.accept(job)
+    worker.start()
+
+    lease = _make_expired_lease(worker, job)
+
+    worker_repository = InMemoryWorkerRepository([worker])
+    job_repository = InMemoryJobRepository([job])
+    lease_repository = InMemoryLeaseRepository()
+    lease_repository.save(lease)
+
+    node_repository = InMemoryNodeRepository([node])
+
+    # The race: renew the lease on the same repository the
+    # service is about to call list() and delete_if_expired()
+    # against, simulating a worker's renewal thread winning the
+    # gap between this pass's snapshot read and its delete.
+    lease_repository.renew(
+        lease.id,
+        timedelta(seconds=30),
+    )
+
+    service = RecoverExpiredLeaseService(
+        worker_repository=worker_repository,
+        job_repository=job_repository,
+        lease_repository=lease_repository,
+        node_repository=node_repository,
+    )
+
+    service.execute()
+
+    recovered_worker = worker_repository.get_by_id(worker.id)
+    recovered_job = job_repository.get_by_id(job.id)
+
+    assert recovered_worker is not None
+    assert recovered_worker.status is WorkerStatus.BUSY
+
+    assert recovered_job is not None
+    assert recovered_job.status is JobStatus.RUNNING
+    assert recovered_job.retry_count == 0
+
+    survived_lease = lease_repository.get_by_job_id(job.id)
+    assert survived_lease is not None
+    assert survived_lease.id == lease.id
+    assert not survived_lease.is_expired()
 
 
 def test_recover_expired_lease_fails_job_once_retries_exhausted() -> None:

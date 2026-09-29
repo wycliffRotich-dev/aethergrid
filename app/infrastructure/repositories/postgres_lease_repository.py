@@ -124,6 +124,21 @@ class PostgresLeaseRepository(LeaseRepository):
                 (str(job_id),),
             )
 
+    def delete_if_expired(self, job_id: JobId) -> bool:
+        with self._pool.connection() as conn:
+            cursor = conn.execute(
+                """
+                DELETE FROM leases
+                WHERE job_id = %(job_id)s
+                AND expires_at < %(now)s
+                """,
+                {
+                    "job_id": str(job_id),
+                    "now": utc_now(),
+                },
+            )
+            return cursor.rowcount > 0
+
     @staticmethod
     def _to_entity(row: dict) -> Lease:
         return Lease(
