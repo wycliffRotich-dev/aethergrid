@@ -67,6 +67,8 @@ needed for this to be safe.
 
 ### Negative
 
+- **Amended by ADR 0050:** the claim above that `ReconciliationLoop.execute()` is "bounded, repository-bound, and fast by construction" held only while the database was reachable. Against a stopped database it inherits the connection pool's default 30-second timeout and blocks the event loop for that long, once per tick, for the duration of any outage. Reconciliation is now also run via `asyncio.to_thread`; see ADR 0050 for the failure mode, the fix, and the liveness/readiness split that came with it.
+
 - Two cluster ticks can no longer be assumed to run in strict
   temporal isolation from every other thread in the process the way a
   single-threaded event loop guarantees by construction. This is safe

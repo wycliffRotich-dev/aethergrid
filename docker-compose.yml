@@ -32,7 +32,7 @@ services:
           "CMD",
           "python3",
           "-c",
-          "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').getcode() == 200 else 1)",
+          "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/livez').getcode() == 200 else 1)",
         ]
       interval: 5s
       timeout: 3s
