@@ -263,6 +263,17 @@ def _build_repositories() -> tuple[
             min_size=1,
             max_size=10,
             open=True,
+            # ConnectionPool's own default timeout is 30 seconds,
+            # inherited silently when left unset. That's correct
+            # for nothing this pool serves: it is too slow for the
+            # readiness check (see ADR 0046, which uses its own
+            # 2 second override), and it is what let a single
+            # reconciliation pass hold a worker thread for 30
+            # seconds during a real outage (see ADR 0050, ADR
+            # 0051). 5 seconds gives real traffic more headroom
+            # than /health's 2 seconds while still failing fast
+            # enough that no caller waits anywhere near 30s.
+            timeout=5.0,
             kwargs={"autocommit": True},
         )
 

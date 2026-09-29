@@ -53,3 +53,9 @@ warn_unused_configs = true
 [tool.setuptools.packages.find]
 include = ["app*"]
 exclude = ["frontend*"]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: exercises real timing (e.g. connection pool timeouts); excluded from the default fast run",
+]
+
