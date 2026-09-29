@@ -43,6 +43,7 @@ def reclaim_job(
     lease_repository: LeaseRepository,
     node_repository: NodeRepository,
     job_repository: JobRepository,
+    lease_already_deleted: bool = False,
 ) -> bool:
     """
     Reclaim a job abandoned by infrastructure failure: delete
@@ -96,10 +97,22 @@ def reclaim_job(
     caller (for example, RecoverExpiredLeaseService records
     JobCancelled instead of JobReclaimed for a job that was
     already CANCELLING).
+
+    lease_already_deleted: pass True when the caller has
+    already deleted the lease itself, conditionally, via
+    LeaseRepository.delete_if_expired() -- and confirmed it
+    actually removed a row. This exists so a caller whose
+    reclaim decision depends on the lease still being expired
+    at delete time (not just at an earlier snapshot read) can
+    perform that fenced check before calling this function,
+    rather than this function deleting unconditionally and
+    silently reclaiming a job whose lease was legitimately
+    renewed in between. See RecoverExpiredLeaseService.
     """
-    lease_repository.delete(
-        job.id,
-    )
+    if not lease_already_deleted:
+        lease_repository.delete(
+            job.id,
+        )
 
     if node is not None:
         node.release(

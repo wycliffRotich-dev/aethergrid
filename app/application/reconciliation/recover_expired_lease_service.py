@@ -56,16 +56,20 @@ class RecoverExpiredLeaseService:
         Leases that have not yet expired are left untouched;
         their worker is still the legitimate owner of the job.
 
-        The lease row is deleted first, before the job or
-        worker are touched. This closes the window where a
-        worker's background renewal thread could successfully
-        renew a lease that reconciliation has already decided
-        to reclaim -- if delete ran last, a renewal landing
-        between job.reclaim() and delete() would succeed
-        against a lease that's effectively already gone,
-        letting a worker believe it still owns a job that's
-        about to be (or already has been) handed to someone
-        else.
+        The lease is deleted first, before the job or worker
+        are touched, via delete_if_expired() rather than an
+        unconditional delete(). Ordering alone (delete-first)
+        only prevents a renewal from landing after the delete;
+        it does nothing about a renewal that already happened
+        before it, since is_expired() above was checked against
+        a snapshot read at the top of this loop, not at the
+        moment of deletion. delete_if_expired() re-checks
+        expiry atomically at delete time, so a lease renewed
+        between the snapshot and the delete is left untouched
+        instead of being stolen out from under its current,
+        legitimate owner -- the same class of race ADR 0034
+        fenced for ReleaseLeaseService, applied here to
+        reconciliation's own reclaim path.
 
         A job whose lease expired is reclaimed rather than
         unscheduled: it may be SCHEDULED (worker died before
@@ -91,6 +95,27 @@ class RecoverExpiredLeaseService:
             if not lease.is_expired():
                 continue
 
+            deleted = self._lease_repository.delete_if_expired(
+                lease.job_id,
+            )
+
+            if not deleted:
+                # Renewed since the list() snapshot above was
+                # taken -- the worker still legitimately owns
+                # this lease. Nothing to reconcile for this
+                # job; reclaiming it now would steal a lease
+                # out from under its current, legitimate owner
+                # (the exact class of bug ADR 0034 fenced for
+                # release, here applied to reconciliation's own
+                # delete).
+                logger.info(
+                    "Skipping reclaim for job %s: lease was "
+                    "renewed after this pass's snapshot was "
+                    "read, so it is no longer expired.",
+                    lease.job_id,
+                )
+                continue
+
             worker = self._worker_repository.get_by_id(
                 lease.worker_id,
             )
@@ -99,10 +124,6 @@ class RecoverExpiredLeaseService:
             )
 
             if job is None:
-                self._lease_repository.delete(
-                    lease.job_id,
-                )
-
                 if worker is not None:
                     worker.recover()
                     self._worker_repository.save(
@@ -131,6 +152,7 @@ class RecoverExpiredLeaseService:
                 lease_repository=self._lease_repository,
                 node_repository=self._node_repository,
                 job_repository=self._job_repository,
+                lease_already_deleted=True,
             )
 
             if not reclaimed:

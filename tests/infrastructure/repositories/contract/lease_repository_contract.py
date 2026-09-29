@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 
 from app.domain.entities.job import Job
@@ -27,7 +29,11 @@ class LeaseRepositoryContract:
             "Subclasses must provide a `repository` fixture."
         )
 
-    def _make_lease(self) -> Lease:
+    def _make_lease(
+        self,
+        *,
+        duration: timedelta = DEFAULT_LEASE_DURATION,
+    ) -> Lease:
         node = Node(
             id=NodeId.new(),
             capacity=ResourceRequirements(
@@ -54,6 +60,7 @@ class LeaseRepositoryContract:
         return Lease.create(
             worker_id=worker.id,
             job_id=job.id,
+            duration=duration,
         )
 
     def test_save_and_get_by_job_id(
@@ -126,6 +133,76 @@ class LeaseRepositoryContract:
             )
             is None
         )
+
+    def test_delete_if_expired_removes_an_expired_lease(
+        self,
+        repository,
+    ) -> None:
+        lease = self._make_lease(
+            duration=timedelta(seconds=-1),
+        )
+
+        repository.save(lease)
+
+        deleted = repository.delete_if_expired(
+            lease.job_id,
+        )
+
+        assert deleted is True
+        assert (
+            repository.get_by_job_id(
+                lease.job_id,
+            )
+            is None
+        )
+
+    def test_delete_if_expired_leaves_a_non_expired_lease_untouched(
+        self,
+        repository,
+    ) -> None:
+        # The actual race this method exists to close: a worker's
+        # background renewal thread extends a lease's expiry between
+        # reconciliation reading a stale, already-expired snapshot
+        # and reconciliation's own delete call. delete_if_expired()
+        # re-checks expiry atomically at delete time, so a lease that
+        # is no longer expired by the time this runs must survive,
+        # even though the caller believed it was expired when it
+        # decided to call this.
+        lease = self._make_lease(
+            duration=timedelta(seconds=-1),
+        )
+
+        repository.save(lease)
+
+        repository.renew(
+            lease.id,
+            DEFAULT_LEASE_DURATION,
+        )
+
+        deleted = repository.delete_if_expired(
+            lease.job_id,
+        )
+
+        assert deleted is False
+        assert (
+            repository.get_by_job_id(
+                lease.job_id,
+            )
+            is not None
+        )
+
+    def test_delete_if_expired_returns_false_when_no_lease_exists(
+        self,
+        repository,
+    ) -> None:
+        # deliberately never saved
+        lease = self._make_lease()
+
+        deleted = repository.delete_if_expired(
+            lease.job_id,
+        )
+
+        assert deleted is False
 
         assert (
             repository.get_by_worker_id(
