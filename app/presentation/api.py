@@ -137,7 +137,9 @@ async def _run_cluster_tick(
         )
 
     try:
-        reconciliation_loop.execute()
+        await asyncio.to_thread(
+            reconciliation_loop.execute,
+        )
     except Exception:
         logger.exception(
             "Unexpected error running reconciliation.",
@@ -163,12 +165,15 @@ async def _run_cluster_loop() -> None:
     and with it every other request this server handles, for
     the job's entire execution.
 
-    ReconciliationLoop.execute() is deliberately left as a
-    direct call, not threaded: it never executes a job's
-    command, and its work (marking dead workers, reclaiming
-    expired leases, recovering offline nodes) is bounded and
-    repository-bound, so moving it would add thread-hop
-    overhead with no corresponding benefit (ADR 0032).
+    ReconciliationLoop.execute() also runs on a worker thread.
+    It never executes a job's command, but every step it takes
+    is a repository call, and a repository call against an
+    unreachable database waits for the connection pool's
+    timeout (30 seconds by default). Called directly, that wait
+    blocks this event loop, and with it every request this
+    server handles, once per tick for as long as the database
+    is down. The earlier "bounded" assumption held only while
+    the database was reachable (amends ADR 0032).
     """
     cluster_tick_service = get_cluster_tick_service()
     reconciliation_loop = get_reconciliation_loop()
@@ -249,6 +254,24 @@ def root() -> dict[str, str]:
     return {
         "message": "Welcome to NeuroMesh API",
     }
+
+
+@app.get("/livez")
+async def liveness() -> dict[str, str]:
+    """
+    Liveness probe: proves only that this process is running
+    and its event loop is scheduling requests.
+
+    Deliberately touches no dependency: not the connection
+    pool, not the database, and not the thread pool (it is a
+    coroutine, so it needs no worker thread). A database
+    outage must never make the process look dead to whatever
+    supervises it; that signal belongs to /health, the
+    readiness check. Being served at all is the proof, so a
+    frozen event loop still fails this probe, which is the
+    failure liveness exists to detect.
+    """
+    return {"status": "alive"}
 
 
 HEALTH_CHECK_TIMEOUT_SECONDS = 2.0
