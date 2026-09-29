@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="#test-coverage"><img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/wycliffRotich-dev/4b35dff5cea5aa68433713c36c3108bb/raw/aethergrid-test-badge.json" alt="Tests"></a>
-  <a href="#engineering-decision-records"><img src="https://img.shields.io/badge/ADRs-49-blueviolet" alt="ADRs"></a>
+  <a href="#engineering-decision-records"><img src="https://img.shields.io/badge/ADRs-50-blueviolet" alt="ADRs"></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
   <a href="#tech-stack"><img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python"></a>
   <a href="#tech-stack"><img src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI"></a>
