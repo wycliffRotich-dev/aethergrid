@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-AetherGrid is an active portfolio project, not a versioned production release. Security fixes are applied to the `main` branch only.
+AetherGrid does not publish versioned releases. Security fixes are applied to the `main` branch only, so deployments should track `main`.
 
 ## Reporting a Vulnerability
 
@@ -18,14 +18,12 @@ Please include:
 
 ## What to Expect
 
-This is a solo-maintained project. There is no formal SLA, but reports
-will be acknowledged and looked at as soon as possible.
+There is no formal SLA, but reports will be acknowledged and looked
+at as soon as possible.
 
-Given the project's current scope, some risk areas carry inherent
-tradeoffs that have been reviewed and deliberately accepted rather
-than overlooked. If your report touches one of these, it is still
-worth reporting, since a real report often reveals something the
-existing review did not account for.
+Reports about any part of the codebase are welcome, including areas
+you suspect were already reviewed. A real report often reveals
+something the existing review did not account for.
 
 ## Scope
 
