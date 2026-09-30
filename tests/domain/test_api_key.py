@@ -65,3 +65,29 @@ def test_mark_used_sets_timestamp():
     api_key.mark_used()
 
     assert api_key.last_used_at is not None
+
+
+def test_issue_defaults_to_no_scopes() -> None:
+    api_key, _ = ApiKey.issue(label="plain")
+
+    assert api_key.scopes == frozenset()
+    assert not api_key.has_scope("jobs:execute")
+
+
+def test_issue_grants_only_the_requested_scopes() -> None:
+    api_key, _ = ApiKey.issue(
+        label="runner",
+        scopes=frozenset({"jobs:execute"}),
+    )
+
+    assert api_key.has_scope("jobs:execute")
+    assert not api_key.has_scope("anything:else")
+
+
+def test_issue_coerces_scopes_to_frozenset() -> None:
+    api_key, _ = ApiKey.issue(
+        label="runner",
+        scopes={"jobs:execute"},  # type: ignore[arg-type]
+    )
+
+    assert isinstance(api_key.scopes, frozenset)

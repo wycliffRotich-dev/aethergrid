@@ -5,6 +5,7 @@ import os
 import pytest
 
 from app.domain.entities.api_key import ApiKey
+from app.domain.value_objects.api_key_scope import JOBS_EXECUTE
 from app.presentation.api import app
 from app.presentation.auth import require_api_key, require_rate_limit
 
@@ -26,8 +27,17 @@ def bypass_api_key_auth():
     Scoped to tests/presentation/ only, by virtue of where this
     file lives -- tests elsewhere still exercise the real auth
     gate.
+
+    The fake caller holds jobs:execute (ADR 0054), so tests
+    that post a job command keep exercising route behavior
+    instead of tripping the scope gate. Scope enforcement
+    itself is tested in test_create_job_scope_api.py, which
+    overrides this with an explicitly unscoped caller.
     """
-    fake_caller, _raw_key = ApiKey.issue(label="test-suite")
+    fake_caller, _raw_key = ApiKey.issue(
+        label="test-suite",
+        scopes=frozenset({JOBS_EXECUTE}),
+    )
     app.dependency_overrides[require_api_key] = lambda: fake_caller
     yield
     app.dependency_overrides.pop(require_api_key, None)

@@ -150,3 +150,30 @@ class ApiKeyRepositoryContract:
             repository.mark_used(
                 ApiKeyId.new(),
             )
+
+    def test_scopes_round_trip_by_id_and_by_hash(
+        self,
+        repository,
+    ) -> None:
+        api_key, _ = ApiKey.issue(
+            label="scoped",
+            scopes=frozenset({"jobs:execute"}),
+        )
+
+        repository.save(api_key)
+
+        by_id = repository.get_by_id(api_key.id)
+        by_hash = repository.get_by_hash(api_key.key_hash)
+
+        assert by_id.scopes == frozenset({"jobs:execute"})
+        assert by_hash.scopes == frozenset({"jobs:execute"})
+
+    def test_key_saved_without_scopes_reloads_with_none(
+        self,
+        repository,
+    ) -> None:
+        api_key, _ = ApiKey.issue(label="plain")
+
+        repository.save(api_key)
+
+        assert repository.get_by_id(api_key.id).scopes == frozenset()

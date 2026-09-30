@@ -98,8 +98,18 @@ CREATE TABLE IF NOT EXISTS api_keys (
     label             TEXT NOT NULL,
     created_at        TIMESTAMPTZ NOT NULL,
     revoked_at        TIMESTAMPTZ,
-    last_used_at      TIMESTAMPTZ
+    last_used_at      TIMESTAMPTZ,
+    scopes            TEXT[] NOT NULL DEFAULT '{}'
 );
+
+-- ADR 0054: a key issued before this column existed defaults to
+-- no scopes, the same safe-by-default posture new keys get at
+-- issuance -- a pre-existing key does not silently inherit
+-- "jobs:execute" or any future scope just because it predates
+-- this column. Whoever needs it re-grants it explicitly, once,
+-- by reissuing.
+ALTER TABLE api_keys
+ADD COLUMN IF NOT EXISTS scopes TEXT[] NOT NULL DEFAULT '{}';
 
 -- get_by_hash() runs on every authenticated request. Without this
 -- index it's a sequential scan per call, the one place in this
