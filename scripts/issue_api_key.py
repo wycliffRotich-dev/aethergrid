@@ -11,13 +11,22 @@ decision, not an oversight.
 
 Usage:
     python scripts/issue_api_key.py "ci-bootstrap"
+    python scripts/issue_api_key.py "runner" --scope jobs:execute
+
+A key is issued with no scopes unless --scope is given (ADR
+0054). The jobs:execute scope is required to set a job's
+command, so grant it deliberately and only to keys that need
+it. Scopes can be granted here, with direct repository
+access, and never over HTTP.
 """
 
 from __future__ import annotations
 
+import argparse
 import os
-import sys
+from collections.abc import Sequence
 
+from app.domain.value_objects.api_key_scope import KNOWN_SCOPES
 from app.presentation.dependencies import get_create_api_key_service
 
 
@@ -50,25 +59,57 @@ def _confirm_not_test_database(database_url: str) -> None:
         )
 
 
-def main() -> None:
-    if len(sys.argv) != 2:
-        print(
-            "Usage: python scripts/issue_api_key.py <label>",
-            file=sys.stderr,
-        )
-        raise SystemExit(1)
+def parse_args(
+    argv: Sequence[str] | None = None,
+) -> tuple[str, frozenset[str]]:
+    """
+    Parse the command line into (label, scopes).
 
-    label = sys.argv[1]
+    --scope is repeatable and restricted to the known scope
+    vocabulary, so a typo fails here with a clear message
+    instead of silently granting nothing. ApiKey.issue()
+    enforces the same rule again, since this parser is only
+    the friendly front door.
+    """
+    parser = argparse.ArgumentParser(
+        description="Issue an API key.",
+    )
+    parser.add_argument(
+        "label",
+        help="human-readable identifier for the caller",
+    )
+    parser.add_argument(
+        "--scope",
+        dest="scopes",
+        action="append",
+        choices=sorted(KNOWN_SCOPES),
+        metavar="SCOPE",
+        help=(
+            "grant a scope; repeatable. Known scopes: "
+            + ", ".join(sorted(KNOWN_SCOPES))
+            + ". Default: no scopes."
+        ),
+    )
+
+    args = parser.parse_args(argv)
+
+    return args.label, frozenset(args.scopes or [])
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    label, scopes = parse_args(argv)
 
     database_url = os.getenv("NEUROMESH_DATABASE_URL")
     if database_url is not None:
         _confirm_not_test_database(database_url)
 
     service = get_create_api_key_service()
-    issued = service.execute(label=label)
+    issued = service.execute(label=label, scopes=scopes)
 
     print(f"Issued API key for '{issued.label}':")
     print(issued.plaintext_key)
+    print()
+    print(f"Scopes: {', '.join(sorted(issued.scopes)) or 'none'}")
     print()
     print(
         "Store this now. It cannot be retrieved again, "

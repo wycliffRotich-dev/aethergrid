@@ -13,7 +13,8 @@ class CreateJobRequest(BaseModel):
     """
     Optional argv-style command for this job to execute,
     e.g. ["python", "train.py", "--epochs", "5"]. See
-    ADR 0028. Never a raw shell string.
+    ADR 0028. Never a raw shell string. Requires the
+    jobs:execute scope on the calling key (ADR 0054).
     """
 
     @field_validator("command")

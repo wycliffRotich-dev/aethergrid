@@ -22,11 +22,16 @@ class IssuedApiKey:
     id: ApiKeyId
     label: str
     plaintext_key: str
+    scopes: frozenset[str] = frozenset()
 
 
 class CreateApiKeyService:
     """
     Issues a new API key and persists it.
+
+    scopes defaults to empty (ADR 0054). Unknown scopes are
+    rejected by ApiKey.issue(), so nothing is persisted for a
+    mistyped scope.
     """
 
     def __init__(
@@ -38,9 +43,11 @@ class CreateApiKeyService:
     def execute(
         self,
         label: str,
+        scopes: frozenset[str] = frozenset(),
     ) -> IssuedApiKey:
         api_key, raw_key = ApiKey.issue(
             label=label,
+            scopes=scopes,
         )
 
         self._api_key_repository.save(
@@ -51,4 +58,5 @@ class CreateApiKeyService:
             id=api_key.id,
             label=api_key.label,
             plaintext_key=raw_key,
+            scopes=api_key.scopes,
         )

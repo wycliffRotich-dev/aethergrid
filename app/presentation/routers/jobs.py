@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 from uuid import UUID
 
@@ -24,11 +25,16 @@ from app.application.services.list_queued_jobs_service import (
 from app.application.services.retry_job_service import (
     RetryJobService,
 )
+from app.domain.entities.api_key import ApiKey
 from app.domain.exceptions.invalid_job_transition import (
     InvalidJobTransition,
 )
 from app.domain.exceptions.job_not_found_error import (
     JobNotFoundError,
+)
+from app.domain.exceptions.scope_denied_error import ScopeDeniedError
+from app.domain.services.job_authorization import (
+    authorize_job_creation,
 )
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.resource_requirements import (
@@ -65,6 +71,9 @@ from app.presentation.schemas.list_jobs_response import (
     ListJobsResponse,
 )
 
+logger = logging.getLogger(__name__)
+
+
 router = APIRouter(
     prefix="/jobs",
     tags=["Jobs"],
@@ -79,9 +88,21 @@ router = APIRouter(
     "",
     response_model=CreateJobResponse,
     status_code=status.HTTP_201_CREATED,
+    responses={
+        status.HTTP_403_FORBIDDEN: {
+            "description": (
+                "command was set but the API key lacks the "
+                "jobs:execute scope (ADR 0054)."
+            ),
+        },
+    },
 )
 def create_job(
     request: CreateJobRequest,
+    caller: Annotated[
+        ApiKey,
+        Depends(require_api_key),
+    ],
     service: Annotated[
         CreateJobService,
         Depends(get_create_job_service),
@@ -89,7 +110,28 @@ def create_job(
 ) -> CreateJobResponse:
     """
     Create a new job.
+
+    Setting command requires the jobs:execute scope on the
+    calling key (ADR 0054). A key without it can still
+    create resource-only jobs.
     """
+    try:
+        authorize_job_creation(
+            caller.scopes,
+            request.command,
+        )
+    except ScopeDeniedError as exc:
+        logger.warning(
+            "job creation denied: caller_id=%s "
+            "missing_scope=%s route=POST /jobs",
+            caller.id,
+            exc.scope,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+
     resources = ResourceRequirements(
         cpu_cores=request.cpu_cores,
         memory_mib=request.memory_mib,

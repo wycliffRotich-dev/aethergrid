@@ -10,6 +10,9 @@ from app.domain.exceptions.api_key_already_revoked_error import (
     ApiKeyAlreadyRevokedError,
 )
 from app.domain.value_objects.api_key_id import ApiKeyId
+from app.domain.value_objects.api_key_scope import (
+    validate_scopes,
+)
 
 
 @dataclass(slots=True)
@@ -35,6 +38,21 @@ class ApiKey:
 
     last_used_at: datetime | None = None
 
+    scopes: frozenset[str] = frozenset()
+    """
+    Capabilities this key is explicitly granted, beyond the
+    baseline every valid key already has (create/read/manage
+    jobs, workers, nodes with no arbitrary command execution).
+
+    Empty by default: a key can do everything the single-tier
+    model already allowed before this field existed, minus
+    anything gated behind an explicit scope. New capabilities
+    that widen blast radius (starting with "jobs:execute",
+    see ADR 0054) must be explicitly granted at issuance, not
+    inherited implicitly by every key the way ADR 0028's
+    single-tier model worked.
+    """
+
     @staticmethod
     def hash_secret(raw_key: str) -> str:
         """
@@ -54,7 +72,11 @@ class ApiKey:
         ).hexdigest()
 
     @classmethod
-    def issue(cls, label: str) -> tuple[ApiKey, str]:
+    def issue(
+        cls,
+        label: str,
+        scopes: frozenset[str] = frozenset(),
+    ) -> tuple[ApiKey, str]:
         """
         Create a new API key.
 
@@ -63,12 +85,20 @@ class ApiKey:
         same convention GitHub and Stripe use for their
         tokens. It cannot be recovered later, only revoked and
         reissued.
+
+        scopes defaults to empty (ADR 0054): a new key must be
+        deliberately granted any capability that widens blast
+        radius, such as "jobs:execute", rather than receiving
+        it implicitly the way every key did under the single-
+        tier model this replaces.
         """
         if not label or not label.strip():
             raise ValueError(
                 "label must be a non-empty, human-readable "
                 "identifier for the caller"
             )
+
+        validated_scopes = validate_scopes(scopes)
 
         raw_key = secrets.token_urlsafe(32)
 
@@ -77,12 +107,16 @@ class ApiKey:
             key_hash=cls.hash_secret(raw_key),
             label=label.strip(),
             created_at=utc_now(),
+            scopes=validated_scopes,
         )
 
         return api_key, raw_key
 
     def is_active(self) -> bool:
         return self.revoked_at is None
+
+    def has_scope(self, scope: str) -> bool:
+        return scope in self.scopes
 
     def revoke(self) -> None:
         if self.revoked_at is not None:
