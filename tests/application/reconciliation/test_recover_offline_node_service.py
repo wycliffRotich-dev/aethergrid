@@ -13,6 +13,8 @@ from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
 from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
+from app.domain.enums.job_status import JobStatus
+from app.domain.enums.worker_status import WorkerStatus
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
@@ -218,20 +220,24 @@ def test_recover_offline_node_records_job_reclaimed_event() -> None:
     assert recorded[0].aggregate_type == "Job"
 
 
-def test_recover_offline_node_deletes_lease_so_job_can_be_reacquired() -> (
+def test_recover_offline_node_skips_a_job_whose_lease_is_still_valid() -> (
     None
 ):
     """
-    Proves the fix for a real gap: RecoverOfflineNodeService now
-    deletes the job's lease row before reclaiming it, mirroring
-    RecoverExpiredLeaseService's exact pattern, so a job
-    recovered through this path can be legitimately rescheduled
-    again. Before this fix, the stale lease survived reclaim,
-    and AcquireLeaseService.execute() would refuse to create a
-    new lease for the "recovered" job, forever, since
-    get_by_job_id() would still find the old one -- verified by
-    a version of this test that passed against the unpatched
-    code, proving the strand actually happened.
+    ADR 0052 follow-up (issue #267): node heartbeat and lease
+    renewal are independent signals -- a worker's lease-renewal
+    thread and its node's heartbeat run on separate schedules,
+    in both WorkerExecutionLoop and the standalone agent, with
+    no coupling between them. A node can be judged offline on a
+    missed heartbeat while that same worker's lease is still
+    being actively, successfully renewed.
+
+    Simulates exactly that: the node is offline, but the job's
+    lease is still valid (not expired). The job must be left
+    entirely untouched -- still RUNNING, not requeued, retry
+    count unchanged, worker not recovered -- since reclaiming it
+    would steal a live lease out from under a worker doing real,
+    ongoing work.
     """
     node = _make_offline_node()
 
@@ -261,6 +267,93 @@ def test_recover_offline_node_deletes_lease_so_job_can_be_reacquired() -> (
     lease = Lease.create(
         worker_id=worker.id,
         job_id=job.id,
+    )
+
+    lease_repository = InMemoryLeaseRepository()
+    lease_repository.save(lease)
+
+    node_repository = InMemoryNodeRepository([node])
+    worker_repository = InMemoryWorkerRepository([worker])
+    job_repository = InMemoryJobRepository([job])
+
+    service = RecoverOfflineNodeService(
+        node_repository=node_repository,
+        worker_repository=worker_repository,
+        job_repository=job_repository,
+        lease_repository=lease_repository,
+    )
+
+    service.execute()
+
+    recovered_worker = worker_repository.get_by_id(worker.id)
+    recovered_job = job_repository.get_by_id(job.id)
+
+    assert recovered_worker is not None
+    assert recovered_worker.status is WorkerStatus.BUSY
+
+    assert recovered_job is not None
+    assert recovered_job.status is JobStatus.RUNNING
+    assert recovered_job.retry_count == 0
+
+    survived_lease = lease_repository.get_by_job_id(job.id)
+    assert survived_lease is not None
+    assert survived_lease.id == lease.id
+    assert not survived_lease.is_expired()
+
+
+def test_recover_offline_node_deletes_lease_so_job_can_be_reacquired() -> (
+    None
+):
+    """
+    Proves the fix for a real gap: RecoverOfflineNodeService now
+    deletes the job's lease row before reclaiming it, mirroring
+    RecoverExpiredLeaseService's exact pattern, so a job
+    recovered through this path can be legitimately rescheduled
+    again. Before this fix, the stale lease survived reclaim,
+    and AcquireLeaseService.execute() would refuse to create a
+    new lease for the "recovered" job, forever, since
+    get_by_job_id() would still find the old one -- verified by
+    a version of this test that passed against the unpatched
+    code, proving the strand actually happened.
+
+    The lease here is deliberately expired (ADR 0052 follow-up,
+    issue #267): since RecoverOfflineNodeService now checks the
+    lease's own validity before reclaiming, a non-expired lease
+    would be correctly left untouched instead of exercising the
+    delete-then-reclaim path this test exists to prove. See
+    test_recover_offline_node_skips_a_job_whose_lease_is_still_valid
+    for the still-valid-lease case this scenario is deliberately
+    not testing.
+    """
+    node = _make_offline_node()
+
+    worker = Worker(
+        id=WorkerId.new(),
+        node=node,
+    )
+
+    worker.ready()
+
+    job = Job(
+        id=JobId.new(),
+        resources=ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=512,
+            vram_mib=0,
+        ),
+        max_retries=1,
+    )
+
+    job.queue()
+    job.assign_to(node.id)
+
+    worker.accept(job)
+    worker.start()
+
+    lease = Lease.create(
+        worker_id=worker.id,
+        job_id=job.id,
+        duration=timedelta(seconds=-1),
     )
 
     lease_repository = InMemoryLeaseRepository()
