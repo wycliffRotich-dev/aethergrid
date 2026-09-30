@@ -40,6 +40,21 @@ class RecoverOfflineNodeService:
     was independently rediscovered here, the same way the
     RUNNING-persistence gap (ADR 0033) was found twice in
     separate execution paths before being fixed at the root.
+
+    Node heartbeat and lease renewal are independent signals
+    (ADR 0052 follow-up, issue #267): a worker's lease-renewal
+    thread and its node's heartbeat run on separate schedules,
+    in both WorkerExecutionLoop and the standalone agent, with
+    no coupling between them. A node can go offline on a
+    missed heartbeat while its worker's lease is still being
+    actively, successfully renewed. Reclaiming unconditionally
+    on node liveness alone would steal that live lease out
+    from under a worker doing real, ongoing work. This service
+    now checks the job's own lease before reclaiming: no lease
+    or an actually-expired one proceeds as before; a lease
+    that is still valid is left untouched, and the worker is
+    not marked recovered, since it may still be legitimately
+    executing.
     """
 
     def __init__(
@@ -86,6 +101,37 @@ class RecoverOfflineNodeService:
             if job is None:
                 continue
 
+            lease = self._lease_repository.get_by_job_id(
+                job.id,
+            )
+
+            lease_already_deleted = False
+
+            if lease is not None:
+                if not lease.is_expired():
+                    # The node's heartbeat lapsed, but this
+                    # worker's lease is still being actively
+                    # renewed -- it is still legitimately doing
+                    # work. Reclaiming here would steal a live
+                    # lease out from under its current owner,
+                    # the same race ADR 0052 closed for expired
+                    # leases. Leave the worker's status alone
+                    # too: it may still be OFFLINE-but-working,
+                    # not actually abandoned.
+                    continue
+
+                deleted = self._lease_repository.delete_if_expired(
+                    job.id,
+                )
+
+                if not deleted:
+                    # Renewed between the check above and this
+                    # delete -- same race, caught at the last
+                    # possible moment instead of the first.
+                    continue
+
+                lease_already_deleted = True
+
             node = worker.node
 
             worker.recover()
@@ -100,6 +146,7 @@ class RecoverOfflineNodeService:
                 lease_repository=self._lease_repository,
                 node_repository=self._node_repository,
                 job_repository=self._job_repository,
+                lease_already_deleted=lease_already_deleted,
             )
 
             if (
