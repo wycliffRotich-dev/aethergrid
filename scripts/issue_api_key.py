@@ -18,6 +18,14 @@ A key is issued with no scopes unless --scope is given (ADR
 command, so grant it deliberately and only to keys that need
 it. Scopes can be granted here, with direct repository
 access, and never over HTTP.
+
+A key issued here has no recorded issuer (ADR 0056): this
+script runs with direct repository access and no
+authenticated caller, so there is no key to record as the
+one that issued it. Only a key issued through POST /api-keys
+records an issuer, letting that issuer later revoke it
+without needing keys:manage. A key issued by this script can
+only ever be revoked by a caller holding keys:manage.
 """
 
 from __future__ import annotations
