@@ -53,6 +53,22 @@ class ApiKey:
     single-tier model worked.
     """
 
+    issued_by: ApiKeyId | None = None
+    """
+    The key that issued this one, if any (ADR 0056).
+
+    None for every key issued before this field existed, and
+    for every key issued by scripts/issue_api_key.py, the
+    bootstrap path that runs with direct repository access
+    rather than an authenticated caller. A key with issued_by
+    set can be revoked by the key named here, in addition to
+    any key holding keys:manage. A key cannot be its own
+    issuer: issuance always requires an already-existing,
+    already-authenticated caller distinct from the key being
+    created, so no key can ever name itself here, by
+    construction, not by a runtime check.
+    """
+
     @staticmethod
     def hash_secret(raw_key: str) -> str:
         """
@@ -76,6 +92,7 @@ class ApiKey:
         cls,
         label: str,
         scopes: frozenset[str] = frozenset(),
+        issued_by: ApiKeyId | None = None,
     ) -> tuple[ApiKey, str]:
         """
         Create a new API key.
@@ -91,6 +108,14 @@ class ApiKey:
         radius, such as "jobs:execute", rather than receiving
         it implicitly the way every key did under the single-
         tier model this replaces.
+
+        issued_by defaults to None (ADR 0056): a key issued by
+        scripts/issue_api_key.py, run with direct repository
+        access and no authenticated caller, has no owner.
+        Passing the id of the authenticated caller that
+        requested issuance over HTTP records that key as this
+        one's owner, letting it later revoke exactly this key
+        without needing keys:manage.
         """
         if not label or not label.strip():
             raise ValueError(
@@ -108,6 +133,7 @@ class ApiKey:
             label=label.strip(),
             created_at=utc_now(),
             scopes=validated_scopes,
+            issued_by=issued_by,
         )
 
         return api_key, raw_key

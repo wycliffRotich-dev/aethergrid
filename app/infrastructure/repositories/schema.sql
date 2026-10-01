@@ -117,3 +117,14 @@ ADD COLUMN IF NOT EXISTS scopes TEXT[] NOT NULL DEFAULT '{}';
 -- just a slow report query.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_key_hash
 ON api_keys (key_hash);
+
+-- ADR 0056: a key issued before this column existed, or
+-- issued by scripts/issue_api_key.py's bootstrap path, has
+-- no recorded issuer. NULL here, not some fabricated
+-- default, since there is no real issuer to record for
+-- those keys. ON DELETE SET NULL rather than CASCADE: an
+-- issuer being revoked or later deleted must never revoke
+-- or delete the keys it issued as a side effect.
+ALTER TABLE api_keys
+ADD COLUMN IF NOT EXISTS issued_by UUID
+REFERENCES api_keys(id) ON DELETE SET NULL;
