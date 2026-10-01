@@ -11,7 +11,12 @@ JOBS_EXECUTE = "jobs:execute"
 Required to set Job.command when creating a job (ADR 0054).
 """
 
-KNOWN_SCOPES: frozenset[str] = frozenset({JOBS_EXECUTE})
+KEYS_MANAGE = "keys:manage"
+"""
+Required to issue or revoke API keys (ADR 0055).
+"""
+
+KNOWN_SCOPES: frozenset[str] = frozenset({JOBS_EXECUTE, KEYS_MANAGE})
 
 
 def validate_scopes(scopes: Iterable[str]) -> frozenset[str]:
