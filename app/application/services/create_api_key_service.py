@@ -44,10 +44,21 @@ class CreateApiKeyService:
         self,
         label: str,
         scopes: frozenset[str] = frozenset(),
+        issued_by: ApiKeyId | None = None,
     ) -> IssuedApiKey:
+        """
+        issued_by defaults to None (ADR 0056): the bootstrap
+        script, scripts/issue_api_key.py, calls this with no
+        authenticated caller and so issues ownerless keys, the
+        same as every key issued before this field existed.
+        The route handler for POST /api-keys passes its
+        authenticated caller's id here instead, recording that
+        caller as the new key's owner.
+        """
         api_key, raw_key = ApiKey.issue(
             label=label,
             scopes=scopes,
+            issued_by=issued_by,
         )
 
         self._api_key_repository.save(
