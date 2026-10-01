@@ -164,10 +164,10 @@ cd aethergrid
 docker compose up --build
 ```
 
-This starts the API and a Postgres instance. Issue yourself a key before calling anything, every route requires one:
+This starts the API and a Postgres instance. Issue yourself a key before calling anything, every route requires one. Grant both scopes so nothing is gated during local development (ADR 0054, ADR 0055):
 
 ```bash
-python scripts/issue_api_key.py "local-dev"
+python scripts/issue_api_key.py "local-dev" --scope jobs:execute --scope keys:manage
 ```
 
 Run the frontend separately:
