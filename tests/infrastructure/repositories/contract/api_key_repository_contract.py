@@ -177,3 +177,31 @@ class ApiKeyRepositoryContract:
         repository.save(api_key)
 
         assert repository.get_by_id(api_key.id).scopes == frozenset()
+
+    def test_issued_by_round_trips_by_id(
+        self,
+        repository,
+    ) -> None:
+        issuer = self._make_api_key()
+        repository.save(issuer)
+
+        issued, _ = ApiKey.issue(
+            label="sub-key",
+            issued_by=issuer.id,
+        )
+        repository.save(issued)
+
+        fetched = repository.get_by_id(issued.id)
+
+        assert fetched is not None
+        assert fetched.issued_by == issuer.id
+
+    def test_key_saved_without_issued_by_reloads_with_none(
+        self,
+        repository,
+    ) -> None:
+        api_key = self._make_api_key()
+
+        repository.save(api_key)
+
+        assert repository.get_by_id(api_key.id).issued_by is None

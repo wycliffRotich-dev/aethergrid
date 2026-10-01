@@ -74,6 +74,9 @@ def create_api_key(
     once, in this response.
 
     Requires the calling key to hold keys:manage (ADR 0055).
+    The issued key records the caller as its issuer (ADR
+    0056), letting the caller later revoke it without needing
+    keys:manage itself.
     """
     try:
         authorize_key_management(caller.scopes)
@@ -91,6 +94,7 @@ def create_api_key(
 
     issued = service.execute(
         label=request.label,
+        issued_by=caller.id,
     )
 
     return CreateApiKeyResponse(
@@ -106,7 +110,8 @@ def create_api_key(
     responses={
         status.HTTP_403_FORBIDDEN: {
             "description": (
-                "caller lacks the keys:manage scope (ADR 0055)."
+                "caller lacks keys:manage and did not issue "
+                "this key (ADR 0056)."
             ),
         },
     },
@@ -125,12 +130,27 @@ def revoke_api_key(
     """
     Revoke an existing API key.
 
-    Requires the calling key to hold keys:manage (ADR 0055).
+    Allowed for a caller holding keys:manage, or for the key
+    that issued this one (ADR 0056). The decision needs the
+    target's issued_by, so it is made inside the service,
+    after the target is loaded, rather than at the route
+    the way every other scope gate in this codebase works.
+
     Revoking an already-revoked key still succeeds silently,
     the same 204 as revoking an active one.
     """
     try:
-        authorize_key_management(caller.scopes)
+        service.execute(
+            ApiKeyId(
+                value=UUID(api_key_id),
+            ),
+            caller=caller,
+        )
+    except ApiKeyNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
     except ScopeDeniedError as exc:
         logger.warning(
             "key revocation denied: caller_id=%s "
@@ -141,17 +161,5 @@ def revoke_api_key(
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(exc),
-        ) from exc
-
-    try:
-        service.execute(
-            ApiKeyId(
-                value=UUID(api_key_id),
-            ),
-        )
-    except ApiKeyNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc

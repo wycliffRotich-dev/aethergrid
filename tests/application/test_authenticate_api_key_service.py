@@ -51,7 +51,14 @@ def test_rejects_revoked_key(repository):
         label="ci-runner",
     )
 
-    RevokeApiKeyService(repository).execute(issued.id)
+    from app.domain.entities.api_key import ApiKey
+    from app.domain.value_objects.api_key_scope import KEYS_MANAGE
+
+    admin, _ = ApiKey.issue(
+        label="admin",
+        scopes=frozenset({KEYS_MANAGE}),
+    )
+    RevokeApiKeyService(repository).execute(issued.id, caller=admin)
 
     with pytest.raises(InvalidApiKeyError):
         AuthenticateApiKeyService(repository).execute(

@@ -30,10 +30,11 @@ class PostgresApiKeyRepository(ApiKeyRepository):
                 """
                 INSERT INTO api_keys (
                     id, key_hash, label, created_at,
-                    revoked_at, last_used_at, scopes
+                    revoked_at, last_used_at, scopes, issued_by
                 ) VALUES (
                     %(id)s, %(key_hash)s, %(label)s, %(created_at)s,
-                    %(revoked_at)s, %(last_used_at)s, %(scopes)s
+                    %(revoked_at)s, %(last_used_at)s, %(scopes)s,
+                    %(issued_by)s
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     revoked_at = EXCLUDED.revoked_at,
@@ -48,6 +49,11 @@ class PostgresApiKeyRepository(ApiKeyRepository):
                     "revoked_at": api_key.revoked_at,
                     "last_used_at": api_key.last_used_at,
                     "scopes": list(api_key.scopes),
+                    "issued_by": (
+                        str(api_key.issued_by)
+                        if api_key.issued_by is not None
+                        else None
+                    ),
                 },
             )
 
@@ -109,4 +115,9 @@ class PostgresApiKeyRepository(ApiKeyRepository):
             revoked_at=row["revoked_at"],
             last_used_at=row["last_used_at"],
             scopes=frozenset(row.get("scopes") or []),
+            issued_by=(
+                ApiKeyId(row["issued_by"])
+                if row.get("issued_by") is not None
+                else None
+            ),
         )
