@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 from uuid import UUID
 
@@ -9,8 +10,13 @@ from app.application.services.create_api_key_service import (
 from app.application.services.revoke_api_key_service import (
     RevokeApiKeyService,
 )
+from app.domain.entities.api_key import ApiKey
 from app.domain.exceptions.api_key_not_found_error import (
     ApiKeyNotFoundError,
+)
+from app.domain.exceptions.scope_denied_error import ScopeDeniedError
+from app.domain.services.key_authorization import (
+    authorize_key_management,
 )
 from app.domain.value_objects.api_key_id import ApiKeyId
 from app.presentation.auth import (
@@ -28,20 +34,11 @@ from app.presentation.schemas.create_api_key_response import (
     CreateApiKeyResponse,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(
     prefix="/api-keys",
     tags=["ApiKeys"],
-    # Every route in this router requires an already-valid key.
-    # There is no unauthenticated way to mint a key over HTTP --
-    # deliberately, since an open POST /api-keys would let
-    # anyone issue themselves a credential before any auth
-    # exists at all. The very first key has to come from
-    # scripts/issue_api_key.py, run locally with direct
-    # repository access, never over the network.
-    #
-    # Rate limited too (ADR 0021): an already-valid key that
-    # issues or revokes other keys in a tight loop is still a
-    # caller worth throttling, the same as any other route.
     dependencies=[
         Depends(require_api_key),
         Depends(require_rate_limit),
@@ -53,9 +50,20 @@ router = APIRouter(
     "",
     response_model=CreateApiKeyResponse,
     status_code=status.HTTP_201_CREATED,
+    responses={
+        status.HTTP_403_FORBIDDEN: {
+            "description": (
+                "caller lacks the keys:manage scope (ADR 0055)."
+            ),
+        },
+    },
 )
 def create_api_key(
     request: CreateApiKeyRequest,
+    caller: Annotated[
+        ApiKey,
+        Depends(require_api_key),
+    ],
     service: Annotated[
         CreateApiKeyService,
         Depends(get_create_api_key_service),
@@ -65,11 +73,22 @@ def create_api_key(
     Issue a new API key. The plaintext key is returned exactly
     once, in this response.
 
-    Requires an existing valid key -- this is how a trusted
-    caller provisions credentials for another caller (a new
-    worker, a new integration), not how the system bootstraps
-    its first credential.
+    Requires the calling key to hold keys:manage (ADR 0055).
     """
+    try:
+        authorize_key_management(caller.scopes)
+    except ScopeDeniedError as exc:
+        logger.warning(
+            "key issuance denied: caller_id=%s "
+            "missing_scope=%s route=POST /api-keys",
+            caller.id,
+            exc.scope,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+
     issued = service.execute(
         label=request.label,
     )
@@ -84,9 +103,20 @@ def create_api_key(
 @router.post(
     "/{api_key_id}/revoke",
     status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        status.HTTP_403_FORBIDDEN: {
+            "description": (
+                "caller lacks the keys:manage scope (ADR 0055)."
+            ),
+        },
+    },
 )
 def revoke_api_key(
     api_key_id: str,
+    caller: Annotated[
+        ApiKey,
+        Depends(require_api_key),
+    ],
     service: Annotated[
         RevokeApiKeyService,
         Depends(get_revoke_api_key_service),
@@ -95,10 +125,25 @@ def revoke_api_key(
     """
     Revoke an existing API key.
 
-    Revoking an already-revoked key succeeds silently, the
-    same 204 as revoking an active one -- the caller's desired
-    end state (key is dead) already holds either way.
+    Requires the calling key to hold keys:manage (ADR 0055).
+    Revoking an already-revoked key still succeeds silently,
+    the same 204 as revoking an active one.
     """
+    try:
+        authorize_key_management(caller.scopes)
+    except ScopeDeniedError as exc:
+        logger.warning(
+            "key revocation denied: caller_id=%s "
+            "missing_scope=%s route=POST /api-keys/%s/revoke",
+            caller.id,
+            exc.scope,
+            api_key_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+
     try:
         service.execute(
             ApiKeyId(
