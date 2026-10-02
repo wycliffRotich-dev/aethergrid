@@ -1,0 +1,46 @@
+name: Frontend dependency audit
+
+on:
+  pull_request:
+    paths:
+      - frontend/package.json
+      - frontend/package-lock.json
+      - .github/workflows/frontend-audit.yml
+  push:
+    branches: [main]
+    paths:
+      - frontend/package.json
+      - frontend/package-lock.json
+  schedule:
+    - cron: "17 5 * * 1"   # Mondays 05:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  npm-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install from lockfile
+        run: npm ci --ignore-scripts
+
+      - name: Gate on production dependencies (high and above)
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Report on all dependencies (informational)
+        if: always()
+        continue-on-error: true
+        run: npm audit
