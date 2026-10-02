@@ -79,6 +79,9 @@ from app.application.services.job_execution_service import (
 from app.application.services.list_events_service import (
     ListEventsService,
 )
+from app.application.services.list_issued_api_keys_service import (
+    ListIssuedApiKeysService,
+)
 from app.application.services.list_jobs_service import (
     ListJobsService,
 )
@@ -795,6 +798,16 @@ def get_revoke_api_key_service() -> RevokeApiKeyService:
     """
 
     return RevokeApiKeyService(
+        api_key_repository=_api_key_repository,
+    )
+
+
+def get_list_issued_api_keys_service() -> ListIssuedApiKeysService:
+    """
+    Return ListIssuedApiKeysService.
+    """
+
+    return ListIssuedApiKeysService(
         api_key_repository=_api_key_repository,
     )
 

@@ -6,6 +6,7 @@ from app.domain.exceptions.scope_denied_error import ScopeDeniedError
 from app.domain.services.key_authorization import (
     authorize_key_management,
     authorize_key_revocation,
+    authorize_key_view,
 )
 from app.domain.value_objects.api_key_id import ApiKeyId
 from app.domain.value_objects.api_key_scope import KEYS_MANAGE
@@ -122,3 +123,51 @@ def test_revocation_rejects_an_id_that_merely_looks_like_the_owner() -> None:
         caller_id=caller_id,
         target_issued_by=target_issued_by,
     )
+
+
+# -- authorize_key_view (ADR 0056 follow-up) --
+
+
+def test_view_allows_keys_manage_on_someone_elses_issued_list() -> None:
+    caller_id = ApiKeyId.new()
+    someone_elses_id = ApiKeyId.new()
+
+    authorize_key_view(
+        caller_scopes={KEYS_MANAGE},
+        caller_id=caller_id,
+        requested_issuer_id=someone_elses_id,
+    )
+
+
+def test_view_allows_a_caller_viewing_its_own_issued_list() -> None:
+    caller_id = ApiKeyId.new()
+
+    # No keys:manage at all. A key can always see what it
+    # itself has issued.
+    authorize_key_view(
+        caller_scopes=frozenset(),
+        caller_id=caller_id,
+        requested_issuer_id=caller_id,
+    )
+
+
+def test_view_denies_a_caller_viewing_someone_elses_issued_list() -> None:
+    with pytest.raises(ScopeDeniedError) as exc_info:
+        authorize_key_view(
+            caller_scopes=frozenset(),
+            caller_id=ApiKeyId.new(),
+            requested_issuer_id=ApiKeyId.new(),
+        )
+
+    assert exc_info.value.scope == KEYS_MANAGE
+
+
+def test_view_denies_a_caller_with_unrelated_scopes_on_someone_elses_list() -> (
+    None
+):
+    with pytest.raises(ScopeDeniedError):
+        authorize_key_view(
+            caller_scopes={"jobs:execute"},
+            caller_id=ApiKeyId.new(),
+            requested_issuer_id=ApiKeyId.new(),
+        )

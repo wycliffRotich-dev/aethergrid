@@ -69,3 +69,13 @@ class InMemoryApiKeyRepository(
             for api_key in self._api_keys.values()
             if api_key.is_active()
         ]
+
+    def list_issued_by(
+        self,
+        issuer_id: ApiKeyId,
+    ) -> list[ApiKey]:
+        return [
+            api_key
+            for api_key in self._api_keys.values()
+            if api_key.issued_by == issuer_id
+        ]
