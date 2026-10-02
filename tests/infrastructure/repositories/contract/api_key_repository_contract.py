@@ -205,3 +205,58 @@ class ApiKeyRepositoryContract:
         repository.save(api_key)
 
         assert repository.get_by_id(api_key.id).issued_by is None
+
+    def test_list_issued_by_returns_keys_with_matching_issuer(
+        self,
+        repository,
+    ) -> None:
+        issuer = self._make_api_key()
+        repository.save(issuer)
+
+        child_one, _ = ApiKey.issue(
+            label="child-one", issued_by=issuer.id
+        )
+        child_two, _ = ApiKey.issue(
+            label="child-two", issued_by=issuer.id
+        )
+        unrelated = self._make_api_key()
+        repository.save(child_one)
+        repository.save(child_two)
+        repository.save(unrelated)
+
+        issued_ids = {
+            api_key.id
+            for api_key in repository.list_issued_by(issuer.id)
+        }
+
+        assert issued_ids == {child_one.id, child_two.id}
+        assert unrelated.id not in issued_ids
+
+    def test_list_issued_by_includes_revoked_keys(
+        self,
+        repository,
+    ) -> None:
+        issuer = self._make_api_key()
+        repository.save(issuer)
+
+        child, _ = ApiKey.issue(
+            label="revoked-child", issued_by=issuer.id
+        )
+        child.revoke()
+        repository.save(child)
+
+        issued_ids = {
+            api_key.id
+            for api_key in repository.list_issued_by(issuer.id)
+        }
+
+        assert child.id in issued_ids
+
+    def test_list_issued_by_returns_empty_for_a_key_with_no_children(
+        self,
+        repository,
+    ) -> None:
+        issuer = self._make_api_key()
+        repository.save(issuer)
+
+        assert repository.list_issued_by(issuer.id) == []

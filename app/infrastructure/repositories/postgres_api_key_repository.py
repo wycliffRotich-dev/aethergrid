@@ -105,6 +105,15 @@ class PostgresApiKeyRepository(ApiKeyRepository):
             ).fetchall()
         return [self._to_entity(row) for row in rows]
 
+    def list_issued_by(self, issuer_id: ApiKeyId) -> list[ApiKey]:
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            rows = conn.execute(
+                "SELECT * FROM api_keys WHERE issued_by = %s",
+                (str(issuer_id),),
+            ).fetchall()
+        return [self._to_entity(row) for row in rows]
+
     @staticmethod
     def _to_entity(row: dict) -> ApiKey:
         return ApiKey(

@@ -128,3 +128,10 @@ ON api_keys (key_hash);
 ALTER TABLE api_keys
 ADD COLUMN IF NOT EXISTS issued_by UUID
 REFERENCES api_keys(id) ON DELETE SET NULL;
+
+-- list_issued_by() filters on this column (ADR 0056
+-- follow-up). Without an index this is a sequential scan
+-- per call, the same reasoning idx_api_keys_key_hash
+-- already documents for get_by_hash().
+CREATE INDEX IF NOT EXISTS idx_api_keys_issued_by
+ON api_keys (issued_by);

@@ -6,6 +6,7 @@ import logging
 from fastapi.testclient import TestClient
 
 from app.domain.entities.api_key import ApiKey
+from app.domain.value_objects.api_key_id import ApiKeyId
 from app.domain.value_objects.api_key_scope import KEYS_MANAGE
 from app.presentation.api import app
 from app.presentation.auth import require_api_key
@@ -172,3 +173,105 @@ def test_non_owner_cannot_revoke_a_legacy_key_with_no_issuer() -> None:
     response = client.post(f"/api-keys/{legacy_key.id}/revoke")
 
     assert response.status_code == 403
+
+
+def test_caller_can_list_keys_it_issued_without_keys_manage() -> None:
+    owner, _ = ApiKey.issue(
+        label="owner",
+        scopes=frozenset({KEYS_MANAGE}),
+    )
+    _api_key_repository.save(owner)
+    client = _act_as(owner)
+
+    issue_response = client.post(
+        "/api-keys", json={"label": "child-one"}
+    )
+    assert issue_response.status_code == 201
+    child_id = issue_response.json()["id"]
+
+    # Re-authenticate as the same identity with no scopes,
+    # proving the list call succeeds on self-view alone.
+    owner_without_scope = dataclasses.replace(
+        owner, scopes=frozenset()
+    )
+    client = _act_as(owner_without_scope)
+
+    response = client.get(f"/api-keys/{owner.id}/issued")
+
+    assert response.status_code == 200
+    issued_ids = {entry["id"] for entry in response.json()["issued"]}
+    assert child_id in issued_ids
+
+
+def test_keys_manage_can_list_someone_elses_issued_keys() -> None:
+    owner, _ = ApiKey.issue(label="owner")
+    _api_key_repository.save(owner)
+    client = _act_as(owner)
+    # owner itself has no keys:manage, so it cannot issue over
+    # HTTP; seed its child directly instead.
+    child, _ = ApiKey.issue(label="child", issued_by=owner.id)
+    _api_key_repository.save(child)
+
+    admin, _ = ApiKey.issue(
+        label="admin",
+        scopes=frozenset({KEYS_MANAGE}),
+    )
+    _api_key_repository.save(admin)
+    client = _act_as(admin)
+
+    response = client.get(f"/api-keys/{owner.id}/issued")
+
+    assert response.status_code == 200
+    issued_ids = {entry["id"] for entry in response.json()["issued"]}
+    assert str(child.id) in issued_ids
+
+
+def test_non_owner_without_keys_manage_cannot_list_someone_elses_issued_keys() -> (
+    None
+):
+    owner, _ = ApiKey.issue(label="owner")
+    _api_key_repository.save(owner)
+
+    stranger, _ = ApiKey.issue(label="stranger")
+    _api_key_repository.save(stranger)
+    client = _act_as(stranger)
+
+    response = client.get(f"/api-keys/{owner.id}/issued")
+
+    assert response.status_code == 403
+    assert "keys:manage" in response.json()["detail"]
+
+
+def test_listing_issued_keys_includes_revoked_ones() -> None:
+    owner, _ = ApiKey.issue(label="owner")
+    _api_key_repository.save(owner)
+
+    child, _ = ApiKey.issue(label="revoked-child", issued_by=owner.id)
+    child.revoke()
+    _api_key_repository.save(child)
+
+    client = _act_as(owner)
+
+    response = client.get(f"/api-keys/{owner.id}/issued")
+
+    assert response.status_code == 200
+    entries = {
+        entry["id"]: entry for entry in response.json()["issued"]
+    }
+    assert str(child.id) in entries
+    assert entries[str(child.id)]["revoked_at"] is not None
+
+
+def test_listing_issued_keys_for_a_nonexistent_id_is_404() -> None:
+    caller, _ = ApiKey.issue(
+        label="caller",
+        scopes=frozenset({KEYS_MANAGE}),
+    )
+    _api_key_repository.save(caller)
+    client = _act_as(caller)
+
+    missing_id = ApiKeyId.new()
+
+    response = client.get(f"/api-keys/{missing_id}/issued")
+
+    assert response.status_code == 404

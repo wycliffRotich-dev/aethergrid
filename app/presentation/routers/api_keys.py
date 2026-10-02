@@ -7,6 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.application.services.create_api_key_service import (
     CreateApiKeyService,
 )
+from app.application.services.list_issued_api_keys_service import (
+    ListIssuedApiKeysService,
+)
 from app.application.services.revoke_api_key_service import (
     RevokeApiKeyService,
 )
@@ -25,6 +28,7 @@ from app.presentation.auth import (
 )
 from app.presentation.dependencies import (
     get_create_api_key_service,
+    get_list_issued_api_keys_service,
     get_revoke_api_key_service,
 )
 from app.presentation.schemas.create_api_key_request import (
@@ -32,6 +36,10 @@ from app.presentation.schemas.create_api_key_request import (
 )
 from app.presentation.schemas.create_api_key_response import (
     CreateApiKeyResponse,
+)
+from app.presentation.schemas.list_issued_api_keys_response import (
+    IssuedApiKeySummaryResponse,
+    ListIssuedApiKeysResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -163,3 +171,74 @@ def revoke_api_key(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(exc),
         ) from exc
+
+
+@router.get(
+    "/{api_key_id}/issued",
+    response_model=ListIssuedApiKeysResponse,
+    responses={
+        status.HTTP_403_FORBIDDEN: {
+            "description": (
+                "caller lacks keys:manage and did not issue "
+                "the requested key (ADR 0056)."
+            ),
+        },
+    },
+)
+def list_issued_api_keys(
+    api_key_id: str,
+    caller: Annotated[
+        ApiKey,
+        Depends(require_api_key),
+    ],
+    service: Annotated[
+        ListIssuedApiKeysService,
+        Depends(get_list_issued_api_keys_service),
+    ],
+) -> ListIssuedApiKeysResponse:
+    """
+    List the keys issued by a given API key (ADR 0056
+    follow-up).
+
+    Allowed for a caller holding keys:manage, or for the key
+    asking about its own issued list. Revoked keys are
+    included: this reflects full issuance history, not just
+    what currently remains active.
+    """
+    try:
+        issued = service.execute(
+            ApiKeyId(
+                value=UUID(api_key_id),
+            ),
+            caller=caller,
+        )
+    except ApiKeyNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except ScopeDeniedError as exc:
+        logger.warning(
+            "key list-issued denied: caller_id=%s "
+            "missing_scope=%s route=GET /api-keys/%s/issued",
+            caller.id,
+            exc.scope,
+            api_key_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+
+    return ListIssuedApiKeysResponse(
+        issued=[
+            IssuedApiKeySummaryResponse(
+                id=str(api_key.id),
+                label=api_key.label,
+                scopes=sorted(api_key.scopes),
+                created_at=api_key.created_at,
+                revoked_at=api_key.revoked_at,
+            )
+            for api_key in issued
+        ],
+    )

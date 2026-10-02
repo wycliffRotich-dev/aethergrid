@@ -90,3 +90,18 @@ class ApiKeyRepository(ABC):
         Return every API key that has not been revoked.
         """
         raise NotImplementedError
+
+    @abstractmethod
+    def list_issued_by(
+        self,
+        issuer_id: ApiKeyId,
+    ) -> list[ApiKey]:
+        """
+        Return every API key whose issued_by equals issuer_id
+        (ADR 0056 follow-up), active or revoked alike.
+
+        Revoked keys stay in the list deliberately: an owner
+        reviewing what it issued should see its full history,
+        not just what currently remains active.
+        """
+        raise NotImplementedError

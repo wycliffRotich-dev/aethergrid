@@ -68,3 +68,34 @@ def authorize_key_revocation(
         return
 
     raise ScopeDeniedError(KEYS_MANAGE)
+
+
+def authorize_key_view(
+    caller_scopes: Collection[str],
+    caller_id: ApiKeyId,
+    requested_issuer_id: ApiKeyId,
+) -> None:
+    """
+    Decide whether a caller holding caller_scopes, identified
+    by caller_id, may list the keys issued by requested_issuer_id
+    (ADR 0056 follow-up).
+
+    Same two-path shape as authorize_key_revocation: keys:manage
+    is an override that can view any key's issued list, or the
+    caller may view its own issued list (caller_id ==
+    requested_issuer_id), with no scope required at all for that
+    case. There is no legacy-key complication here the way
+    revocation has one: requested_issuer_id always names a real,
+    existing key the caller is asking about, never an optional
+    field that might be unset.
+
+    Pure policy: no I/O, no request or framework types, no
+    repository access.
+    """
+    if KEYS_MANAGE in caller_scopes:
+        return
+
+    if caller_id == requested_issuer_id:
+        return
+
+    raise ScopeDeniedError(KEYS_MANAGE)
