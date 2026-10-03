@@ -1,0 +1,80 @@
+# Asserts the container hardening properties recorded in ADR 0058 and
+# ADR 0059, so a later change cannot undo them without failing this job.
+name: Container hardening
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  hardening:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Compose refuses to start without POSTGRES_PASSWORD
+        run: |
+          if env -u POSTGRES_PASSWORD docker compose --env-file /dev/null config >/dev/null 2>&1; then
+            echo "::error::compose accepted a missing POSTGRES_PASSWORD"
+            exit 1
+          fi
+
+      - name: Start the stack with a generated password
+        run: |
+          echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" > .env
+          docker compose up -d --build --wait --wait-timeout 180
+
+      - name: App runs as uid 10001 with no effective capabilities
+        run: |
+          uid=$(docker compose exec -T neuromesh id -u)
+          [ "$uid" = "10001" ] || { echo "::error::app runs as uid $uid, expected 10001"; exit 1; }
+          cap=$(docker compose exec -T neuromesh sh -c "grep CapEff /proc/1/status" | awk '{print $2}')
+          [ "$cap" = "0000000000000000" ] || { echo "::error::CapEff is $cap, expected all zeros"; exit 1; }
+
+      - name: Container is read-only, drops all capabilities, blocks privilege gain
+        run: |
+          cid=$(docker compose ps -q neuromesh)
+          ro=$(docker inspect -f '{{.HostConfig.ReadonlyRootfs}}' "$cid")
+          drop=$(docker inspect -f '{{json .HostConfig.CapDrop}}' "$cid")
+          opt=$(docker inspect -f '{{json .HostConfig.SecurityOpt}}' "$cid")
+          [ "$ro" = "true" ] || { echo "::error::ReadonlyRootfs is $ro"; exit 1; }
+          [ "$drop" = '["ALL"]' ] || { echo "::error::CapDrop is $drop"; exit 1; }
+          echo "$opt" | grep -q 'no-new-privileges' || { echo "::error::SecurityOpt is $opt"; exit 1; }
+
+      - name: App writes nothing to its own filesystem
+        run: |
+          cid=$(docker compose ps -q neuromesh)
+          curl -fsS http://127.0.0.1:8000/livez > /dev/null
+          changes=$(docker diff "$cid")
+          if [ -n "$changes" ]; then
+            echo "::error::unexpected writes to the container filesystem"
+            echo "$changes"
+            exit 1
+          fi
+
+      - name: SIGTERM reaches uvicorn and shutdown is graceful
+        run: |
+          start=$(date +%s%N)
+          docker compose stop neuromesh
+          end=$(date +%s%N)
+          ms=$(( (end - start) / 1000000 ))
+          echo "stop took ${ms} ms"
+          [ "$ms" -lt 3000 ] || { echo "::error::docker stop took ${ms} ms, SIGTERM is not reaching the app"; exit 1; }
+          docker compose logs neuromesh | grep -q "Application shutdown complete" \
+            || { echo "::error::no graceful shutdown line in the logs"; exit 1; }
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
