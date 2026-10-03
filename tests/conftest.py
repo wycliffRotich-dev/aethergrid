@@ -30,3 +30,22 @@ if os.environ.get("NEUROMESH_STORAGE_BACKEND", "").lower() == "postgres":
             "name ends in _test. Refusing to run."
         )
     os.environ["NEUROMESH_DATABASE_URL"] = test_url
+
+
+@pytest.fixture(scope="session")
+def test_database_url() -> str:
+    """Return the test database URL, or fail with one clear message."""
+    url = os.environ.get("NEUROMESH_TEST_DATABASE_URL")
+    if not url:
+        pytest.fail(
+            "NEUROMESH_TEST_DATABASE_URL is not set. Point it at a "
+            "database whose name ends in _test (see README).",
+            pytrace=False,
+        )
+    if not _database_name(url).endswith("_test"):
+        pytest.fail(
+            "NEUROMESH_TEST_DATABASE_URL must point at a database whose "
+            "name ends in _test. Refusing to run.",
+            pytrace=False,
+        )
+    return url
