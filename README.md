@@ -153,7 +153,13 @@ The suite spans domain, application, infrastructure, and API layers (see badge a
 
 Separately, a Playwright end-to-end test drives the real dashboard against the real API and Postgres, not mocked, reproducing the ADR 0041/0042 worker-recovery incident through an actual browser (`frontend/e2e`). It is verified locally and in this PR's own CI run, not yet part of the standing CI workflow on every push, that wiring is a deliberate, separate follow-up.
 
+These commands assume the setup in [Running It](#running-it) is done first: the `.env` file, the virtualenv and `pip install -e ".[dev]"`. The Postgres-backed tests need a separate `neuromesh_test` database. The suite refuses to run against any database whose name does not end in `_test`, because some fixtures truncate tables. With the compose Postgres running:
+
 ```bash
+docker compose up -d postgres
+docker compose exec -T postgres psql -U neuromesh -d neuromesh -c 'CREATE DATABASE neuromesh_test'
+docker compose exec -T postgres psql -U neuromesh -d neuromesh_test < app/infrastructure/repositories/schema.sql
+export NEUROMESH_TEST_DATABASE_URL="postgresql://neuromesh:$(grep '^POSTGRES_PASSWORD=' .env | cut -d= -f2-)@127.0.0.1:5433/neuromesh_test"
 pytest
 ```
 
@@ -164,12 +170,17 @@ pytest
 ```bash
 git clone https://github.com/wycliffRotich-dev/aethergrid.git
 cd aethergrid
+echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" > .env
+chmod 600 .env
 docker compose up --build
 ```
 
-This starts the API and a Postgres instance. Issue yourself a key before calling anything, every route requires one. Grant both scopes so nothing is gated during local development (ADR 0054, ADR 0055):
+This starts the API and a Postgres instance, both reachable from the host only (127.0.0.1). Compose refuses to start without `POSTGRES_PASSWORD`; it is interpolated into a connection URL, so generate it as above (hex has no URL-reserved characters). A Postgres volume created by an earlier version keeps its old password: reset it with `docker compose down -v` ([ADR 0058](docs/adr/0058-harden-container-defaults-and-keep-credentials-out-of-the-repo.md)). Issue yourself a key before calling anything, every route requires one. Grant both scopes so nothing is gated during local development (ADR 0054, ADR 0055):
 
 ```bash
+python -m venv .venv && . .venv/bin/activate
+pip install -e ".[dev]"
+export NEUROMESH_DATABASE_URL="postgresql://neuromesh:$(grep '^POSTGRES_PASSWORD=' .env | cut -d= -f2-)@127.0.0.1:5433/neuromesh"
 python scripts/issue_api_key.py "local-dev" --scope jobs:execute --scope keys:manage
 ```
 
