@@ -1,12 +1,12 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
     environment:
       POSTGRES_USER: neuromesh
-      POSTGRES_PASSWORD: neuromesh
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: neuromesh
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - neuromesh-postgres-data:/var/lib/postgresql/data
       - ./app/infrastructure/repositories/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
@@ -19,10 +19,10 @@ services:
   neuromesh:
     build: .
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       NEUROMESH_STORAGE_BACKEND: postgres
-      NEUROMESH_DATABASE_URL: postgresql://neuromesh:neuromesh@postgres:5432/neuromesh
+      NEUROMESH_DATABASE_URL: postgresql://neuromesh:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/neuromesh
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import os
-
+import pytest
 from psycopg_pool import ConnectionPool
 
 from app.domain.entities.event import Event
@@ -10,30 +9,17 @@ from app.infrastructure.repositories.postgres_event_repository import (
     PostgresEventRepository,
 )
 
-TEST_DATABASE_URL = os.environ.get(
-    "NEUROMESH_TEST_DATABASE_URL",
-    "postgresql://neuromesh:neuromesh@localhost:5432/neuromesh_test",
-)
-
 
 class TestPostgresEventRepositoryContract:
     """
     Contract tests for PostgresEventRepository.
     """
 
+    @pytest.fixture(autouse=True, scope="class")
     @classmethod
-    def setup_class(
-        cls,
-    ) -> None:
-        cls.pool = ConnectionPool(
-            TEST_DATABASE_URL,
-            open=True,
-        )
-
-    @classmethod
-    def teardown_class(
-        cls,
-    ) -> None:
+    def _pool(cls, test_database_url):
+        cls.pool = ConnectionPool(test_database_url, open=True)
+        yield
         cls.pool.close()
 
     def setup_method(

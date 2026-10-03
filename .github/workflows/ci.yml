@@ -1,3 +1,5 @@
+# Database credentials in this workflow belong to ephemeral service containers
+# that exist only for the duration of a job. They are not used anywhere else.
 name: CI
 
 on:
@@ -29,6 +31,7 @@ jobs:
           --health-retries=5
     env:
       NEUROMESH_DATABASE_URL: postgresql://neuromesh:neuromesh@localhost:5432/neuromesh_test
+      NEUROMESH_TEST_DATABASE_URL: postgresql://neuromesh:neuromesh@localhost:5432/neuromesh_test
       NEUROMESH_STORAGE_BACKEND: postgres
     steps:
       - name: Check out code

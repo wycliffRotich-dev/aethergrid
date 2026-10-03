@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-
 import pytest
 from psycopg_pool import ConnectionPool
 
@@ -29,16 +27,11 @@ from tests.infrastructure.repositories.contract.lease_repository_contract import
     LeaseRepositoryContract,
 )
 
-TEST_DATABASE_URL = os.environ.get(
-    "NEUROMESH_TEST_DATABASE_URL",
-    "postgresql://neuromesh:neuromesh@localhost:5432/neuromesh_test",
-)
-
 
 @pytest.fixture(scope="session")
-def pool():
+def pool(test_database_url):
     test_pool = ConnectionPool(
-        TEST_DATABASE_URL,
+        test_database_url,
         min_size=1,
         max_size=5,
         open=True,
