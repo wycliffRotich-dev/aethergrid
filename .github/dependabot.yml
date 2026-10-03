@@ -49,6 +49,12 @@ updates:
     directory: /frontend
     schedule:
       interval: weekly
+    ignore:
+      # typescript-eslint 8.71 supports typescript below 6.1, so the 7.0 bump
+      # fails npm ci with an ERESOLVE peer conflict. Hold the major until the
+      # linter supports it, then remove this entry.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
     groups:
       frontend-dependencies:
         patterns: ["*"]
