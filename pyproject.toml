@@ -20,7 +20,7 @@ dependencies = [
     "pydantic-settings>=2.2",
     "structlog>=24.1",
     "psycopg[binary,pool]>=3.2",
-    "httpx<0.28",
+    "httpx<0.29",
 ]
 
 [project.optional-dependencies]
