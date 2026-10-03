@@ -55,6 +55,11 @@ updates:
       # linter supports it, then remove this entry.
       - dependency-name: typescript
         update-types: ["version-update:semver-major"]
+      # Tailwind 4 moved its PostCSS plugin to @tailwindcss/postcss, so the
+      # 3 to 4 bump fails vite build. The migration also changes config and
+      # utilities, so take it as its own change with the e2e suite.
+      - dependency-name: tailwindcss
+        update-types: ["version-update:semver-major"]
     groups:
       frontend-dependencies:
         patterns: ["*"]
