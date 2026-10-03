@@ -7,3 +7,14 @@ __pycache__
 tests
 docs
 *.db
+.env
+.env.*
+!.env.example
+.ruff_cache
+.mypy_cache
+htmlcov
+test-results
+frontend
+.coverage
+.vscode
+*.egg-info
