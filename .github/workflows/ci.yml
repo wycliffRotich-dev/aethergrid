@@ -1,3 +1,5 @@
+# Database credentials in this workflow belong to ephemeral service containers
+# that exist only for the duration of a job. They are not used anywhere else.
 name: CI
 
 on:
