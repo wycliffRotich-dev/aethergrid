@@ -107,6 +107,32 @@ jobs:
       - name: Build
         run: npm run build
 
+  changes:
+    # Tells the e2e job whether a pull request touches the frontend or
+    # this workflow, so the slow browser suite runs where it earns its
+    # cost and docs-only or Python-only pull requests keep fast feedback.
+    runs-on: ubuntu-24.04
+    outputs:
+      frontend: ${{ steps.diff.outputs.frontend }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Detect frontend changes
+        id: diff
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "frontend=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base="origin/${{ github.base_ref }}"
+          if git diff --name-only "$base"...HEAD | grep -qE '^(frontend/|\.github/workflows/ci\.yml$)'; then
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "frontend=false" >> "$GITHUB_OUTPUT"
+          fi
+
   e2e:
     # Runs on push to main (not on every PR: this suite
     # deliberately waits out the real 60s HEARTBEAT_TIMEOUT to prove
@@ -115,9 +141,9 @@ jobs:
     # per merge to main, not worth taxing every PR's feedback loop
     # with the same cost), or manually via workflow_dispatch for
     # verifying this job itself before it can run on main.
-    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch'
+    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && needs.changes.outputs.frontend == 'true')
     runs-on: ubuntu-24.04
-    needs: [test, frontend]
+    needs: [test, frontend, changes]
     services:
       postgres:
         image: postgres:16
