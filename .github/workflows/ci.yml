@@ -15,6 +15,10 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
     services:
       postgres:
         image: postgres:16
@@ -39,7 +43,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
       - name: Install PostgreSQL client
         run: |
           sudo apt-get update
@@ -68,7 +72,7 @@ jobs:
           fi
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
       - name: Update live test count badge
-        if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch'
+        if: matrix.python-version == '3.11' && ((github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch')
         uses: schneegans/dynamic-badges-action@v1.9.0
         with:
           auth: ${{ secrets.GIST_SECRET }}
