@@ -187,6 +187,8 @@ export NEUROMESH_DATABASE_URL="postgresql://neuromesh:$(grep '^POSTGRES_PASSWORD
 python scripts/issue_api_key.py "local-dev" --scope jobs:execute --scope keys:manage
 ```
 
+The image defaults to SQLite and stores its database in `/data`, owned by uid 10001. A named volume works as is. If you bind-mount a host directory at `/data` instead, give it to that user first (`sudo chown 10001:10001 <dir>`). A root-owned directory fails at startup with `sqlite3.OperationalError: unable to open database file`.
+
 Run the frontend separately:
 
 ```bash
