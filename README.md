@@ -157,13 +157,14 @@ The suite spans domain, application, infrastructure, and API layers (see badge a
 
 Separately, a Playwright end-to-end test drives the real dashboard against the real API and Postgres, not mocked, reproducing the ADR 0041/0042 worker-recovery incident through an actual browser (`frontend/e2e`). It is verified locally and in this PR's own CI run, not yet part of the standing CI workflow on every push, that wiring is a deliberate, separate follow-up.
 
-These commands assume the setup in [Running It](#running-it) is done first: the `.env` file, the virtualenv and `pip install -e ".[dev]"`. The Postgres-backed tests need a separate `neuromesh_test` database. The suite refuses to run against any database whose name does not end in `_test`, because some fixtures truncate tables. With the compose Postgres running:
+These commands assume the setup in [Running It](#running-it) is done first: the secret file, the virtualenv and `pip install -e ".[dev]"`. The Postgres-backed tests need a separate `neuromesh_test` database. The suite refuses to run against any database whose name does not end in `_test`, because some fixtures truncate tables. With the compose Postgres running:
 
 ```bash
 docker compose up -d postgres
 docker compose exec -T postgres psql -U neuromesh -d neuromesh -c 'CREATE DATABASE neuromesh_test'
 docker compose exec -T postgres psql -U neuromesh -d neuromesh_test < app/infrastructure/repositories/schema.sql
-export NEUROMESH_TEST_DATABASE_URL="postgresql://neuromesh:$(grep '^POSTGRES_PASSWORD=' .env | cut -d= -f2-)@127.0.0.1:5433/neuromesh_test"
+export NEUROMESH_TEST_DATABASE_URL="postgresql://neuromesh@127.0.0.1:5433/neuromesh_test"
+export NEUROMESH_DATABASE_PASSWORD_FILE=./secrets/postgres_password.local
 pytest
 ```
 
@@ -174,17 +175,21 @@ pytest
 ```bash
 git clone https://github.com/wycliffRotich-dev/aethergrid.git
 cd aethergrid
-echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" > .env
-chmod 600 .env
+mkdir -p secrets
+openssl rand -hex 24 | tr -d '\n' > secrets/postgres_password
+sudo chown 10001:10001 secrets/postgres_password
+chmod 600 secrets/postgres_password
 docker compose up --build
 ```
 
-This starts the API and a Postgres instance, both reachable from the host only (127.0.0.1). Compose refuses to start without `POSTGRES_PASSWORD`; it is interpolated into a connection URL, so generate it as above (hex has no URL-reserved characters). A Postgres volume created by an earlier version keeps its old password: reset it with `docker compose down -v` ([ADR 0058](docs/adr/0058-harden-container-defaults-and-keep-credentials-out-of-the-repo.md)). Issue yourself a key before calling anything, every route requires one. Grant both scopes so nothing is gated during local development (ADR 0054, ADR 0055):
+This starts the API and a Postgres instance, both reachable from the host only (127.0.0.1). `docker compose up` fails if `secrets/postgres_password` is missing, and the application reads the same file through `NEUROMESH_DATABASE_PASSWORD_FILE`, so the password is in neither the connection URL nor the container environment. A Postgres volume created by an earlier version keeps its old password: reset it with `docker compose down -v` ([ADR 0058](docs/adr/0058-harden-container-defaults-and-keep-credentials-out-of-the-repo.md)). Issue yourself a key before calling anything, every route requires one. Grant both scopes so nothing is gated during local development (ADR 0054, ADR 0055):
 
 ```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
-export NEUROMESH_DATABASE_URL="postgresql://neuromesh:$(grep '^POSTGRES_PASSWORD=' .env | cut -d= -f2-)@127.0.0.1:5433/neuromesh"
+export NEUROMESH_DATABASE_URL="postgresql://neuromesh@127.0.0.1:5433/neuromesh"
+export NEUROMESH_DATABASE_PASSWORD_FILE=./secrets/postgres_password.local
+sudo cat secrets/postgres_password > secrets/postgres_password.local && chmod 600 secrets/postgres_password.local
 python scripts/issue_api_key.py "local-dev" --scope jobs:execute --scope keys:manage
 ```
 

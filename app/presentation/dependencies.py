@@ -161,6 +161,9 @@ from app.domain.repositories.worker_repository import (
     WorkerRepository,
 )
 from app.domain.services.scheduler import Scheduler
+from app.infrastructure.database_credentials import (
+    resolve_database_password,
+)
 from app.infrastructure.repositories.in_memory_api_key_repository import (
     InMemoryApiKeyRepository,
 )
@@ -260,6 +263,10 @@ def _build_repositories() -> tuple[
         database_url = os.environ[
             "NEUROMESH_DATABASE_URL"
         ]
+        connect_kwargs: dict[str, object] = {"autocommit": True}
+        password = resolve_database_password(database_url, os.environ)
+        if password is not None:
+            connect_kwargs["password"] = password
 
         pool = ConnectionPool(
             database_url,
@@ -277,7 +284,7 @@ def _build_repositories() -> tuple[
             # than /health's 2 seconds while still failing fast
             # enough that no caller waits anywhere near 30s.
             timeout=5.0,
-            kwargs={"autocommit": True},
+            kwargs=connect_kwargs,
         )
 
         return (

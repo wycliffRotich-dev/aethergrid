@@ -15,8 +15,10 @@ services:
       - no-new-privileges:true
     environment:
       POSTGRES_USER: neuromesh
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
       POSTGRES_DB: neuromesh
+    secrets:
+      - postgres_password
     ports:
       - "127.0.0.1:5433:5432"
     volumes:
@@ -40,7 +42,10 @@ services:
       - "127.0.0.1:8000:8000"
     environment:
       NEUROMESH_STORAGE_BACKEND: postgres
-      NEUROMESH_DATABASE_URL: postgresql://neuromesh:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/neuromesh
+      NEUROMESH_DATABASE_URL: postgresql://neuromesh@postgres:5432/neuromesh
+      NEUROMESH_DATABASE_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
     depends_on:
       postgres:
         condition: service_healthy
@@ -56,6 +61,10 @@ services:
       timeout: 3s
       retries: 5
       start_period: 10s
+
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password
 
 volumes:
   neuromesh-postgres-data:

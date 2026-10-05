@@ -21,3 +21,4 @@ frontend/test-results/
 *.sh
 frontend/.env
 .env
+secrets/
