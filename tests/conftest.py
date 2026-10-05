@@ -12,6 +12,10 @@ from urllib.parse import urlparse
 
 import pytest
 
+from app.infrastructure.database_credentials import (
+    resolve_database_password,
+)
+
 
 def _database_name(url: str) -> str:
     return urlparse(url).path.lstrip("/")
@@ -49,3 +53,19 @@ def test_database_url() -> str:
             pytrace=False,
         )
     return url
+
+
+@pytest.fixture(scope="session", autouse=True)
+def database_password_from_file() -> None:
+    """Expose a file-based database password to libpq for the whole run.
+
+    When NEUROMESH_DATABASE_PASSWORD_FILE is set, the password is read
+    through the same helper the application uses and handed to every
+    connection via PGPASSWORD, so the Postgres tests authenticate
+    without a password in any URL. With no file configured this does
+    nothing.
+    """
+    url = os.environ.get("NEUROMESH_TEST_DATABASE_URL", "")
+    password = resolve_database_password(url, os.environ)
+    if password is not None:
+        os.environ["PGPASSWORD"] = password
