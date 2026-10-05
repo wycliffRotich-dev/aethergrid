@@ -179,6 +179,8 @@ mkdir -p secrets
 openssl rand -hex 24 | tr -d '\n' > secrets/postgres_password
 cp secrets/postgres_password secrets/postgres_password.local
 chmod 600 secrets/postgres_password secrets/postgres_password.local
+# A restrictive umask (077) checks files out unreadable to the database user in the container.
+chmod a+r app/infrastructure/repositories/schema.sql
 sudo chown 10001:10001 secrets/postgres_password && docker compose up -d --build --wait --wait-timeout 180
 ```
 
