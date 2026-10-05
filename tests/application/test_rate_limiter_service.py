@@ -1,5 +1,3 @@
-import time
-
 import pytest
 
 from app.application.services.rate_limiter_service import (
@@ -9,6 +7,22 @@ from app.domain.exceptions.rate_limit_exceeded_error import (
     RateLimitExceededError,
 )
 from app.domain.value_objects.api_key_id import ApiKeyId
+
+
+class _FakeClock:
+    """
+    A clock that only moves when the test moves it, so refill
+    is exact and no test depends on how fast the runner is.
+    """
+
+    def __init__(self) -> None:
+        self._now = 0.0
+
+    def __call__(self) -> float:
+        return self._now
+
+    def advance(self, seconds: float) -> None:
+        self._now += seconds
 
 
 def test_check_allows_requests_up_to_capacity() -> None:
@@ -51,14 +65,15 @@ def test_check_raises_once_bucket_is_exhausted() -> None:
 def test_check_refills_tokens_over_time() -> None:
     """
     A caller that has exhausted its bucket regains capacity as
-    time passes, at refill_rate_per_second. A high refill rate
-    is used so this is verifiable with a short, non-flaky sleep
-    rather than waiting close to a full second in the test
-    suite.
+    time passes, at refill_rate_per_second. The clock is
+    controlled, so half a token must not be enough and a whole
+    token must be, with no sleeping and no timing margin.
     """
+    clock = _FakeClock()
     limiter = RateLimiterService(
         capacity=1,
-        refill_rate_per_second=1000.0,
+        refill_rate_per_second=1.0,
+        clock=clock,
     )
 
     api_key_id = ApiKeyId.new()
@@ -68,9 +83,62 @@ def test_check_refills_tokens_over_time() -> None:
     with pytest.raises(RateLimitExceededError):
         limiter.check(api_key_id)
 
-    time.sleep(0.05)
+    clock.advance(0.5)
+
+    with pytest.raises(RateLimitExceededError):
+        limiter.check(api_key_id)
+
+    clock.advance(0.5)
 
     limiter.check(api_key_id)
+
+
+def test_check_reports_exact_retry_after_seconds() -> None:
+    """
+    With an empty bucket and a refill rate of 2 tokens per
+    second, one token takes exactly half a second to arrive.
+    """
+    clock = _FakeClock()
+    limiter = RateLimiterService(
+        capacity=1,
+        refill_rate_per_second=2.0,
+        clock=clock,
+    )
+
+    api_key_id = ApiKeyId.new()
+
+    limiter.check(api_key_id)
+
+    with pytest.raises(RateLimitExceededError) as exc_info:
+        limiter.check(api_key_id)
+
+    assert exc_info.value.retry_after_seconds == 0.5
+
+
+def test_check_never_refills_beyond_capacity() -> None:
+    """
+    A long idle period restores the bucket to capacity and no
+    further, so the burst allowance stays capacity requests.
+    """
+    clock = _FakeClock()
+    limiter = RateLimiterService(
+        capacity=2,
+        refill_rate_per_second=1.0,
+        clock=clock,
+    )
+
+    api_key_id = ApiKeyId.new()
+
+    limiter.check(api_key_id)
+    limiter.check(api_key_id)
+
+    clock.advance(100.0)
+
+    limiter.check(api_key_id)
+    limiter.check(api_key_id)
+
+    with pytest.raises(RateLimitExceededError):
+        limiter.check(api_key_id)
 
 
 def test_check_tracks_buckets_independently_per_api_key() -> None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from app.domain.exceptions.rate_limit_exceeded_error import (
@@ -35,6 +36,11 @@ class RateLimiterService:
     capacity requests immediately before being throttled to
     refill_rate_per_second thereafter.
 
+    clock returns the current time in seconds and must never
+    go backwards. It defaults to time.monotonic. Tests pass a
+    controlled clock so refill is exact and no test has to
+    sleep or race the real clock.
+
     Guarded by a single lock rather than one lock per bucket.
     Requests are not the hot path this system optimizes for
     (job scheduling and lease renewal are); a single lock keeps
@@ -46,6 +52,7 @@ class RateLimiterService:
         self,
         capacity: int,
         refill_rate_per_second: float,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if capacity <= 0:
             raise ValueError(
@@ -59,6 +66,7 @@ class RateLimiterService:
 
         self._capacity = capacity
         self._refill_rate_per_second = refill_rate_per_second
+        self._clock = clock
         self._buckets: dict[ApiKeyId, _Bucket] = {}
         self._lock = threading.Lock()
 
@@ -70,7 +78,7 @@ class RateLimiterService:
         Does nothing (and consumes a token) on success; callers
         that do not catch the exception may proceed.
         """
-        now = time.monotonic()
+        now = self._clock()
 
         with self._lock:
             bucket = self._buckets.get(api_key_id)
