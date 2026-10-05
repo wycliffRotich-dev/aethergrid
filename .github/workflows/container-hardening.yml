@@ -96,7 +96,10 @@ jobs:
         run: |
           cid=$(docker compose ps -q neuromesh)
           curl -fsS http://127.0.0.1:8000/livez > /dev/null
-          changes=$(docker diff "$cid")
+          # The file secret is a mount, so docker diff lists its mount points. Only
+          # these three exact lines are allowed; any other entry still fails.
+          raw=$(docker diff "$cid")
+          changes=$(printf '%s\n' "$raw" | grep -vxF -e 'C /run' -e 'A /run/secrets' -e 'A /run/secrets/postgres_password') || [ $? -eq 1 ]
           if [ -n "$changes" ]; then
             echo "::error::unexpected writes to the container filesystem"
             echo "$changes"
