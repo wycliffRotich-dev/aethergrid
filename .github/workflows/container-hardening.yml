@@ -51,7 +51,9 @@ jobs:
 
       - name: Postgres keeps its restrictions
         run: |
-          # Compared exactly, so adding a capability to the postgres
+          # Capabilities are compared as a sorted list with any CAP_
+          # prefix removed, because Docker versions differ in both. The
+          # list is still exact, so adding a capability to the postgres
           # service means changing this step in the same commit.
           id=$(docker compose ps -q postgres)
           check() {
@@ -62,8 +64,15 @@ jobs:
             fi
           }
           check "root filesystem read-only" '{{.HostConfig.ReadonlyRootfs}}' 'true'
-          check "CapDrop" '{{json .HostConfig.CapDrop}}' '["ALL"]'
-          check "CapAdd" '{{json .HostConfig.CapAdd}}' '["CHOWN","SETUID","SETGID","DAC_READ_SEARCH"]'
+          check_caps() {
+            actual=$(docker inspect "$id" --format "{{range $2}}{{.}}{{println}}{{end}}" | sed -e 's/^CAP_//' -e '/^$/d' | sort | paste -sd, -)
+            if [ "$actual" != "$3" ]; then
+              echo "::error::postgres $1: got $actual, expected $3"
+              exit 1
+            fi
+          }
+          check_caps "CapDrop" .HostConfig.CapDrop 'ALL'
+          check_caps "CapAdd" .HostConfig.CapAdd 'CHOWN,DAC_READ_SEARCH,SETGID,SETUID'
           check "SecurityOpt" '{{json .HostConfig.SecurityOpt}}' '["no-new-privileges:true"]'
 
       - name: App runs as uid 10001 with no effective capabilities
