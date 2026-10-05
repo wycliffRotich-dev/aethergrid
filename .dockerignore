@@ -18,3 +18,4 @@ frontend
 .coverage
 .vscode
 *.egg-info
+secrets/

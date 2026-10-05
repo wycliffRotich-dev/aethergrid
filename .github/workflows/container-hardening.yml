@@ -20,17 +20,51 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v7
 
-      - name: Compose refuses to start without POSTGRES_PASSWORD
+      - name: Compose refuses to create the database without its secret file
         run: |
-          if env -u POSTGRES_PASSWORD docker compose --env-file /dev/null config >/dev/null 2>&1; then
-            echo "::error::compose accepted a missing POSTGRES_PASSWORD"
+          # No secrets/ directory exists yet, so the bind mount for the
+          # password file has no source. A scratch project name keeps this
+          # from touching the real stack. Only the postgres service is
+          # named, so the app image is not built for this check. The
+          # failure must name the missing source, so a pull or network
+          # error cannot satisfy the check.
+          status=0
+          out=$(docker compose -p nm-nosecret up --no-start postgres 2>&1) || status=$?
+          docker compose -p nm-nosecret down -v >/dev/null 2>&1 || true
+          if [ "$status" -eq 0 ]; then
+            echo "::error::compose created the database without a secret file"
+            exit 1
+          fi
+          if ! printf '%s' "$out" | grep -q "bind source path does not exist"; then
+            echo "::error::compose failed, but not because the secret file is missing"
+            printf '%s\n' "$out"
             exit 1
           fi
 
-      - name: Start the stack with a generated password
+      - name: Start the stack with a generated secret file
         run: |
-          echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" > .env
+          mkdir -p secrets
+          openssl rand -hex 24 | tr -d '\n' > secrets/postgres_password
+          sudo chown 10001:10001 secrets/postgres_password
+          chmod 600 secrets/postgres_password
           docker compose up -d --build --wait --wait-timeout 180
+
+      - name: Postgres keeps its restrictions
+        run: |
+          # Compared exactly, so adding a capability to the postgres
+          # service means changing this step in the same commit.
+          id=$(docker compose ps -q postgres)
+          check() {
+            actual=$(docker inspect "$id" --format "$2")
+            if [ "$actual" != "$3" ]; then
+              echo "::error::postgres $1: got $actual, expected $3"
+              exit 1
+            fi
+          }
+          check "root filesystem read-only" '{{.HostConfig.ReadonlyRootfs}}' 'true'
+          check "CapDrop" '{{json .HostConfig.CapDrop}}' '["ALL"]'
+          check "CapAdd" '{{json .HostConfig.CapAdd}}' '["CHOWN","SETUID","SETGID","DAC_READ_SEARCH"]'
+          check "SecurityOpt" '{{json .HostConfig.SecurityOpt}}' '["no-new-privileges:true"]'
 
       - name: App runs as uid 10001 with no effective capabilities
         run: |
