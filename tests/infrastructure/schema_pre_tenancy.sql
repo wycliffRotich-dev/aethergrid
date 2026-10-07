@@ -2,22 +2,6 @@
 -- Plain SQL, no ORM/migration-tool magic, by design --
 -- see ADR 0004 (psycopg over SQLAlchemy).
 
--- ADR 0064: the tenant is the isolation boundary. The default tenant
--- owns every record created before tenancy existed. Its id and name
--- are fixed so this upgrade is idempotent, and
--- app/domain/entities/tenant.py holds the same literals (a test keeps
--- the two equal). A name already taken by a different id fails loudly
--- here instead of being skipped.
-CREATE TABLE IF NOT EXISTS tenants (
-    id          UUID PRIMARY KEY,
-    name        TEXT NOT NULL UNIQUE,
-    created_at  TIMESTAMPTZ NOT NULL
-);
-
-INSERT INTO tenants (id, name, created_at)
-VALUES ('00000000-0000-0000-0000-000000000001', 'default', now())
-ON CONFLICT (id) DO NOTHING;
-
 CREATE TABLE IF NOT EXISTS nodes (
     id                    UUID PRIMARY KEY,
     name                  TEXT NOT NULL,
