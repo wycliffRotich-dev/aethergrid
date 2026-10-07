@@ -8,6 +8,7 @@ from app.domain.entities.api_key import ApiKey
 from app.domain.value_objects.api_key_scope import JOBS_EXECUTE
 from app.presentation.api import app
 from app.presentation.auth import require_api_key
+from tests.support.api_keys import make_api_key
 
 RESOURCES = {"cpu_cores": 1, "memory_mib": 128, "vram_mib": 0}
 COMMAND = ["python", "train.py"]
@@ -19,7 +20,7 @@ def _act_as(caller: ApiKey) -> TestClient:
 
 
 def test_unscoped_key_can_create_a_resource_only_job() -> None:
-    caller, _ = ApiKey.issue(label="plain")
+    caller, _ = make_api_key(label="plain")
     client = _act_as(caller)
 
     response = client.post("/jobs", json=RESOURCES)
@@ -28,7 +29,7 @@ def test_unscoped_key_can_create_a_resource_only_job() -> None:
 
 
 def test_unscoped_key_cannot_set_a_command() -> None:
-    caller, _ = ApiKey.issue(label="plain")
+    caller, _ = make_api_key(label="plain")
     client = _act_as(caller)
 
     response = client.post(
@@ -41,7 +42,7 @@ def test_unscoped_key_cannot_set_a_command() -> None:
 
 
 def test_scoped_key_can_set_a_command() -> None:
-    caller, _ = ApiKey.issue(
+    caller, _ = make_api_key(
         label="runner",
         scopes=frozenset({JOBS_EXECUTE}),
     )
@@ -57,7 +58,7 @@ def test_scoped_key_can_set_a_command() -> None:
 def test_denial_is_logged_with_caller_and_missing_scope(
     caplog,
 ) -> None:
-    caller, _ = ApiKey.issue(label="plain")
+    caller, _ = make_api_key(label="plain")
     client = _act_as(caller)
 
     with caplog.at_level(logging.WARNING):

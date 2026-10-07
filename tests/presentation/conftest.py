@@ -4,10 +4,10 @@ import os
 
 import pytest
 
-from app.domain.entities.api_key import ApiKey
 from app.domain.value_objects.api_key_scope import JOBS_EXECUTE
 from app.presentation.api import app
 from app.presentation.auth import require_api_key, require_rate_limit
+from tests.support.api_keys import make_api_key
 
 
 @pytest.fixture(autouse=True)
@@ -34,7 +34,7 @@ def bypass_api_key_auth():
     itself is tested in test_create_job_scope_api.py, which
     overrides this with an explicitly unscoped caller.
     """
-    fake_caller, _raw_key = ApiKey.issue(
+    fake_caller, _raw_key = make_api_key(
         label="test-suite",
         scopes=frozenset({JOBS_EXECUTE}),
     )

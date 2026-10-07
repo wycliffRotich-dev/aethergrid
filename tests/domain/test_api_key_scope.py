@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 
-from app.domain.entities.api_key import ApiKey
 from app.domain.exceptions.unknown_api_key_scope_error import (
     UnknownApiKeyScopeError,
 )
@@ -11,6 +10,7 @@ from app.domain.value_objects.api_key_scope import (
     KNOWN_SCOPES,
     validate_scopes,
 )
+from tests.support.api_keys import make_api_key
 
 
 def test_jobs_execute_is_in_the_vocabulary() -> None:
@@ -48,7 +48,7 @@ def test_validate_scopes_rejects_a_bare_string() -> None:
 
 def test_issue_rejects_an_unknown_scope() -> None:
     with pytest.raises(UnknownApiKeyScopeError):
-        ApiKey.issue(
+        make_api_key(
             label="runner",
             scopes=frozenset({"job:execute"}),
         )
