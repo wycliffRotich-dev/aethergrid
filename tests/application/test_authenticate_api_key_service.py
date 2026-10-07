@@ -15,6 +15,7 @@ from app.application.services.revoke_api_key_service import (
 from app.infrastructure.repositories.in_memory_api_key_repository import (
     InMemoryApiKeyRepository,
 )
+from tests.support.api_keys import make_api_key
 
 
 @pytest.fixture
@@ -51,10 +52,9 @@ def test_rejects_revoked_key(repository):
         label="ci-runner",
     )
 
-    from app.domain.entities.api_key import ApiKey
     from app.domain.value_objects.api_key_scope import KEYS_MANAGE
 
-    admin, _ = ApiKey.issue(
+    admin, _ = make_api_key(
         label="admin",
         scopes=frozenset({KEYS_MANAGE}),
     )

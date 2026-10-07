@@ -8,7 +8,6 @@ from app.application.services.create_api_key_service import (
 from app.application.services.revoke_api_key_service import (
     RevokeApiKeyService,
 )
-from app.domain.entities.api_key import ApiKey
 from app.domain.exceptions.api_key_not_found_error import (
     ApiKeyNotFoundError,
 )
@@ -17,6 +16,7 @@ from app.domain.value_objects.api_key_scope import KEYS_MANAGE
 from app.infrastructure.repositories.in_memory_api_key_repository import (
     InMemoryApiKeyRepository,
 )
+from tests.support.api_keys import make_api_key
 
 
 @pytest.fixture
@@ -26,7 +26,7 @@ def repository():
 
 @pytest.fixture
 def admin():
-    caller, _ = ApiKey.issue(
+    caller, _ = make_api_key(
         label="admin",
         scopes=frozenset({KEYS_MANAGE}),
     )

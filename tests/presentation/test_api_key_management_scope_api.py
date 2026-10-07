@@ -11,6 +11,7 @@ from app.domain.value_objects.api_key_scope import KEYS_MANAGE
 from app.presentation.api import app
 from app.presentation.auth import require_api_key
 from app.presentation.dependencies import _api_key_repository
+from tests.support.api_keys import make_api_key
 
 
 def _act_as(caller: ApiKey) -> TestClient:
@@ -19,7 +20,7 @@ def _act_as(caller: ApiKey) -> TestClient:
 
 
 def test_unscoped_key_cannot_issue_a_key() -> None:
-    caller, _ = ApiKey.issue(label="plain")
+    caller, _ = make_api_key(label="plain")
     client = _act_as(caller)
 
     response = client.post("/api-keys", json={"label": "new-key"})
@@ -29,7 +30,7 @@ def test_unscoped_key_cannot_issue_a_key() -> None:
 
 
 def test_scoped_key_can_issue_a_key() -> None:
-    caller, _ = ApiKey.issue(
+    caller, _ = make_api_key(
         label="admin",
         scopes=frozenset({KEYS_MANAGE}),
     )
@@ -44,10 +45,10 @@ def test_scoped_key_can_issue_a_key() -> None:
 
 
 def test_unscoped_key_cannot_revoke_a_key() -> None:
-    caller, _ = ApiKey.issue(label="plain")
+    caller, _ = make_api_key(label="plain")
     client = _act_as(caller)
 
-    target, _ = ApiKey.issue(label="target")
+    target, _ = make_api_key(label="target")
     _api_key_repository.save(target)
 
     response = client.post(f"/api-keys/{target.id}/revoke")
@@ -59,7 +60,7 @@ def test_unscoped_key_cannot_revoke_a_key() -> None:
 def test_denial_is_logged_with_caller_and_missing_scope_on_issue(
     caplog,
 ) -> None:
-    caller, _ = ApiKey.issue(label="plain")
+    caller, _ = make_api_key(label="plain")
     client = _act_as(caller)
 
     with caplog.at_level(logging.WARNING):
@@ -72,10 +73,10 @@ def test_denial_is_logged_with_caller_and_missing_scope_on_issue(
 def test_denial_is_logged_with_caller_and_missing_scope_on_revoke(
     caplog,
 ) -> None:
-    caller, _ = ApiKey.issue(label="plain")
+    caller, _ = make_api_key(label="plain")
     client = _act_as(caller)
 
-    target, _ = ApiKey.issue(label="target")
+    target, _ = make_api_key(label="target")
     _api_key_repository.save(target)
 
     with caplog.at_level(logging.WARNING):
@@ -89,7 +90,7 @@ def test_owner_can_revoke_a_key_it_issued_without_keys_manage() -> None:
     # The whole point of ADR 0056: ownership alone, with no
     # keys:manage at all, is sufficient to revoke a key this
     # caller issued.
-    owner, _ = ApiKey.issue(
+    owner, _ = make_api_key(
         label="owner",
         scopes=frozenset({KEYS_MANAGE}),
     )
@@ -122,7 +123,7 @@ def test_owner_can_revoke_a_key_it_issued_without_keys_manage() -> None:
 def test_non_owner_without_keys_manage_cannot_revoke_someone_elses_key() -> (
     None
 ):
-    issuer, _ = ApiKey.issue(
+    issuer, _ = make_api_key(
         label="issuer",
         scopes=frozenset({KEYS_MANAGE}),
     )
@@ -135,7 +136,7 @@ def test_non_owner_without_keys_manage_cannot_revoke_someone_elses_key() -> (
     assert issue_response.status_code == 201
     target_id = issue_response.json()["id"]
 
-    stranger, _ = ApiKey.issue(label="stranger")
+    stranger, _ = make_api_key(label="stranger")
     _api_key_repository.save(stranger)
     client = _act_as(stranger)
 
@@ -146,11 +147,11 @@ def test_non_owner_without_keys_manage_cannot_revoke_someone_elses_key() -> (
 
 
 def test_keys_manage_can_revoke_a_legacy_key_with_no_issuer() -> None:
-    legacy_key, _ = ApiKey.issue(label="predates-adr-0056")
+    legacy_key, _ = make_api_key(label="predates-adr-0056")
     _api_key_repository.save(legacy_key)
     assert legacy_key.issued_by is None
 
-    admin, _ = ApiKey.issue(
+    admin, _ = make_api_key(
         label="admin",
         scopes=frozenset({KEYS_MANAGE}),
     )
@@ -163,10 +164,10 @@ def test_keys_manage_can_revoke_a_legacy_key_with_no_issuer() -> None:
 
 
 def test_non_owner_cannot_revoke_a_legacy_key_with_no_issuer() -> None:
-    legacy_key, _ = ApiKey.issue(label="predates-adr-0056")
+    legacy_key, _ = make_api_key(label="predates-adr-0056")
     _api_key_repository.save(legacy_key)
 
-    stranger, _ = ApiKey.issue(label="stranger")
+    stranger, _ = make_api_key(label="stranger")
     _api_key_repository.save(stranger)
     client = _act_as(stranger)
 
@@ -176,7 +177,7 @@ def test_non_owner_cannot_revoke_a_legacy_key_with_no_issuer() -> None:
 
 
 def test_caller_can_list_keys_it_issued_without_keys_manage() -> None:
-    owner, _ = ApiKey.issue(
+    owner, _ = make_api_key(
         label="owner",
         scopes=frozenset({KEYS_MANAGE}),
     )
@@ -204,15 +205,15 @@ def test_caller_can_list_keys_it_issued_without_keys_manage() -> None:
 
 
 def test_keys_manage_can_list_someone_elses_issued_keys() -> None:
-    owner, _ = ApiKey.issue(label="owner")
+    owner, _ = make_api_key(label="owner")
     _api_key_repository.save(owner)
     client = _act_as(owner)
     # owner itself has no keys:manage, so it cannot issue over
     # HTTP; seed its child directly instead.
-    child, _ = ApiKey.issue(label="child", issued_by=owner.id)
+    child, _ = make_api_key(label="child", issued_by=owner.id)
     _api_key_repository.save(child)
 
-    admin, _ = ApiKey.issue(
+    admin, _ = make_api_key(
         label="admin",
         scopes=frozenset({KEYS_MANAGE}),
     )
@@ -229,10 +230,10 @@ def test_keys_manage_can_list_someone_elses_issued_keys() -> None:
 def test_non_owner_without_keys_manage_cannot_list_someone_elses_issued_keys() -> (
     None
 ):
-    owner, _ = ApiKey.issue(label="owner")
+    owner, _ = make_api_key(label="owner")
     _api_key_repository.save(owner)
 
-    stranger, _ = ApiKey.issue(label="stranger")
+    stranger, _ = make_api_key(label="stranger")
     _api_key_repository.save(stranger)
     client = _act_as(stranger)
 
@@ -243,10 +244,10 @@ def test_non_owner_without_keys_manage_cannot_list_someone_elses_issued_keys() -
 
 
 def test_listing_issued_keys_includes_revoked_ones() -> None:
-    owner, _ = ApiKey.issue(label="owner")
+    owner, _ = make_api_key(label="owner")
     _api_key_repository.save(owner)
 
-    child, _ = ApiKey.issue(label="revoked-child", issued_by=owner.id)
+    child, _ = make_api_key(label="revoked-child", issued_by=owner.id)
     child.revoke()
     _api_key_repository.save(child)
 
@@ -263,7 +264,7 @@ def test_listing_issued_keys_includes_revoked_ones() -> None:
 
 
 def test_listing_issued_keys_for_a_nonexistent_id_is_404() -> None:
-    caller, _ = ApiKey.issue(
+    caller, _ = make_api_key(
         label="caller",
         scopes=frozenset({KEYS_MANAGE}),
     )

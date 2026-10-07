@@ -7,6 +7,7 @@ from app.domain.exceptions.api_key_not_found_error import (
     ApiKeyNotFoundError,
 )
 from app.domain.value_objects.api_key_id import ApiKeyId
+from tests.support.api_keys import make_api_key
 
 
 class ApiKeyRepositoryContract:
@@ -22,7 +23,7 @@ class ApiKeyRepositoryContract:
         )
 
     def _make_api_key(self) -> ApiKey:
-        api_key, _raw_key = ApiKey.issue(
+        api_key, _raw_key = make_api_key(
             label="ci-runner",
         )
         return api_key
@@ -155,7 +156,7 @@ class ApiKeyRepositoryContract:
         self,
         repository,
     ) -> None:
-        api_key, _ = ApiKey.issue(
+        api_key, _ = make_api_key(
             label="scoped",
             scopes=frozenset({"jobs:execute"}),
         )
@@ -172,7 +173,7 @@ class ApiKeyRepositoryContract:
         self,
         repository,
     ) -> None:
-        api_key, _ = ApiKey.issue(label="plain")
+        api_key, _ = make_api_key(label="plain")
 
         repository.save(api_key)
 
@@ -185,7 +186,7 @@ class ApiKeyRepositoryContract:
         issuer = self._make_api_key()
         repository.save(issuer)
 
-        issued, _ = ApiKey.issue(
+        issued, _ = make_api_key(
             label="sub-key",
             issued_by=issuer.id,
         )
@@ -213,10 +214,10 @@ class ApiKeyRepositoryContract:
         issuer = self._make_api_key()
         repository.save(issuer)
 
-        child_one, _ = ApiKey.issue(
+        child_one, _ = make_api_key(
             label="child-one", issued_by=issuer.id
         )
-        child_two, _ = ApiKey.issue(
+        child_two, _ = make_api_key(
             label="child-two", issued_by=issuer.id
         )
         unrelated = self._make_api_key()
@@ -239,7 +240,7 @@ class ApiKeyRepositoryContract:
         issuer = self._make_api_key()
         repository.save(issuer)
 
-        child, _ = ApiKey.issue(
+        child, _ = make_api_key(
             label="revoked-child", issued_by=issuer.id
         )
         child.revoke()
