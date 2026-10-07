@@ -102,7 +102,7 @@ def create_api_key(
 
     issued = service.execute(
         label=request.label,
-        issued_by=caller.id,
+        issuer=caller,
     )
 
     return CreateApiKeyResponse(

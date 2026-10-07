@@ -12,8 +12,12 @@ from app.application.services.create_api_key_service import (
 from app.application.services.revoke_api_key_service import (
     RevokeApiKeyService,
 )
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.infrastructure.repositories.in_memory_api_key_repository import (
     InMemoryApiKeyRepository,
+)
+from app.infrastructure.repositories.in_memory_tenant_repository import (
+    InMemoryTenantRepository,
 )
 from tests.support.api_keys import make_api_key
 
@@ -24,8 +28,8 @@ def repository():
 
 
 def test_authenticates_a_freshly_issued_key(repository):
-    issued = CreateApiKeyService(repository).execute(
-        label="ci-runner",
+    issued = CreateApiKeyService(repository, tenant_repository=InMemoryTenantRepository()).execute(
+        label="ci-runner", tenant_id=DEFAULT_TENANT_ID,
     )
 
     caller = AuthenticateApiKeyService(repository).execute(
@@ -48,8 +52,8 @@ def test_rejects_empty_credential(repository):
 
 
 def test_rejects_revoked_key(repository):
-    issued = CreateApiKeyService(repository).execute(
-        label="ci-runner",
+    issued = CreateApiKeyService(repository, tenant_repository=InMemoryTenantRepository()).execute(
+        label="ci-runner", tenant_id=DEFAULT_TENANT_ID,
     )
 
     from app.domain.value_objects.api_key_scope import KEYS_MANAGE
@@ -67,8 +71,8 @@ def test_rejects_revoked_key(repository):
 
 
 def test_successful_auth_updates_last_used(repository):
-    issued = CreateApiKeyService(repository).execute(
-        label="ci-runner",
+    issued = CreateApiKeyService(repository, tenant_repository=InMemoryTenantRepository()).execute(
+        label="ci-runner", tenant_id=DEFAULT_TENANT_ID,
     )
 
     AuthenticateApiKeyService(repository).execute(

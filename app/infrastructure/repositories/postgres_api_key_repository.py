@@ -12,6 +12,7 @@ from app.domain.repositories.api_key_repository import (
     ApiKeyRepository,
 )
 from app.domain.value_objects.api_key_id import ApiKeyId
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class PostgresApiKeyRepository(ApiKeyRepository):
@@ -30,11 +31,12 @@ class PostgresApiKeyRepository(ApiKeyRepository):
                 """
                 INSERT INTO api_keys (
                     id, key_hash, label, created_at,
-                    revoked_at, last_used_at, scopes, issued_by
+                    revoked_at, last_used_at, scopes, issued_by,
+                    tenant_id
                 ) VALUES (
                     %(id)s, %(key_hash)s, %(label)s, %(created_at)s,
                     %(revoked_at)s, %(last_used_at)s, %(scopes)s,
-                    %(issued_by)s
+                    %(issued_by)s, %(tenant_id)s
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     revoked_at = EXCLUDED.revoked_at,
@@ -49,6 +51,7 @@ class PostgresApiKeyRepository(ApiKeyRepository):
                     "revoked_at": api_key.revoked_at,
                     "last_used_at": api_key.last_used_at,
                     "scopes": list(api_key.scopes),
+                    "tenant_id": str(api_key.tenant_id),
                     "issued_by": (
                         str(api_key.issued_by)
                         if api_key.issued_by is not None
@@ -121,6 +124,7 @@ class PostgresApiKeyRepository(ApiKeyRepository):
             key_hash=row["key_hash"],
             label=row["label"],
             created_at=row["created_at"],
+            tenant_id=TenantId(row["tenant_id"]),
             revoked_at=row["revoked_at"],
             last_used_at=row["last_used_at"],
             scopes=frozenset(row.get("scopes") or []),

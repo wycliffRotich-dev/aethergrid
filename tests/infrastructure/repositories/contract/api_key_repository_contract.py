@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from app.domain.entities.api_key import ApiKey
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.exceptions.api_key_not_found_error import (
     ApiKeyNotFoundError,
 )
@@ -261,3 +262,17 @@ class ApiKeyRepositoryContract:
         repository.save(issuer)
 
         assert repository.list_issued_by(issuer.id) == []
+
+    def test_tenant_round_trips(
+        self,
+        repository,
+    ) -> None:
+        api_key = self._make_api_key()
+
+        repository.save(api_key)
+
+        fetched = repository.get_by_id(api_key.id)
+
+        assert fetched is not None
+        assert fetched.tenant_id == api_key.tenant_id
+        assert fetched.tenant_id == DEFAULT_TENANT_ID

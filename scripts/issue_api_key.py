@@ -34,6 +34,7 @@ import argparse
 import os
 from collections.abc import Sequence
 
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.value_objects.api_key_scope import KNOWN_SCOPES
 from app.presentation.dependencies import get_create_api_key_service
 
@@ -112,7 +113,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         _confirm_not_test_database(database_url)
 
     service = get_create_api_key_service()
-    issued = service.execute(label=label, scopes=scopes)
+    # ADR 0064: a bootstrap key belongs to the default tenant until
+    # this script takes a --tenant option.
+    issued = service.execute(
+        label=label,
+        scopes=scopes,
+        tenant_id=DEFAULT_TENANT_ID,
+    )
 
     print(f"Issued API key for '{issued.label}':")
     print(issued.plaintext_key)

@@ -157,6 +157,9 @@ from app.domain.repositories.lease_repository import (
 from app.domain.repositories.node_repository import (
     NodeRepository,
 )
+from app.domain.repositories.tenant_repository import (
+    TenantRepository,
+)
 from app.domain.repositories.worker_repository import (
     WorkerRepository,
 )
@@ -179,6 +182,9 @@ from app.infrastructure.repositories.in_memory_lease_repository import (
 from app.infrastructure.repositories.in_memory_node_repository import (
     InMemoryNodeRepository,
 )
+from app.infrastructure.repositories.in_memory_tenant_repository import (
+    InMemoryTenantRepository,
+)
 from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
@@ -196,6 +202,9 @@ from app.infrastructure.repositories.postgres_lease_repository import (
 )
 from app.infrastructure.repositories.postgres_node_repository import (
     PostgresNodeRepository,
+)
+from app.infrastructure.repositories.postgres_tenant_repository import (
+    PostgresTenantRepository,
 )
 from app.infrastructure.repositories.postgres_worker_repository import (
     PostgresWorkerRepository,
@@ -343,6 +352,14 @@ def _build_repositories() -> tuple[
     _api_key_repository,
     _connection_pool,
 ) = _build_repositories()
+
+# The sqlite and memory backends keep keys in memory, so they keep
+# tenants in memory too, seeded with the default tenant.
+_tenant_repository: TenantRepository = (
+    PostgresTenantRepository(_connection_pool)
+    if _connection_pool is not None
+    else InMemoryTenantRepository()
+)
 
 
 _record_job_events_service = RecordJobEventsService(
@@ -796,6 +813,7 @@ def get_create_api_key_service() -> CreateApiKeyService:
 
     return CreateApiKeyService(
         api_key_repository=_api_key_repository,
+        tenant_repository=_tenant_repository,
     )
 
 

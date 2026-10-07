@@ -72,9 +72,10 @@ a fact and invents nothing.
    A job's command therefore never runs on another tenant's
    hardware.
 
-7. **The database refuses cross-tenant links.** `nodes`, `jobs`
-   and `workers` get a unique constraint on `(id, tenant_id)`.
-   Composite foreign keys cover `jobs.assigned_node_id`,
+7. **The database refuses cross-tenant links.** `api_keys`,
+   `nodes`, `jobs` and `workers` get a unique constraint on
+   `(id, tenant_id)`. Composite foreign keys cover
+   `api_keys.issued_by`, `jobs.assigned_node_id`,
    `workers.node_id`, `workers.running_job_id`, `leases.worker_id`
    and `leases.job_id`. A row that links two tenants cannot be
    written even if application code is wrong. The SQLite backends

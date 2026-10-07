@@ -13,6 +13,7 @@ from app.domain.value_objects.api_key_id import ApiKeyId
 from app.domain.value_objects.api_key_scope import (
     validate_scopes,
 )
+from app.domain.value_objects.tenant_id import TenantId
 
 
 @dataclass(slots=True)
@@ -33,6 +34,13 @@ class ApiKey:
     label: str
 
     created_at: datetime
+
+    tenant_id: TenantId
+    """
+    The tenant this key belongs to (ADR 0064). Required and fixed
+    at issuance: a key never moves between tenants, and there is
+    no unscoped key.
+    """
 
     revoked_at: datetime | None = None
 
@@ -91,6 +99,7 @@ class ApiKey:
     def issue(
         cls,
         label: str,
+        tenant_id: TenantId,
         scopes: frozenset[str] = frozenset(),
         issued_by: ApiKeyId | None = None,
     ) -> tuple[ApiKey, str]:
@@ -132,11 +141,33 @@ class ApiKey:
             key_hash=cls.hash_secret(raw_key),
             label=label.strip(),
             created_at=utc_now(),
+            tenant_id=tenant_id,
             scopes=validated_scopes,
             issued_by=issued_by,
         )
 
         return api_key, raw_key
+
+    def issue_child(
+        self,
+        label: str,
+        scopes: frozenset[str] = frozenset(),
+    ) -> tuple[ApiKey, str]:
+        """
+        Issue a key owned by this one (ADR 0056), in this key's
+        tenant (ADR 0064).
+
+        Takes no tenant argument on purpose: the child's tenant is
+        always its issuer's, so no caller can mint a key into
+        another tenant. Scopes are never inherited, and must be
+        stated for the child.
+        """
+        return ApiKey.issue(
+            label=label,
+            tenant_id=self.tenant_id,
+            scopes=scopes,
+            issued_by=self.id,
+        )
 
     def is_active(self) -> bool:
         return self.revoked_at is None
