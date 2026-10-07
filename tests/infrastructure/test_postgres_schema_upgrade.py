@@ -92,3 +92,55 @@ def test_applying_the_schema_again_changes_nothing(scratch):
     assert _tenants(scratch) == [
         (str(DEFAULT_TENANT_ID), DEFAULT_TENANT_NAME)
     ]
+
+
+def test_upgrading_assigns_existing_keys_to_the_default_tenant(scratch):
+    scratch.execute(PRE_TENANCY_SCHEMA)
+    key_id = str(uuid.uuid4())
+    scratch.execute(
+        "INSERT INTO api_keys (id, key_hash, label, created_at) "
+        "VALUES (%s, %s, 'legacy', now())",
+        (key_id, "hash-" + key_id),
+    )
+
+    scratch.execute(CURRENT_SCHEMA)
+
+    rows = scratch.execute(
+        "SELECT id::text, tenant_id::text FROM api_keys"
+    ).fetchall()
+    assert rows == [(key_id, str(DEFAULT_TENANT_ID))]
+
+
+def test_a_key_must_name_a_tenant_after_the_upgrade(scratch):
+    scratch.execute(CURRENT_SCHEMA)
+
+    with pytest.raises(psycopg.errors.NotNullViolation):
+        scratch.execute(
+            "INSERT INTO api_keys (id, key_hash, label, created_at) "
+            "VALUES (%s, 'hash-x', 'x', now())",
+            (str(uuid.uuid4()),),
+        )
+
+
+def test_a_key_cannot_name_an_issuer_from_another_tenant(scratch):
+    scratch.execute(CURRENT_SCHEMA)
+    other = str(uuid.uuid4())
+    issuer = str(uuid.uuid4())
+    scratch.execute(
+        "INSERT INTO tenants (id, name, created_at) "
+        "VALUES (%s, 'other', now())",
+        (other,),
+    )
+    scratch.execute(
+        "INSERT INTO api_keys (id, key_hash, label, created_at, tenant_id) "
+        "VALUES (%s, 'hash-issuer', 'issuer', now(), %s)",
+        (issuer, str(DEFAULT_TENANT_ID)),
+    )
+
+    with pytest.raises(psycopg.errors.ForeignKeyViolation):
+        scratch.execute(
+            "INSERT INTO api_keys "
+            "(id, key_hash, label, created_at, tenant_id, issued_by) "
+            "VALUES (%s, 'hash-child', 'child', now(), %s, %s)",
+            (str(uuid.uuid4()), other, issuer),
+        )

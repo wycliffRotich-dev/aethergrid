@@ -151,3 +151,46 @@ REFERENCES api_keys(id) ON DELETE SET NULL;
 -- already documents for get_by_hash().
 CREATE INDEX IF NOT EXISTS idx_api_keys_issued_by
 ON api_keys (issued_by);
+
+-- ADR 0064: every key belongs to exactly one tenant. A key that
+-- predates this column belongs to the default tenant, the one
+-- deployment that created it. The column never gets a default, so an
+-- insert that forgets the tenant fails instead of landing in the
+-- default tenant. The three steps run in one transaction, so a failed
+-- upgrade leaves the old schema.
+BEGIN;
+
+ALTER TABLE api_keys
+ADD COLUMN IF NOT EXISTS tenant_id UUID
+REFERENCES tenants(id);
+
+UPDATE api_keys
+SET tenant_id = '00000000-0000-0000-0000-000000000001'
+WHERE tenant_id IS NULL;
+
+ALTER TABLE api_keys
+ALTER COLUMN tenant_id SET NOT NULL;
+
+COMMIT;
+
+-- A key's issuer must belong to the same tenant as the key. The
+-- unique index is what the composite foreign key points at. A key
+-- with no issuer has a NULL issued_by and is not checked.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_id_tenant
+ON api_keys (id, tenant_id);
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'api_keys_issuer_same_tenant'
+          AND conrelid = 'api_keys'::regclass
+    ) THEN
+        ALTER TABLE api_keys
+        ADD CONSTRAINT api_keys_issuer_same_tenant
+        FOREIGN KEY (issued_by, tenant_id)
+        REFERENCES api_keys (id, tenant_id);
+    END IF;
+END
+$$;
