@@ -6,11 +6,15 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 from app.domain.entities.node import Node
+from app.domain.exceptions.node_tenant_conflict_error import (
+    NodeTenantConflictError,
+)
 from app.domain.repositories.node_repository import NodeRepository
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class PostgresNodeRepository(NodeRepository):
@@ -28,18 +32,19 @@ class PostgresNodeRepository(NodeRepository):
 
     def save(self, node: Node) -> None:
         with self._pool.connection() as conn:
-            conn.execute(
+            cursor = conn.execute(
                 """
                 INSERT INTO nodes (
                     id, name, capacity_cpu_cores, capacity_memory_mib,
                     capacity_vram_mib, available_cpu_cores,
                     available_memory_mib, available_vram_mib,
-                    labels, last_seen_at, draining
+                    labels, last_seen_at, draining, tenant_id
                 ) VALUES (
                     %(id)s, %(name)s, %(capacity_cpu_cores)s, %(capacity_memory_mib)s,
                     %(capacity_vram_mib)s, %(available_cpu_cores)s,
                     %(available_memory_mib)s, %(available_vram_mib)s,
-                    %(labels)s, %(last_seen_at)s, %(draining)s
+                    %(labels)s, %(last_seen_at)s, %(draining)s,
+                    %(tenant_id)s
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     name = EXCLUDED.name,
@@ -52,6 +57,7 @@ class PostgresNodeRepository(NodeRepository):
                     labels = EXCLUDED.labels,
                     last_seen_at = EXCLUDED.last_seen_at,
                     draining = EXCLUDED.draining
+                WHERE nodes.tenant_id = EXCLUDED.tenant_id
                 """,
                 {
                     "id": str(node.id),
@@ -65,8 +71,14 @@ class PostgresNodeRepository(NodeRepository):
                     "labels": json.dumps(node.labels),
                     "last_seen_at": node.last_seen_at,
                     "draining": node.draining,
+                    "tenant_id": str(node.tenant_id),
                 },
             )
+
+            if cursor.rowcount == 0:
+                raise NodeTenantConflictError(
+                    f"node {node.id} belongs to another tenant"
+                )
 
     def list(self) -> list[Node]:
         with self._pool.connection() as conn:
@@ -120,6 +132,7 @@ class PostgresNodeRepository(NodeRepository):
         return Node(
             id=NodeId.from_string(str(row["id"])),
             capacity=capacity,
+            tenant_id=TenantId(row["tenant_id"]),
             available=available,
             name=row["name"],
             labels=row["labels"] or {},

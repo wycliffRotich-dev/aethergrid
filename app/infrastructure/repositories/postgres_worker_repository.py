@@ -12,6 +12,7 @@ from app.domain.enums.worker_status import WorkerStatus
 from app.domain.repositories.worker_repository import WorkerRepository
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
+from app.domain.value_objects.tenant_id import TenantId
 from app.domain.value_objects.worker_id import WorkerId
 
 
@@ -140,6 +141,7 @@ class PostgresWorkerRepository(WorkerRepository):
 
         return Node(
             id=NodeId(row["id"]),
+            tenant_id=TenantId(row["tenant_id"]),
             capacity=ResourceRequirements(
                 cpu_cores=row["capacity_cpu_cores"],
                 memory_mib=row["capacity_memory_mib"],

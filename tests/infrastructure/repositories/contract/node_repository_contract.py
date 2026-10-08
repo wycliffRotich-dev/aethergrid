@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+import copy
+
 import pytest
 
 from app.domain.entities.node import Node
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
+from app.domain.exceptions.node_tenant_conflict_error import (
+    NodeTenantConflictError,
+)
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from app.domain.value_objects.tenant_id import TenantId
 from tests.support.nodes import make_node
 
 
@@ -117,3 +124,51 @@ class NodeRepositoryContract:
         fetched = repository.get_by_id(node.id)
 
         assert fetched.labels == {"gpu": "a100", "zone": "nrb-1"}
+
+    @pytest.fixture
+    def second_tenant_id(self) -> TenantId:
+        """
+        A tenant other than the default one. Backends whose
+        storage enforces tenant rows override this to create
+        the tenant first.
+        """
+        return TenantId.new()
+
+    def test_a_node_keeps_a_non_default_tenant(
+        self,
+        repository,
+        second_tenant_id,
+    ) -> None:
+        node = self._make_node(tenant_id=second_tenant_id)
+        repository.save(node)
+
+        fetched = repository.get_by_id(node.id)
+
+        assert fetched is not None
+        assert fetched.tenant_id == second_tenant_id
+
+    def test_save_in_another_tenant_raises_and_changes_nothing(
+        self,
+        repository,
+        second_tenant_id,
+    ) -> None:
+        node = self._make_node()
+        repository.save(node)
+
+        # A separate object with the same id, claiming another
+        # tenant and other values. Saving it is reported as a
+        # conflict and must not move or change the stored node.
+        impostor = copy.deepcopy(node)
+        impostor.tenant_id = second_tenant_id
+        impostor.name = "impostor"
+        impostor.draining = True
+
+        with pytest.raises(NodeTenantConflictError):
+            repository.save(impostor)
+
+        fetched = repository.get_by_id(node.id)
+
+        assert fetched is not None
+        assert fetched.tenant_id == DEFAULT_TENANT_ID
+        assert fetched.name == node.name
+        assert fetched.draining is False
