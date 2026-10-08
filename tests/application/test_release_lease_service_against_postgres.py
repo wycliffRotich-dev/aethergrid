@@ -8,7 +8,6 @@ from app.application.services.release_lease_service import (
 )
 from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
-from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
 from app.domain.exceptions.lease_not_found_error import (
     LeaseNotFoundError,
@@ -31,6 +30,7 @@ from app.infrastructure.repositories.postgres_node_repository import (
 from app.infrastructure.repositories.postgres_worker_repository import (
     PostgresWorkerRepository,
 )
+from tests.support.nodes import make_node
 
 
 @pytest.fixture(scope="session")
@@ -74,7 +74,7 @@ def test_release_by_stale_lease_id_is_rejected_and_reassigned_lease_survives(
     worker_repository = PostgresWorkerRepository(pool)
     job_repository = PostgresJobRepository(pool)
 
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,

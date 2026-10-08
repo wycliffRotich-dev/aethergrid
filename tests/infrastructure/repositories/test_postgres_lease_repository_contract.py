@@ -5,7 +5,6 @@ from psycopg_pool import ConnectionPool
 
 from app.domain.entities.job import Job
 from app.domain.entities.lease import DEFAULT_LEASE_DURATION
-from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
@@ -26,6 +25,7 @@ from app.infrastructure.repositories.postgres_worker_repository import (
 from tests.infrastructure.repositories.contract.lease_repository_contract import (
     LeaseRepositoryContract,
 )
+from tests.support.nodes import make_node
 
 
 @pytest.fixture(scope="session")
@@ -73,7 +73,7 @@ class TestPostgresLeaseRepositoryContract(LeaseRepositoryContract):
         ):
             lease = original_make_lease(duration=duration)
 
-            node = Node(
+            node = make_node(
                 id=NodeId.new(),
                 capacity=ResourceRequirements(
                     cpu_cores=8,

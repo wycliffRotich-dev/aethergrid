@@ -2,7 +2,6 @@ from app.application.services.worker_heartbeat_service import (
     WorkerHeartbeatService,
 )
 from app.domain.entities.job import Job
-from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
 from app.domain.enums.worker_status import WorkerStatus
 from app.domain.value_objects.job_id import JobId
@@ -14,10 +13,11 @@ from app.domain.value_objects.worker_id import WorkerId
 from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
+from tests.support.nodes import make_node
 
 
 def test_execute_refreshes_worker_heartbeat() -> None:
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,
@@ -61,7 +61,7 @@ def test_execute_recovers_offline_worker_with_no_running_job() -> None:
     heartbeating an OFFLINE, jobless worker must persist it back to
     IDLE, not just refresh its timestamp.
     """
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,
@@ -104,7 +104,7 @@ def test_execute_does_not_recover_offline_worker_with_running_job() -> None:
     OFFLINE worker holding a job must stay OFFLINE after a heartbeat,
     left for reconciliation to resolve instead.
     """
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,

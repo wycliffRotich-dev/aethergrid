@@ -1,13 +1,13 @@
 from app.application.services.register_worker_service import (
     RegisterWorkerService,
 )
-from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
 from app.domain.enums.worker_status import WorkerStatus
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from tests.support.nodes import make_node
 
 
 class InMemoryWorkerRepository:
@@ -40,7 +40,7 @@ class InMemoryWorkerRepository:
 def test_register_worker_service_registers_worker() -> None:
     repository = InMemoryWorkerRepository()
 
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,

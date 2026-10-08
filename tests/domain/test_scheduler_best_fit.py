@@ -1,11 +1,11 @@
 from app.domain.entities.job import Job
-from app.domain.entities.node import Node
 from app.domain.services.scheduler import Scheduler
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from tests.support.nodes import make_node
 
 
 def test_scheduler_selects_best_fit_node() -> None:
@@ -19,7 +19,7 @@ def test_scheduler_selects_best_fit_node() -> None:
     """
     scheduler = Scheduler()
 
-    large = Node(
+    large = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=32,
@@ -28,7 +28,7 @@ def test_scheduler_selects_best_fit_node() -> None:
         ),
     )
 
-    medium = Node(
+    medium = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=16,
@@ -37,7 +37,7 @@ def test_scheduler_selects_best_fit_node() -> None:
         ),
     )
 
-    small = Node(
+    small = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,
@@ -81,7 +81,7 @@ def test_scheduler_prefers_tighter_fit_on_vram_not_cpu() -> None:
     """
     scheduler = Scheduler()
 
-    cpu_heavy = Node(
+    cpu_heavy = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=16,
@@ -98,7 +98,7 @@ def test_scheduler_prefers_tighter_fit_on_vram_not_cpu() -> None:
         ),
     )
 
-    vram_heavy = Node(
+    vram_heavy = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=16,
@@ -146,7 +146,7 @@ def test_scheduler_ignores_unrequested_dimensions_in_scoring() -> None:
     """
     scheduler = Scheduler()
 
-    modest_vram = Node(
+    modest_vram = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,
@@ -155,7 +155,7 @@ def test_scheduler_ignores_unrequested_dimensions_in_scoring() -> None:
         ),
     )
 
-    huge_vram = Node(
+    huge_vram = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,

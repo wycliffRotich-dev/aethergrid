@@ -1,5 +1,4 @@
 from app.domain.entities.job import Job
-from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
 from app.domain.enums.job_status import JobStatus
 from app.domain.value_objects.job_id import JobId
@@ -8,6 +7,7 @@ from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
 from app.domain.value_objects.worker_id import WorkerId
+from tests.support.nodes import make_node
 
 
 def test_worker_can_run_job() -> None:
@@ -16,7 +16,7 @@ def test_worker_can_run_job() -> None:
     transition it into the RUNNING state.
     """
 
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,

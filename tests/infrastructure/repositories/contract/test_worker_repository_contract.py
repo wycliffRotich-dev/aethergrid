@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
 from app.domain.value_objects.worker_id import WorkerId
+from tests.support.nodes import make_node
 
 
 class WorkerRepositoryContract:
@@ -28,7 +28,7 @@ class WorkerRepositoryContract:
         )
 
     def _make_worker(self) -> Worker:
-        node = Node(
+        node = make_node(
             id=NodeId.new(),
             capacity=ResourceRequirements(
                 cpu_cores=8,

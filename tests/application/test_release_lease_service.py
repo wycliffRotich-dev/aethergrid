@@ -12,7 +12,6 @@ from app.application.services.release_lease_service import (
 )
 from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
-from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
 from app.domain.exceptions.lease_not_found_error import (
     LeaseNotFoundError,
@@ -38,10 +37,11 @@ from app.infrastructure.repositories.in_memory_lease_repository import (
 from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
+from tests.support.nodes import make_node
 
 
 def _make_worker_with_running_job() -> tuple[Worker, Job]:
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,

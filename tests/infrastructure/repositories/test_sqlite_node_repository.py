@@ -17,6 +17,7 @@ from app.infrastructure.repositories.sqlite_connection import (
 from app.infrastructure.repositories.sqlite_node_repository import (
     SqliteNodeRepository,
 )
+from tests.support.nodes import make_node
 
 
 @pytest.fixture()
@@ -41,7 +42,7 @@ def _make_node(
     draining: bool = False,
     last_seen_at: datetime | None = None,
 ) -> Node:
-    return Node(
+    return make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=cpu_cores,

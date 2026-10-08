@@ -36,10 +36,11 @@ from app.infrastructure.repositories.in_memory_node_repository import (
 from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
+from tests.support.nodes import make_node
 
 
 def _make_offline_node() -> Node:
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,

@@ -1,11 +1,11 @@
 from app.domain.entities.job import Job
-from app.domain.entities.node import Node
 from app.domain.services.scheduler import Scheduler
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from tests.support.nodes import make_node
 
 
 def test_scheduler_requires_all_constraints() -> None:
@@ -14,7 +14,7 @@ def test_scheduler_requires_all_constraints() -> None:
     to be considered for scheduling.
     """
 
-    europe = Node(
+    europe = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,
@@ -25,7 +25,7 @@ def test_scheduler_requires_all_constraints() -> None:
     europe.labels["gpu"] = "true"
     europe.labels["region"] = "eu-west"
 
-    wrong_region = Node(
+    wrong_region = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,

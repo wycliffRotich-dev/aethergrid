@@ -1,7 +1,6 @@
 from app.application.services.heartbeat_node_service import (
     HeartbeatNodeService,
 )
-from app.domain.entities.node import Node
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
@@ -9,6 +8,7 @@ from app.domain.value_objects.resource_requirements import (
 from app.infrastructure.repositories.in_memory_node_repository import (
     InMemoryNodeRepository,
 )
+from tests.support.nodes import make_node
 
 
 def test_heartbeat_node_service_updates_last_seen_at() -> None:
@@ -17,7 +17,7 @@ def test_heartbeat_node_service_updates_last_seen_at() -> None:
     last seen timestamp.
     """
 
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=16,

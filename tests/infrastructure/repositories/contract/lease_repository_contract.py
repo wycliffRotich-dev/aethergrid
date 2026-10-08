@@ -6,7 +6,6 @@ import pytest
 
 from app.domain.entities.job import Job
 from app.domain.entities.lease import DEFAULT_LEASE_DURATION, Lease
-from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
 from app.domain.exceptions.lease_not_found_error import LeaseNotFoundError
 from app.domain.value_objects.job_id import JobId
@@ -15,6 +14,7 @@ from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
 from app.domain.value_objects.worker_id import WorkerId
+from tests.support.nodes import make_node
 
 
 class LeaseRepositoryContract:
@@ -34,7 +34,7 @@ class LeaseRepositoryContract:
         *,
         duration: timedelta = DEFAULT_LEASE_DURATION,
     ) -> Lease:
-        node = Node(
+        node = make_node(
             id=NodeId.new(),
             capacity=ResourceRequirements(
                 cpu_cores=8,

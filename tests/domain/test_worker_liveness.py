@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import timedelta
 
 from app.domain.entities.job import Job
-from app.domain.entities.node import Node
 from app.domain.entities.worker import (
     HEARTBEAT_TIMEOUT,
     Worker,
@@ -16,10 +15,11 @@ from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
 from app.domain.value_objects.worker_id import WorkerId
+from tests.support.nodes import make_node
 
 
 def create_worker() -> Worker:
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,

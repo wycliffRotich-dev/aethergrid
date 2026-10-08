@@ -44,12 +44,13 @@ from app.infrastructure.repositories.in_memory_node_repository import (
 from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
+from tests.support.nodes import make_node
 
 
 def _make_worker_and_job(
     command: list[str] | None = None,
 ) -> tuple[Worker, Job, Node]:
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,
@@ -313,7 +314,7 @@ def test_run_once_marks_job_failed_when_command_exceeds_timeout() -> None:
 
 
 def test_run_once_returns_early_when_worker_has_no_running_job() -> None:
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,

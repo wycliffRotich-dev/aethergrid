@@ -2,7 +2,6 @@ from app.application.services.cluster_tick_service import (
     ClusterTickService,
 )
 from app.domain.entities.job import Job
-from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
 from app.domain.enums.worker_management import WorkerManagement
 from app.domain.enums.worker_status import WorkerStatus
@@ -15,6 +14,7 @@ from app.domain.value_objects.worker_id import WorkerId
 from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
+from tests.support.nodes import make_node
 
 
 class FakeSchedulerLoopService:
@@ -45,7 +45,7 @@ class FakeWorkerExecutionLoop:
 def _make_worker_with_running_job(
     managed_by: WorkerManagement,
 ) -> Worker:
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,
