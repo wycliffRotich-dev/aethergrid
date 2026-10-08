@@ -8,7 +8,6 @@ from app.application.services.scheduler_loop_service import (
     SchedulerLoopService,
 )
 from app.domain.entities.job import Job
-from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
 from app.domain.enums.job_status import JobStatus
 from app.domain.enums.worker_status import WorkerStatus
@@ -31,6 +30,7 @@ from app.infrastructure.repositories.in_memory_node_repository import (
 from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
+from tests.support.nodes import make_node
 
 
 def test_scheduler_loop_schedules_queued_jobs() -> None:
@@ -38,7 +38,7 @@ def test_scheduler_loop_schedules_queued_jobs() -> None:
     Queued jobs should automatically be scheduled
     onto healthy compute nodes.
     """
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=16,
@@ -84,7 +84,7 @@ def test_scheduler_loop_assigns_idle_worker_and_starts_job() -> None:
     covered here since SchedulerLoopService is now the single
     place scheduling and assignment both happen.
     """
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=16,
@@ -140,7 +140,7 @@ def test_scheduler_loop_records_job_scheduled_event() -> None:
     JobCreated -- the event history should reflect the job's
     real lifecycle, not just its creation.
     """
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=16,

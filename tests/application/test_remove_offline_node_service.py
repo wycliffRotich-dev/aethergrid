@@ -5,7 +5,6 @@ import pytest
 from app.application.services.remove_offline_node_service import (
     RemoveOfflineNodeService,
 )
-from app.domain.entities.node import Node
 from app.domain.exceptions.node_not_found_error import (
     NodeNotFoundError,
 )
@@ -19,6 +18,7 @@ from app.domain.value_objects.resource_requirements import (
 from app.infrastructure.repositories.in_memory_node_repository import (
     InMemoryNodeRepository,
 )
+from tests.support.nodes import make_node
 
 
 def test_remove_offline_node_service_removes_offline_node() -> None:
@@ -26,7 +26,7 @@ def test_remove_offline_node_service_removes_offline_node() -> None:
     An offline node can be removed
     from the cluster.
     """
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,
@@ -72,7 +72,7 @@ def test_remove_offline_node_service_raises_when_node_missing() -> None:
 
 
 def test_remove_offline_node_service_raises_when_node_still_alive() -> None:
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,

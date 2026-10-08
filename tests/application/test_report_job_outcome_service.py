@@ -44,6 +44,7 @@ from app.infrastructure.repositories.in_memory_node_repository import (
 from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
+from tests.support.nodes import make_node
 
 
 def _make_running_worker_and_job() -> tuple[Worker, Job, Node]:
@@ -54,7 +55,7 @@ def _make_running_worker_and_job() -> tuple[Worker, Job, Node]:
     Job._ALLOWED_TRANSITIONS only permits COMPLETED from
     RUNNING, not SCHEDULED.
     """
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,
@@ -289,7 +290,7 @@ def test_complete_raises_worker_job_mismatch_when_worker_holds_different_job() -
 
 
 def test_complete_raises_worker_job_mismatch_when_worker_holds_no_job() -> None:
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,

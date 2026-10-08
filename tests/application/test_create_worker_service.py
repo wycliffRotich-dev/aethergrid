@@ -5,7 +5,6 @@ from app.application.services.create_worker_service import (
 )
 from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
-from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
 from app.domain.enums.worker_status import WorkerStatus
 from app.domain.value_objects.job_id import JobId
@@ -25,6 +24,7 @@ from app.infrastructure.repositories.in_memory_node_repository import (
 from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
+from tests.support.nodes import make_node
 
 
 def _make_service(
@@ -46,7 +46,7 @@ def test_create_worker_service_creates_and_persists_worker() -> None:
 
     service = _make_service(repository)
 
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,
@@ -80,7 +80,7 @@ def test_create_worker_service_reclaims_existing_worker_for_node() -> None:
     """
     repository = InMemoryWorkerRepository()
     service = _make_service(repository)
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,
@@ -108,7 +108,7 @@ def test_create_worker_service_reclaim_recovers_abandoned_job() -> None:
     """
     repository = InMemoryWorkerRepository()
     service = _make_service(repository)
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,
@@ -158,7 +158,7 @@ def test_create_worker_service_reclaim_releases_lease_and_node_resources() -> (
         vram_mib=0,
     )
 
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,

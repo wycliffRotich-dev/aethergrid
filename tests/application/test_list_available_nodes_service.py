@@ -3,7 +3,6 @@ from datetime import UTC, datetime, timedelta
 from app.application.services.list_nodes_service import (
     ListNodesService,
 )
-from app.domain.entities.node import Node
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
@@ -11,6 +10,7 @@ from app.domain.value_objects.resource_requirements import (
 from app.infrastructure.repositories.in_memory_node_repository import (
     InMemoryNodeRepository,
 )
+from tests.support.nodes import make_node
 
 
 def test_list_nodes_returns_alive_and_offline_nodes() -> None:
@@ -25,7 +25,7 @@ def test_list_nodes_returns_alive_and_offline_nodes() -> None:
     offline, at the same time.
     """
 
-    alive = Node(
+    alive = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=16,
@@ -34,7 +34,7 @@ def test_list_nodes_returns_alive_and_offline_nodes() -> None:
         ),
     )
 
-    offline = Node(
+    offline = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=16,

@@ -1,12 +1,12 @@
-from app.domain.entities.node import Node
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from tests.support.nodes import make_node
 
 
 def test_node_can_host_smaller_job() -> None:
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=16,
@@ -25,7 +25,7 @@ def test_node_can_host_smaller_job() -> None:
 
 
 def test_node_rejects_large_job() -> None:
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=4,
@@ -44,7 +44,7 @@ def test_node_rejects_large_job() -> None:
 
 
 def test_node_allocates_resources() -> None:
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=16,
@@ -67,7 +67,7 @@ def test_node_allocates_resources() -> None:
 
 
 def test_node_releases_resources() -> None:
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=16,

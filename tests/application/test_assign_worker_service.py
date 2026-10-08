@@ -10,7 +10,6 @@ from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
 from app.domain.entities.job import Job
-from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
 from app.domain.enums.job_status import JobStatus
 from app.domain.enums.worker_status import WorkerStatus
@@ -30,6 +29,7 @@ from app.domain.value_objects.resource_requirements import (
 from app.infrastructure.repositories.in_memory_event_repository import (
     InMemoryEventRepository,
 )
+from tests.support.nodes import make_node
 
 
 class InMemoryWorkerRepository(
@@ -78,7 +78,7 @@ class InMemoryWorkerRepository(
 
 
 def test_assign_worker_service_assigns_job_to_idle_worker() -> None:
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,
@@ -139,7 +139,7 @@ def test_assign_worker_service_records_worker_assigned_event() -> None:
     Assigning a job to a worker must record a WorkerAssigned
     event, the same way scheduling already records JobScheduled.
     """
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,
@@ -234,7 +234,7 @@ def test_assign_worker_service_raises_no_available_node_when_worker_vanishes() -
     retry on the next tick) handles it without any changes of
     its own. See ADR 0027.
     """
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,

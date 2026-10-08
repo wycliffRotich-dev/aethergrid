@@ -7,6 +7,7 @@ from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from tests.support.nodes import make_node
 
 
 class NodeRepositoryContract:
@@ -27,16 +28,7 @@ class NodeRepositoryContract:
         raise NotImplementedError("Subclasses must provide a `repository` fixture.")
 
     def _make_node(self, **overrides) -> Node:
-        defaults = dict(
-            id=NodeId.new(),
-            capacity=ResourceRequirements(
-                cpu_cores=8,
-                memory_mib=16384,
-                vram_mib=8192,
-            ),
-        )
-        defaults.update(overrides)
-        return Node(**defaults)
+        return make_node(**overrides)
 
     def test_save_and_get_by_id_round_trip(self, repository):
         node = self._make_node()

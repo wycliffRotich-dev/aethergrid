@@ -4,7 +4,6 @@ from app.application.services.complete_job_service import (
     CompleteJobService,
 )
 from app.domain.entities.job import Job
-from app.domain.entities.node import Node
 from app.domain.enums.job_status import JobStatus
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
@@ -17,11 +16,12 @@ from app.infrastructure.repositories.in_memory_job_repository import (
 from app.infrastructure.repositories.in_memory_node_repository import (
     InMemoryNodeRepository,
 )
+from tests.support.nodes import make_node
 
 
 def test_complete_job_service_completes_job() -> None:
     # 1. Instantiate the domain entity safely using its native dataclass fields
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,
@@ -155,7 +155,7 @@ def test_complete_job_service_persists_released_node_resources(
 
     db_path = os.path.join(tmp_path, "test.db")
 
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,

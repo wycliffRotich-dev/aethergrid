@@ -2,7 +2,6 @@ from app.application.services.retry_job_service import (
     RetryJobService,
 )
 from app.domain.entities.job import Job
-from app.domain.entities.node import Node
 from app.domain.enums.job_status import JobStatus
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
@@ -12,6 +11,7 @@ from app.domain.value_objects.resource_requirements import (
 from app.infrastructure.repositories.in_memory_job_repository import (
     InMemoryJobRepository,
 )
+from tests.support.nodes import make_node
 
 
 def test_retry_service_requeues_failed_job() -> None:
@@ -20,7 +20,7 @@ def test_retry_service_requeues_failed_job() -> None:
     should be requeued.
     """
 
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=2,

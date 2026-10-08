@@ -1,10 +1,10 @@
 from datetime import UTC, datetime, timedelta
 
-from app.domain.entities.node import Node
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from tests.support.nodes import make_node
 
 
 def test_node_is_alive_when_recently_seen() -> None:
@@ -12,7 +12,7 @@ def test_node_is_alive_when_recently_seen() -> None:
     A node with a recent heartbeat is alive.
     """
 
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=16,
@@ -30,7 +30,7 @@ def test_node_is_not_alive_when_heartbeat_is_stale() -> None:
     is considered offline.
     """
 
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=16,

@@ -17,6 +17,7 @@ from app.infrastructure.repositories.postgres_job_repository import (
 from app.infrastructure.repositories.postgres_node_repository import (
     PostgresNodeRepository,
 )
+from tests.support.nodes import make_node
 
 
 @pytest.fixture(scope="session")
@@ -64,7 +65,7 @@ def _make_job(
 
 
 def _make_node() -> Node:
-    return Node(
+    return make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,

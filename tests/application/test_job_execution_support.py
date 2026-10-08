@@ -25,13 +25,14 @@ from app.infrastructure.repositories.sqlite_connection import (
 from app.infrastructure.repositories.sqlite_node_repository import (
     SqliteNodeRepository,
 )
+from tests.support.nodes import make_node
 
 
 def _make_node_and_job(
     job_resources: ResourceRequirements,
     max_retries: int = 1,
 ) -> tuple[Node, Job]:
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,

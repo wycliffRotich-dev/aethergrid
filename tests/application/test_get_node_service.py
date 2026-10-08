@@ -5,7 +5,6 @@ import pytest
 from app.application.services.get_node_service import (
     GetNodeService,
 )
-from app.domain.entities.node import Node
 from app.domain.exceptions.node_not_found_error import (
     NodeNotFoundError,
 )
@@ -16,6 +15,7 @@ from app.domain.value_objects.resource_requirements import (
 from app.infrastructure.repositories.in_memory_node_repository import (
     InMemoryNodeRepository,
 )
+from tests.support.nodes import make_node
 
 
 def test_get_node_service_returns_existing_node() -> None:
@@ -25,7 +25,7 @@ def test_get_node_service_returns_existing_node() -> None:
     """
     repository = InMemoryNodeRepository()
 
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,

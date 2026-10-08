@@ -8,7 +8,6 @@ from app.application.services.renew_lease_service import (
 )
 from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
-from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
 from app.domain.exceptions.lease_not_found_error import (
     LeaseNotFoundError,
@@ -25,10 +24,11 @@ from app.domain.value_objects.worker_id import WorkerId
 from app.infrastructure.repositories.in_memory_lease_repository import (
     InMemoryLeaseRepository,
 )
+from tests.support.nodes import make_node
 
 
 def test_execute_renews_worker_lease() -> None:
-    node = Node(
+    node = make_node(
         id=NodeId.new(),
         capacity=ResourceRequirements(
             cpu_cores=8,
