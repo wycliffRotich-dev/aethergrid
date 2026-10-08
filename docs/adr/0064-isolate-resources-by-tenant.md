@@ -55,8 +55,18 @@ a fact and invents nothing.
    or has a name ending in `_across_tenants`. The second form is
    reserved for system actors that act on the whole fleet by
    design: the scheduler loop, dead-worker marking, reconciliation
-   and lease expiry. A test inspects the abstract repositories and
-   fails on any method that is neither.
+   and lease expiry. Authentication is the one other case: it
+   learns the tenant from the credential, so its lookup cannot take
+   one, and it is named `get_by_hash_across_tenants`. A method that
+   saves an entity already carrying its `tenant_id` also satisfies
+   the rule, because the tenant travels in the entity. Such a save
+   never moves a key between tenants and never changes another
+   tenant's key, and it raises `ApiKeyTenantConflictError` instead
+   of being ignored. A test reads the parameter types of the
+   abstract repositories and fails on any method that is neither
+   scoped nor named `_across_tenants`, and on a method named
+   `_across_tenants` that takes a `TenantId`. A repository joins
+   the test in the same change that scopes it.
 
 5. **Cross-tenant access is indistinguishable from absence.**
    Route-facing lookups filter by tenant inside the query. Another
@@ -64,7 +74,9 @@ a fact and invents nothing.
    exist, so no response reveals that it exists. Lists contain only
    the caller's tenant. The cluster health, capacity and
    utilization routes and the event feed compute over the caller's
-   tenant only.
+   tenant only. The tenant filter runs before any scope decision,
+   so a caller without rights in another tenant never receives a
+   403 for a key that exists.
 
 6. **Scheduling never crosses a tenant.** Nodes are tenant-owned
    and there is no shared pool. `Scheduler.select_node` considers

@@ -43,8 +43,12 @@ class AuthenticateApiKeyService:
 
         key_hash = ApiKey.hash_secret(raw_key)
 
-        api_key = self._api_key_repository.get_by_hash(
-            key_hash,
+        # The tenant is learned from the credential itself
+        # (ADR 0064, point 3), so this is the one lookup
+        # that cannot be scoped to a tenant first.
+        api_key = (
+            self._api_key_repository
+            .get_by_hash_across_tenants(key_hash)
         )
 
         if api_key is None or not api_key.is_active():
@@ -66,6 +70,7 @@ class AuthenticateApiKeyService:
         # renewal on its own hot path.
         self._api_key_repository.mark_used(
             api_key.id,
+            api_key.tenant_id,
         )
 
         return api_key

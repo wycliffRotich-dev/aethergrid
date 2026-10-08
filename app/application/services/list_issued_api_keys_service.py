@@ -26,6 +26,11 @@ class ListIssuedApiKeysService:
     ordering RevokeApiKeyService already uses, so a caller
     without rights over a given id still only learns whether
     that id exists, not anything about what it issued.
+
+    Both reads are scoped to the caller's tenant (ADR 0064,
+    point 5). An issuer in another tenant is reported
+    exactly like a missing one, so the answer cannot reveal
+    that it exists.
     """
 
     def __init__(
@@ -39,7 +44,10 @@ class ListIssuedApiKeysService:
         issuer_id: ApiKeyId,
         caller: ApiKey,
     ) -> list[ApiKey]:
-        issuer = self._api_key_repository.get_by_id(issuer_id)
+        issuer = self._api_key_repository.get_by_id(
+            issuer_id,
+            caller.tenant_id,
+        )
 
         if issuer is None:
             raise ApiKeyNotFoundError(issuer_id)
@@ -52,4 +60,5 @@ class ListIssuedApiKeysService:
 
         return self._api_key_repository.list_issued_by(
             issuer_id,
+            caller.tenant_id,
         )[:MAX_ISSUED_KEYS_RETURNED]
