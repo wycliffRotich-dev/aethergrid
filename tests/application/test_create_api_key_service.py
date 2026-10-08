@@ -26,7 +26,7 @@ def test_execute_returns_plaintext_key_and_persists_the_entity(
         label="ci-runner", tenant_id=DEFAULT_TENANT_ID,
     )
 
-    fetched = repository.get_by_id(issued.id)
+    fetched = repository.get_by_id(issued.id, DEFAULT_TENANT_ID)
 
     assert fetched is not None
     assert fetched.key_hash != issued.plaintext_key

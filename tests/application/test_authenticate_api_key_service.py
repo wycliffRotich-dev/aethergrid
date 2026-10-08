@@ -79,7 +79,7 @@ def test_successful_auth_updates_last_used(repository):
         issued.plaintext_key,
     )
 
-    fetched = repository.get_by_id(issued.id)
+    fetched = repository.get_by_id(issued.id, DEFAULT_TENANT_ID)
 
     assert fetched is not None
     assert fetched.last_used_at is not None

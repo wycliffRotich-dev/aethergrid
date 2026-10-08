@@ -10,16 +10,14 @@ from app.domain.exceptions.unknown_api_key_scope_error import (
     UnknownApiKeyScopeError,
 )
 from app.domain.value_objects.api_key_scope import JOBS_EXECUTE
-from app.infrastructure.repositories.in_memory_api_key_repository import (
-    InMemoryApiKeyRepository,
-)
 from app.infrastructure.repositories.in_memory_tenant_repository import (
     InMemoryTenantRepository,
 )
+from tests.support.api_keys import RecordingApiKeyRepository
 
 
-def _service() -> tuple[CreateApiKeyService, InMemoryApiKeyRepository]:
-    repository = InMemoryApiKeyRepository()
+def _service() -> tuple[CreateApiKeyService, RecordingApiKeyRepository]:
+    repository = RecordingApiKeyRepository()
     return CreateApiKeyService(repository, tenant_repository=InMemoryTenantRepository()), repository
 
 
@@ -29,7 +27,7 @@ def test_issues_with_no_scopes_by_default() -> None:
     issued = service.execute(label="plain", tenant_id=DEFAULT_TENANT_ID)
 
     assert issued.scopes == frozenset()
-    stored = repository.get_by_id(issued.id)
+    stored = repository.get_by_id(issued.id, DEFAULT_TENANT_ID)
     assert stored.scopes == frozenset()
 
 
@@ -42,7 +40,7 @@ def test_grants_and_persists_the_requested_scopes() -> None:
     )
 
     assert issued.scopes == frozenset({JOBS_EXECUTE})
-    stored = repository.get_by_id(issued.id)
+    stored = repository.get_by_id(issued.id, DEFAULT_TENANT_ID)
     assert stored.has_scope(JOBS_EXECUTE)
 
 
@@ -55,4 +53,4 @@ def test_unknown_scope_is_rejected_and_nothing_is_persisted() -> None:
             scopes=frozenset({"job:execute"}), tenant_id=DEFAULT_TENANT_ID,
         )
 
-    assert repository.list_active() == []
+    assert repository.saved == []

@@ -52,7 +52,7 @@ def test_revoke_marks_the_key_inactive(repository, admin):
 
     RevokeApiKeyService(repository).execute(issued.id, caller=admin)
 
-    fetched = repository.get_by_id(issued.id)
+    fetched = repository.get_by_id(issued.id, DEFAULT_TENANT_ID)
 
     assert fetched is not None
     assert fetched.is_active() is False

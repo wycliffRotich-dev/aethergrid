@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+
 import pytest
 
 from app.domain.entities.api_key import ApiKey
@@ -7,7 +9,11 @@ from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.exceptions.api_key_not_found_error import (
     ApiKeyNotFoundError,
 )
+from app.domain.exceptions.api_key_tenant_conflict_error import (
+    ApiKeyTenantConflictError,
+)
 from app.domain.value_objects.api_key_id import ApiKeyId
+from app.domain.value_objects.tenant_id import TenantId
 from tests.support.api_keys import make_api_key
 
 
@@ -39,6 +45,7 @@ class ApiKeyRepositoryContract:
 
         fetched = repository.get_by_id(
             api_key.id,
+            DEFAULT_TENANT_ID,
         )
 
         assert fetched is not None
@@ -52,6 +59,7 @@ class ApiKeyRepositoryContract:
         assert (
             repository.get_by_id(
                 ApiKeyId.new(),
+                DEFAULT_TENANT_ID,
             )
             is None
         )
@@ -64,7 +72,7 @@ class ApiKeyRepositoryContract:
 
         repository.save(api_key)
 
-        fetched = repository.get_by_hash(
+        fetched = repository.get_by_hash_across_tenants(
             api_key.key_hash,
         )
 
@@ -76,30 +84,11 @@ class ApiKeyRepositoryContract:
         repository,
     ) -> None:
         assert (
-            repository.get_by_hash(
+            repository.get_by_hash_across_tenants(
                 "not-a-real-hash",
             )
             is None
         )
-
-    def test_list_active_excludes_revoked_keys(
-        self,
-        repository,
-    ) -> None:
-        active_key = self._make_api_key()
-        revoked_key = self._make_api_key()
-        revoked_key.revoke()
-
-        repository.save(active_key)
-        repository.save(revoked_key)
-
-        active_ids = {
-            api_key.id
-            for api_key in repository.list_active()
-        }
-
-        assert active_key.id in active_ids
-        assert revoked_key.id not in active_ids
 
     def test_save_persists_revocation(
         self,
@@ -114,6 +103,7 @@ class ApiKeyRepositoryContract:
 
         fetched = repository.get_by_id(
             api_key.id,
+            DEFAULT_TENANT_ID,
         )
 
         assert fetched is not None
@@ -132,10 +122,12 @@ class ApiKeyRepositoryContract:
 
         repository.mark_used(
             api_key.id,
+            DEFAULT_TENANT_ID,
         )
 
         fetched = repository.get_by_id(
             api_key.id,
+            DEFAULT_TENANT_ID,
         )
 
         assert fetched is not None
@@ -151,6 +143,7 @@ class ApiKeyRepositoryContract:
         with pytest.raises(ApiKeyNotFoundError):
             repository.mark_used(
                 ApiKeyId.new(),
+                DEFAULT_TENANT_ID,
             )
 
     def test_scopes_round_trip_by_id_and_by_hash(
@@ -164,8 +157,8 @@ class ApiKeyRepositoryContract:
 
         repository.save(api_key)
 
-        by_id = repository.get_by_id(api_key.id)
-        by_hash = repository.get_by_hash(api_key.key_hash)
+        by_id = repository.get_by_id(api_key.id, DEFAULT_TENANT_ID)
+        by_hash = repository.get_by_hash_across_tenants(api_key.key_hash)
 
         assert by_id.scopes == frozenset({"jobs:execute"})
         assert by_hash.scopes == frozenset({"jobs:execute"})
@@ -178,7 +171,7 @@ class ApiKeyRepositoryContract:
 
         repository.save(api_key)
 
-        assert repository.get_by_id(api_key.id).scopes == frozenset()
+        assert repository.get_by_id(api_key.id, DEFAULT_TENANT_ID).scopes == frozenset()
 
     def test_issued_by_round_trips_by_id(
         self,
@@ -193,7 +186,7 @@ class ApiKeyRepositoryContract:
         )
         repository.save(issued)
 
-        fetched = repository.get_by_id(issued.id)
+        fetched = repository.get_by_id(issued.id, DEFAULT_TENANT_ID)
 
         assert fetched is not None
         assert fetched.issued_by == issuer.id
@@ -206,7 +199,7 @@ class ApiKeyRepositoryContract:
 
         repository.save(api_key)
 
-        assert repository.get_by_id(api_key.id).issued_by is None
+        assert repository.get_by_id(api_key.id, DEFAULT_TENANT_ID).issued_by is None
 
     def test_list_issued_by_returns_keys_with_matching_issuer(
         self,
@@ -228,7 +221,7 @@ class ApiKeyRepositoryContract:
 
         issued_ids = {
             api_key.id
-            for api_key in repository.list_issued_by(issuer.id)
+            for api_key in repository.list_issued_by(issuer.id, DEFAULT_TENANT_ID)
         }
 
         assert issued_ids == {child_one.id, child_two.id}
@@ -249,7 +242,7 @@ class ApiKeyRepositoryContract:
 
         issued_ids = {
             api_key.id
-            for api_key in repository.list_issued_by(issuer.id)
+            for api_key in repository.list_issued_by(issuer.id, DEFAULT_TENANT_ID)
         }
 
         assert child.id in issued_ids
@@ -261,7 +254,7 @@ class ApiKeyRepositoryContract:
         issuer = self._make_api_key()
         repository.save(issuer)
 
-        assert repository.list_issued_by(issuer.id) == []
+        assert repository.list_issued_by(issuer.id, DEFAULT_TENANT_ID) == []
 
     def test_tenant_round_trips(
         self,
@@ -271,8 +264,114 @@ class ApiKeyRepositoryContract:
 
         repository.save(api_key)
 
-        fetched = repository.get_by_id(api_key.id)
+        fetched = repository.get_by_id(api_key.id, DEFAULT_TENANT_ID)
 
         assert fetched is not None
         assert fetched.tenant_id == api_key.tenant_id
         assert fetched.tenant_id == DEFAULT_TENANT_ID
+
+    @pytest.fixture
+    def second_tenant_id(self) -> TenantId:
+        """
+        A tenant other than the default one. Backends whose
+        storage enforces tenant rows override this to create
+        the tenant first.
+        """
+        return TenantId.new()
+
+    def test_get_by_id_in_another_tenant_returns_none(
+        self,
+        repository,
+        second_tenant_id,
+    ) -> None:
+        api_key = self._make_api_key()
+        repository.save(api_key)
+
+        assert (
+            repository.get_by_id(api_key.id, second_tenant_id)
+            is None
+        )
+
+    def test_mark_used_in_another_tenant_raises_and_changes_nothing(
+        self,
+        repository,
+        second_tenant_id,
+    ) -> None:
+        api_key = self._make_api_key()
+        repository.save(api_key)
+
+        with pytest.raises(ApiKeyNotFoundError):
+            repository.mark_used(api_key.id, second_tenant_id)
+
+        fetched = repository.get_by_id(
+            api_key.id,
+            DEFAULT_TENANT_ID,
+        )
+
+        assert fetched is not None
+        assert fetched.last_used_at is None
+
+    def test_list_issued_by_in_another_tenant_is_empty(
+        self,
+        repository,
+        second_tenant_id,
+    ) -> None:
+        issuer = self._make_api_key()
+        repository.save(issuer)
+
+        child, _ = make_api_key(
+            label="child",
+            issued_by=issuer.id,
+        )
+        repository.save(child)
+
+        assert (
+            repository.list_issued_by(issuer.id, second_tenant_id)
+            == []
+        )
+
+    def test_get_by_hash_across_tenants_finds_a_key_in_any_tenant(
+        self,
+        repository,
+        second_tenant_id,
+    ) -> None:
+        api_key, _ = make_api_key(
+            label="other-tenant",
+            tenant_id=second_tenant_id,
+        )
+        repository.save(api_key)
+
+        fetched = repository.get_by_hash_across_tenants(
+            api_key.key_hash,
+        )
+
+        assert fetched is not None
+        assert fetched.id == api_key.id
+        assert fetched.tenant_id == second_tenant_id
+
+    def test_save_in_another_tenant_raises_and_changes_nothing(
+        self,
+        repository,
+        second_tenant_id,
+    ) -> None:
+        api_key = self._make_api_key()
+        repository.save(api_key)
+
+        # A separate object with the same id, claiming another
+        # tenant and a revocation. Saving it is reported as a
+        # conflict and must not move or revoke the stored key.
+        impostor = copy.deepcopy(api_key)
+        impostor.tenant_id = second_tenant_id
+        impostor.revoke()
+
+        with pytest.raises(ApiKeyTenantConflictError):
+            repository.save(impostor)
+
+        fetched = repository.get_by_id(
+            api_key.id,
+            DEFAULT_TENANT_ID,
+        )
+
+        assert fetched is not None
+        assert fetched.tenant_id == DEFAULT_TENANT_ID
+        assert fetched.revoked_at is None

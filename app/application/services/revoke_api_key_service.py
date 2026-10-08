@@ -42,8 +42,14 @@ class RevokeApiKeyService:
         api_key_id: ApiKeyId,
         caller: ApiKey,
     ) -> None:
+        # Scoped to the caller's tenant inside the lookup, so
+        # a key in another tenant raises the same not-found
+        # as a missing id, before any scope decision can
+        # answer 403 and reveal that it exists (ADR 0064,
+        # point 5).
         api_key = self._api_key_repository.get_by_id(
             api_key_id,
+            caller.tenant_id,
         )
 
         if api_key is None:

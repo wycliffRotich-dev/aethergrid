@@ -4,6 +4,9 @@ from app.domain.entities.api_key import ApiKey
 from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.value_objects.api_key_id import ApiKeyId
 from app.domain.value_objects.tenant_id import TenantId
+from app.infrastructure.repositories.in_memory_api_key_repository import (
+    InMemoryApiKeyRepository,
+)
 
 
 def make_api_key(
@@ -25,3 +28,21 @@ def make_api_key(
         scopes=scopes,
         issued_by=issued_by,
     )
+
+
+class RecordingApiKeyRepository(InMemoryApiKeyRepository):
+    """
+    In-memory repository that also records every save call.
+
+    Lets a test assert that a service never reached the
+    repository (for example after a rejected request) without
+    needing a fleet-wide read on the production contract.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.saved: list[ApiKey] = []
+
+    def save(self, api_key: ApiKey) -> None:
+        super().save(api_key)
+        self.saved.append(api_key)

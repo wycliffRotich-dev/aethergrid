@@ -7,6 +7,9 @@ from psycopg import errors
 from psycopg_pool import ConnectionPool
 
 from app.domain.entities.tenant import DEFAULT_TENANT_ID, Tenant
+from app.domain.exceptions.api_key_tenant_conflict_error import (
+    ApiKeyTenantConflictError,
+)
 from app.domain.value_objects.tenant_id import TenantId
 from app.infrastructure.repositories.postgres_api_key_repository import (
     PostgresApiKeyRepository,
@@ -85,7 +88,7 @@ def test_a_key_may_have_an_issuer_in_the_same_tenant(repositories):
 
     keys.save(child)
 
-    stored = keys.get_by_id(child.id)
+    stored = keys.get_by_id(child.id, tenant.id)
     assert stored is not None
     assert stored.tenant_id == tenant.id
     assert stored.issued_by == issuer.id
@@ -99,8 +102,9 @@ def test_saving_again_never_moves_a_key_to_another_tenant(repositories):
     keys.save(key)
 
     key.tenant_id = second.id
-    keys.save(key)
+    with pytest.raises(ApiKeyTenantConflictError):
+        keys.save(key)
 
-    stored = keys.get_by_id(key.id)
+    stored = keys.get_by_id(key.id, first.id)
     assert stored is not None
     assert stored.tenant_id == first.id
