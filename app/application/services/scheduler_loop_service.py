@@ -45,7 +45,7 @@ class SchedulerLoopService:
         """
         Schedule queued jobs in priority order.
         """
-        nodes = self._node_repository.list_available()
+        nodes = self._node_repository.list_available_across_tenants()
 
         queued_jobs = sorted(
             (

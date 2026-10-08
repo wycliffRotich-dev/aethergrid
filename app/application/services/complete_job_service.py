@@ -38,7 +38,7 @@ class CompleteJobService:
         if job.assigned_node_id is None:
             return None
 
-        node = self._node_repository.get_by_id(
+        node = self._node_repository.get_by_id_across_tenants(
             job.assigned_node_id,
         )
 

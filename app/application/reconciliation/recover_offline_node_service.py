@@ -79,7 +79,7 @@ class RecoverOfflineNodeService:
         """
         offline_node_ids = {
             node.id
-            for node in self._node_repository.list()
+            for node in self._node_repository.list_across_tenants()
             if not node.is_alive()
         }
 
