@@ -11,6 +11,7 @@ from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from app.domain.value_objects.tenant_id import TenantId
 
 
 def utc_now() -> datetime:
@@ -61,6 +62,13 @@ class Node:
 
     id: NodeId
     capacity: ResourceRequirements
+    tenant_id: TenantId
+    """
+    The tenant this node belongs to (ADR 0064). Required and fixed
+    at registration: a node never moves between tenants, and there
+    is no unscoped node.
+    """
+
     name: str = field(
         default_factory=generate_node_name,
     )

@@ -144,3 +144,55 @@ def test_a_key_cannot_name_an_issuer_from_another_tenant(scratch):
             "VALUES (%s, 'hash-child', 'child', now(), %s, %s)",
             (str(uuid.uuid4()), other, issuer),
         )
+
+
+_NODE_WITHOUT_TENANT = (
+    "INSERT INTO nodes ("
+    "id, name, capacity_cpu_cores, capacity_memory_mib, "
+    "capacity_vram_mib, available_cpu_cores, available_memory_mib, "
+    "available_vram_mib, last_seen_at"
+    ") VALUES (%s, 'n', 8, 16384, 0, 8, 16384, 0, now())"
+)
+
+
+def test_upgrading_assigns_existing_nodes_to_the_default_tenant(scratch):
+    scratch.execute(PRE_TENANCY_SCHEMA)
+    node_id = str(uuid.uuid4())
+    scratch.execute(_NODE_WITHOUT_TENANT, (node_id,))
+
+    scratch.execute(CURRENT_SCHEMA)
+
+    rows = scratch.execute(
+        "SELECT id::text, tenant_id::text FROM nodes"
+    ).fetchall()
+    assert rows == [(node_id, str(DEFAULT_TENANT_ID))]
+
+
+def test_a_node_must_name_a_tenant_after_the_upgrade(scratch):
+    scratch.execute(PRE_TENANCY_SCHEMA)
+    scratch.execute(CURRENT_SCHEMA)
+
+    with pytest.raises(psycopg.errors.NotNullViolation):
+        scratch.execute(_NODE_WITHOUT_TENANT, (str(uuid.uuid4()),))
+
+
+def test_a_node_must_name_a_tenant_in_a_fresh_schema(scratch):
+    scratch.execute(CURRENT_SCHEMA)
+
+    with pytest.raises(psycopg.errors.NotNullViolation):
+        scratch.execute(_NODE_WITHOUT_TENANT, (str(uuid.uuid4()),))
+
+
+def test_a_node_cannot_name_a_tenant_that_does_not_exist(scratch):
+    scratch.execute(CURRENT_SCHEMA)
+
+    with pytest.raises(psycopg.errors.ForeignKeyViolation):
+        scratch.execute(
+            "INSERT INTO nodes ("
+            "id, name, capacity_cpu_cores, capacity_memory_mib, "
+            "capacity_vram_mib, available_cpu_cores, "
+            "available_memory_mib, available_vram_mib, last_seen_at, "
+            "tenant_id"
+            ") VALUES (%s, 'n', 8, 16384, 0, 8, 16384, 0, now(), %s)",
+            (str(uuid.uuid4()), str(uuid.uuid4())),
+        )

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from app.domain.entities.node import Node
+from app.domain.exceptions.node_tenant_conflict_error import (
+    NodeTenantConflictError,
+)
 from app.domain.repositories.node_repository import (
     NodeRepository,
 )
@@ -26,6 +29,13 @@ class InMemoryNodeRepository(NodeRepository):
         self,
         node: Node,
     ) -> None:
+        existing = self._nodes.get(node.id)
+
+        if existing is not None and existing.tenant_id != node.tenant_id:
+            raise NodeTenantConflictError(
+                f"node {node.id} belongs to another tenant"
+            )
+
         self._nodes[node.id] = node
 
     def clear(

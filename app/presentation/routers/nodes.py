@@ -23,6 +23,7 @@ from app.application.services.list_offline_nodes_service import (
 from app.application.services.remove_offline_node_service import (
     RemoveOfflineNodeService,
 )
+from app.domain.entities.api_key import ApiKey
 from app.domain.exceptions.node_not_found_error import (
     NodeNotFoundError,
 )
@@ -81,6 +82,7 @@ def create_node(
         CreateNodeService,
         Depends(get_create_node_service),
     ],
+    caller: Annotated[ApiKey, Depends(require_api_key)],
 ) -> CreateNodeResponse:
     """
     Create a new compute node.
@@ -91,7 +93,11 @@ def create_node(
         vram_mib=request.vram_mib,
     )
 
-    node = service.execute(capacity, name=request.name)
+    node = service.execute(
+        capacity,
+        caller.tenant_id,
+        name=request.name,
+    )
 
     return CreateNodeResponse(
         id=str(node.id),

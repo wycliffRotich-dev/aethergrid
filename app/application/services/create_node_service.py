@@ -8,6 +8,7 @@ from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class CreateNodeService:
@@ -25,6 +26,7 @@ class CreateNodeService:
     def execute(
         self,
         capacity: ResourceRequirements,
+        tenant_id: TenantId,
         name: str | None = None,
     ) -> Node:
         """
@@ -36,6 +38,10 @@ class CreateNodeService:
         fallback exists for nodes registered without one,
         such as through manual registration.
 
+        The node belongs to tenant_id for its whole life (ADR 0064).
+        Callers take it from the authenticated key, never from
+        request input.
+
         Returns:
             The newly created node.
         """
@@ -43,12 +49,14 @@ class CreateNodeService:
             Node(
                 id=NodeId.new(),
                 capacity=capacity,
+                tenant_id=tenant_id,
                 name=name,
             )
             if name
             else Node(
                 id=NodeId.new(),
                 capacity=capacity,
+                tenant_id=tenant_id,
             )
         )
 

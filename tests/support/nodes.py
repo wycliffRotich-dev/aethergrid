@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.domain.entities.node import Node
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
@@ -26,6 +27,9 @@ def make_node(**overrides: Any) -> Node:
             memory_mib=16384,
             vram_mib=8192,
         ),
+        # The default tenant, so a test only names a tenant when
+        # tenancy is what it is testing (ADR 0064).
+        "tenant_id": DEFAULT_TENANT_ID,
     }
     defaults.update(overrides)
 

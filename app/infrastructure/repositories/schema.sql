@@ -194,3 +194,30 @@ BEGIN
     END IF;
 END
 $$;
+
+-- ADR 0064: every node belongs to exactly one tenant. A node that
+-- predates this column belongs to the default tenant, the one
+-- deployment that created it. The column never gets a default, so an
+-- insert that forgets the tenant fails instead of landing in the
+-- default tenant. The three steps run in one transaction, so a failed
+-- upgrade leaves the old schema.
+BEGIN;
+
+ALTER TABLE nodes
+ADD COLUMN IF NOT EXISTS tenant_id UUID
+REFERENCES tenants(id);
+
+UPDATE nodes
+SET tenant_id = '00000000-0000-0000-0000-000000000001'
+WHERE tenant_id IS NULL;
+
+ALTER TABLE nodes
+ALTER COLUMN tenant_id SET NOT NULL;
+
+COMMIT;
+
+-- The composite foreign keys that tie jobs and workers to a node in
+-- the same tenant point at this index. They arrive with the change
+-- that gives those tables a tenant.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_nodes_id_tenant
+ON nodes (id, tenant_id);
