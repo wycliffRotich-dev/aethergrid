@@ -42,3 +42,36 @@ class NodeRepository(ABC):
         Remove a node from the repository.
         """
         ...
+
+    @abstractmethod
+    def get_by_id_across_tenants(
+        self,
+        node_id: NodeId,
+    ) -> Node | None:
+        """
+        Retrieve a node in any tenant.
+
+        Reserved for system actors that act on the whole fleet by
+        design, and for callers that hold a node id but no tenant
+        yet (ADR 0064, point 4). Route-facing code must not use it.
+        """
+        ...
+
+    @abstractmethod
+    def list_across_tenants(
+        self,
+    ) -> list[Node]:
+        """
+        List every node in every tenant. System actors only.
+        """
+        ...
+
+    @abstractmethod
+    def list_available_across_tenants(
+        self,
+    ) -> list[Node]:
+        """
+        List nodes that are eligible for scheduling, in every
+        tenant. System actors only.
+        """
+        ...

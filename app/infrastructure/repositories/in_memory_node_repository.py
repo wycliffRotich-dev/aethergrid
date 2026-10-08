@@ -81,3 +81,28 @@ class InMemoryNodeRepository(NodeRepository):
             node_id,
             None,
         )
+
+    def get_by_id_across_tenants(
+        self,
+        node_id: NodeId,
+    ) -> Node | None:
+        return self._nodes.get(
+            node_id,
+        )
+
+    def list_across_tenants(
+        self,
+    ) -> list[Node]:
+        return list(
+            self._nodes.values(),
+        )
+
+    def list_available_across_tenants(
+        self,
+    ) -> list[Node]:
+        return [
+            node
+            for node in self._nodes.values()
+            if node.is_alive()
+            and not node.is_draining()
+        ]

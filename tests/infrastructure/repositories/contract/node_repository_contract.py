@@ -172,3 +172,38 @@ class NodeRepositoryContract:
         assert fetched.tenant_id == DEFAULT_TENANT_ID
         assert fetched.name == node.name
         assert fetched.draining is False
+
+    def test_across_tenants_reads_see_nodes_in_every_tenant(
+        self,
+        repository,
+        second_tenant_id,
+    ) -> None:
+        mine = self._make_node()
+        theirs = self._make_node(tenant_id=second_tenant_id)
+        repository.save(mine)
+        repository.save(theirs)
+
+        listed = repository.list_across_tenants()
+        fetched = repository.get_by_id_across_tenants(theirs.id)
+
+        assert {node.id for node in listed} == {mine.id, theirs.id}
+        assert fetched is not None
+        assert fetched.tenant_id == second_tenant_id
+        assert repository.get_by_id_across_tenants(NodeId.new()) is None
+
+    def test_list_available_across_tenants_skips_draining_nodes(
+        self,
+        repository,
+        second_tenant_id,
+    ) -> None:
+        ready = self._make_node(tenant_id=second_tenant_id)
+        draining = self._make_node(draining=True)
+        repository.save(ready)
+        repository.save(draining)
+
+        available = {
+            node.id for node in repository.list_available_across_tenants()
+        }
+
+        assert ready.id in available
+        assert draining.id not in available

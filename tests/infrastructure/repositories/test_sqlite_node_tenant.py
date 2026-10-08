@@ -115,3 +115,39 @@ def test_upgrade_assigns_pre_tenant_rows_to_the_default_tenant(
     assert fetched is not None
     assert fetched.tenant_id == DEFAULT_TENANT_ID
     assert fetched.name == "old-node"
+
+
+def test_across_tenants_reads_see_nodes_in_every_tenant(db_path) -> None:
+    connection = create_connection(db_path)
+    repository = SqliteNodeRepository(connection)
+    mine = make_node()
+    theirs = make_node(tenant_id=TenantId.new())
+    repository.save(mine)
+    repository.save(theirs)
+
+    listed = repository.list_across_tenants()
+    fetched = repository.get_by_id_across_tenants(theirs.id)
+    missing = repository.get_by_id_across_tenants(NodeId.new())
+    connection.close()
+
+    assert {node.id for node in listed} == {mine.id, theirs.id}
+    assert fetched is not None
+    assert fetched.tenant_id == theirs.tenant_id
+    assert missing is None
+
+
+def test_list_available_across_tenants_skips_draining_nodes(db_path) -> None:
+    connection = create_connection(db_path)
+    repository = SqliteNodeRepository(connection)
+    ready = make_node(tenant_id=TenantId.new())
+    draining = make_node(draining=True)
+    repository.save(ready)
+    repository.save(draining)
+
+    available = {
+        node.id for node in repository.list_available_across_tenants()
+    }
+    connection.close()
+
+    assert ready.id in available
+    assert draining.id not in available

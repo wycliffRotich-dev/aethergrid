@@ -189,6 +189,38 @@ class SqliteNodeRepository(NodeRepository):
         )
         self._connection.commit()
 
+    def get_by_id_across_tenants(
+        self,
+        node_id: NodeId,
+    ) -> Node | None:
+        row = self._connection.execute(
+            "SELECT * FROM nodes WHERE id = ?",
+            (str(node_id),),
+        ).fetchone()
+
+        if row is None:
+            return None
+
+        return self._row_to_node(row)
+
+    def list_across_tenants(
+        self,
+    ) -> list[Node]:
+        rows = self._connection.execute(
+            "SELECT * FROM nodes",
+        ).fetchall()
+
+        return [self._row_to_node(row) for row in rows]
+
+    def list_available_across_tenants(
+        self,
+    ) -> list[Node]:
+        return [
+            node
+            for node in self.list_across_tenants()
+            if node.is_alive() and not node.is_draining()
+        ]
+
     def _row_to_node(
         self,
         row: sqlite3.Row,
