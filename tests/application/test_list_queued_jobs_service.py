@@ -1,7 +1,6 @@
 from app.application.services.list_queued_jobs_service import (
     ListQueuedJobsService,
 )
-from app.domain.entities.job import Job
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
@@ -9,6 +8,7 @@ from app.domain.value_objects.resource_requirements import (
 from app.infrastructure.repositories.in_memory_job_repository import (
     InMemoryJobRepository,
 )
+from tests.support.jobs import make_job
 
 
 def test_list_queued_jobs_returns_only_queued_jobs() -> None:
@@ -16,7 +16,7 @@ def test_list_queued_jobs_returns_only_queued_jobs() -> None:
     Only queued jobs should be returned.
     """
 
-    queued = Job(
+    queued = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=2,
@@ -26,7 +26,7 @@ def test_list_queued_jobs_returns_only_queued_jobs() -> None:
     )
     queued.queue()
 
-    submitted = Job(
+    submitted = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=2,

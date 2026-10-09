@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from app.domain.entities.job import Job
 from app.domain.entities.worker import (
     HEARTBEAT_TIMEOUT,
     Worker,
@@ -15,6 +14,7 @@ from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
 from app.domain.value_objects.worker_id import WorkerId
+from tests.support.jobs import make_job
 from tests.support.nodes import make_node
 
 
@@ -92,7 +92,7 @@ def test_heartbeat_does_not_recover_offline_worker_with_running_job() -> None:
     """
     worker = create_worker()
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=1,

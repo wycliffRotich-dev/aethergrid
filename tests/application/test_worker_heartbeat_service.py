@@ -1,7 +1,6 @@
 from app.application.services.worker_heartbeat_service import (
     WorkerHeartbeatService,
 )
-from app.domain.entities.job import Job
 from app.domain.entities.worker import Worker
 from app.domain.enums.worker_status import WorkerStatus
 from app.domain.value_objects.job_id import JobId
@@ -13,6 +12,7 @@ from app.domain.value_objects.worker_id import WorkerId
 from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
+from tests.support.jobs import make_job
 from tests.support.nodes import make_node
 
 
@@ -118,7 +118,7 @@ def test_execute_does_not_recover_offline_worker_with_running_job() -> None:
         node=node,
     )
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=1,

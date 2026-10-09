@@ -1,14 +1,14 @@
-from app.domain.entities.job import Job
 from app.domain.enums.job_status import JobStatus
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from tests.support.jobs import make_job
 
 
 def test_job_can_be_created() -> None:
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=4,
@@ -31,12 +31,12 @@ def test_jobs_with_different_ids_are_not_equal() -> None:
         vram_mib=1024,
     )
 
-    job1 = Job(
+    job1 = make_job(
         id=JobId.new(),
         resources=resources,
     )
 
-    job2 = Job(
+    job2 = make_job(
         id=JobId.new(),
         resources=resources,
     )
@@ -45,7 +45,7 @@ def test_jobs_with_different_ids_are_not_equal() -> None:
 
 
 def test_job_can_be_assigned_to_a_node() -> None:
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=4,
@@ -64,7 +64,7 @@ def test_job_can_be_assigned_to_a_node() -> None:
 
 
 def test_job_can_start_running() -> None:
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=4,

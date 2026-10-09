@@ -5,7 +5,6 @@ from fastapi.testclient import TestClient
 from app.application.services.acquire_lease_service import (
     AcquireLeaseService,
 )
-from app.domain.entities.job import Job
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
@@ -13,6 +12,7 @@ from app.domain.value_objects.resource_requirements import (
 )
 from app.domain.value_objects.worker_id import WorkerId
 from app.presentation.api import app
+from tests.support.jobs import make_job
 
 
 def test_renew_lease_succeeds_while_worker_holds_a_job() -> None:
@@ -56,7 +56,7 @@ def test_renew_lease_succeeds_while_worker_holds_a_job() -> None:
         )
         worker_id = worker_response.json()["id"]
 
-        job = Job(
+        job = make_job(
             id=JobId.new(),
             resources=ResourceRequirements(
                 cpu_cores=2,

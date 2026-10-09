@@ -3,7 +3,6 @@ from datetime import timedelta
 from app.application.services.create_worker_service import (
     CreateWorkerService,
 )
-from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
 from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.entities.worker import Worker
@@ -25,6 +24,7 @@ from app.infrastructure.repositories.in_memory_node_repository import (
 from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
+from tests.support.jobs import make_job
 from tests.support.nodes import make_node
 
 
@@ -185,7 +185,7 @@ def test_create_worker_service_reclaim_releases_lease_and_node_resources() -> (
         node=node,
     )
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=job_resources,
         max_retries=1,

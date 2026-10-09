@@ -1,7 +1,6 @@
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
-from app.domain.entities.job import Job
 from app.domain.services.job_lifecycle import JobLifecycle
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
@@ -11,6 +10,7 @@ from app.domain.value_objects.resource_requirements import (
 from app.infrastructure.repositories.in_memory_event_repository import (
     InMemoryEventRepository,
 )
+from tests.support.jobs import make_job
 from tests.support.nodes import make_node
 
 
@@ -21,7 +21,7 @@ def test_record_job_scheduled_event() -> None:
         vram_mib=0,
     )
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=resources,
     )

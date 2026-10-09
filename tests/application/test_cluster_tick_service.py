@@ -1,7 +1,6 @@
 from app.application.services.cluster_tick_service import (
     ClusterTickService,
 )
-from app.domain.entities.job import Job
 from app.domain.entities.worker import Worker
 from app.domain.enums.worker_management import WorkerManagement
 from app.domain.enums.worker_status import WorkerStatus
@@ -14,6 +13,7 @@ from app.domain.value_objects.worker_id import WorkerId
 from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
+from tests.support.jobs import make_job
 from tests.support.nodes import make_node
 
 
@@ -53,7 +53,7 @@ def _make_worker_with_running_job(
             vram_mib=0,
         ),
     )
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=2,

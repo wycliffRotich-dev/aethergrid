@@ -1,10 +1,10 @@
-from app.domain.entities.job import Job
 from app.domain.services.scheduler import Scheduler
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from tests.support.jobs import make_job
 from tests.support.nodes import make_node
 
 
@@ -20,7 +20,7 @@ def test_scheduler_selects_node_with_sufficient_resources() -> None:
         ),
     )
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=4,
@@ -49,7 +49,7 @@ def test_scheduler_returns_none_when_no_node_matches() -> None:
         ),
     )
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=8,

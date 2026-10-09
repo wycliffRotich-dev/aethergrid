@@ -36,6 +36,7 @@ from app.infrastructure.repositories.in_memory_node_repository import (
 from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
+from tests.support.jobs import make_job
 from tests.support.nodes import make_node
 
 
@@ -73,7 +74,7 @@ def test_recover_expired_lease_requeues_job_with_retries_remaining() -> None:
 
     worker.ready()
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=1,
@@ -153,7 +154,7 @@ def test_recover_expired_lease_skips_a_job_whose_lease_was_renewed_mid_pass() ->
 
     worker.ready()
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=1,
@@ -227,7 +228,7 @@ def test_recover_expired_lease_fails_job_once_retries_exhausted() -> None:
 
     worker.ready()
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=1,
@@ -287,7 +288,7 @@ def test_recover_expired_lease_records_job_reclaimed_event() -> None:
 
     worker.ready()
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=1,
@@ -351,7 +352,7 @@ def test_recover_expired_lease_finalizes_cancelling_job_as_cancelled() -> None:
 
     worker.ready()
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=1,
@@ -418,7 +419,7 @@ def test_recover_expired_lease_records_job_cancelled_event_for_cancelling_job() 
 
     worker.ready()
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=1,
@@ -494,7 +495,7 @@ def test_recover_expired_lease_releases_node_resources() -> None:
 
     worker.ready()
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=job_resources,
         max_retries=1,

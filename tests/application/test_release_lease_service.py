@@ -37,6 +37,7 @@ from app.infrastructure.repositories.in_memory_lease_repository import (
 from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
+from tests.support.jobs import make_job
 from tests.support.nodes import make_node
 
 
@@ -57,7 +58,7 @@ def _make_worker_with_running_job() -> tuple[Worker, Job]:
 
     worker.ready()
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=1,

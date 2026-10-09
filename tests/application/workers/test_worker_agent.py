@@ -1,4 +1,3 @@
-from app.domain.entities.job import Job
 from app.domain.entities.worker import Worker
 from app.domain.enums.job_status import JobStatus
 from app.domain.value_objects.job_id import JobId
@@ -7,6 +6,7 @@ from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
 from app.domain.value_objects.worker_id import WorkerId
+from tests.support.jobs import make_job
 from tests.support.nodes import make_node
 
 
@@ -25,7 +25,7 @@ def test_worker_can_run_job() -> None:
         ),
     )
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=2,
