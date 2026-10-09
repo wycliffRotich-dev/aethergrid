@@ -26,6 +26,7 @@ from app.infrastructure.repositories.sqlite_connection import (
 from app.infrastructure.repositories.sqlite_node_repository import (
     SqliteNodeRepository,
 )
+from tests.support.jobs import make_job
 from tests.support.nodes import make_node
 
 
@@ -43,7 +44,7 @@ def _make_node_and_job(
     )
     node.allocate(job_resources)
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=job_resources,
         max_retries=max_retries,
@@ -126,7 +127,7 @@ def test_reclaim_job_with_no_node_still_deletes_lease_and_reclaims_job() -> (
         memory_mib=512,
         vram_mib=0,
     )
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=job_resources,
         max_retries=1,
@@ -171,7 +172,7 @@ def test_reclaim_job_returns_false_when_job_not_reclaimable() -> None:
         memory_mib=512,
         vram_mib=0,
     )
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=job_resources,
         max_retries=1,
@@ -216,7 +217,7 @@ def test_reclaim_job_fails_outright_once_retries_exhausted() -> None:
         memory_mib=512,
         vram_mib=0,
     )
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=job_resources,
         max_retries=0,

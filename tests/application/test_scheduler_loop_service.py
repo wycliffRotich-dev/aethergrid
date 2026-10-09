@@ -7,7 +7,6 @@ from app.application.services.record_job_events_service import (
 from app.application.services.scheduler_loop_service import (
     SchedulerLoopService,
 )
-from app.domain.entities.job import Job
 from app.domain.entities.worker import Worker
 from app.domain.enums.job_status import JobStatus
 from app.domain.enums.worker_status import WorkerStatus
@@ -30,6 +29,7 @@ from app.infrastructure.repositories.in_memory_node_repository import (
 from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
+from tests.support.jobs import make_job
 from tests.support.nodes import make_node
 
 
@@ -46,7 +46,7 @@ def test_scheduler_loop_schedules_queued_jobs() -> None:
             vram_mib=16384,
         ),
     )
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=4,
@@ -99,7 +99,7 @@ def test_scheduler_loop_assigns_idle_worker_and_starts_job() -> None:
         status=WorkerStatus.IDLE,
     )
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=4,
@@ -149,7 +149,7 @@ def test_scheduler_loop_records_job_scheduled_event() -> None:
         ),
     )
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=4,

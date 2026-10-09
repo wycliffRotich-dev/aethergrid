@@ -1,7 +1,6 @@
 from app.application.services.scheduler_loop_service import (
     SchedulerLoopService,
 )
-from app.domain.entities.job import Job
 from app.domain.enums.job_status import JobStatus
 from app.domain.services.scheduler import Scheduler
 from app.domain.value_objects.job_id import JobId
@@ -15,6 +14,7 @@ from app.infrastructure.repositories.in_memory_job_repository import (
 from app.infrastructure.repositories.in_memory_node_repository import (
     InMemoryNodeRepository,
 )
+from tests.support.jobs import make_job
 from tests.support.nodes import make_node
 
 
@@ -33,7 +33,7 @@ def test_scheduler_loop_schedules_highest_priority_job_first() -> None:
         ),
     )
 
-    low = Job(
+    low = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=1,
@@ -43,7 +43,7 @@ def test_scheduler_loop_schedules_highest_priority_job_first() -> None:
         priority=1,
     )
 
-    medium = Job(
+    medium = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=1,
@@ -53,7 +53,7 @@ def test_scheduler_loop_schedules_highest_priority_job_first() -> None:
         priority=5,
     )
 
-    high = Job(
+    high = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=1,

@@ -1,7 +1,6 @@
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
-from app.domain.entities.job import Job
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
@@ -9,10 +8,11 @@ from app.domain.value_objects.resource_requirements import (
 from app.infrastructure.repositories.in_memory_event_repository import (
     InMemoryEventRepository,
 )
+from tests.support.jobs import make_job
 
 
 def test_record_job_created_event() -> None:
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=2,
@@ -43,7 +43,7 @@ def test_record_job_created_event() -> None:
 
 
 def test_record_multiple_events_for_same_job() -> None:
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=1,

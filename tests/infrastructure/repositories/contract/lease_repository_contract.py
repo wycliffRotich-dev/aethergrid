@@ -4,7 +4,6 @@ from datetime import timedelta
 
 import pytest
 
-from app.domain.entities.job import Job
 from app.domain.entities.lease import DEFAULT_LEASE_DURATION, Lease
 from app.domain.entities.worker import Worker
 from app.domain.exceptions.lease_not_found_error import LeaseNotFoundError
@@ -14,6 +13,7 @@ from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
 from app.domain.value_objects.worker_id import WorkerId
+from tests.support.jobs import make_job
 from tests.support.nodes import make_node
 
 
@@ -48,7 +48,7 @@ class LeaseRepositoryContract:
             node=node,
         )
 
-        job = Job(
+        job = make_job(
             id=JobId.new(),
             resources=ResourceRequirements(
                 cpu_cores=1,

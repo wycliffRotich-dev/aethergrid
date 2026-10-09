@@ -1,10 +1,10 @@
-from app.domain.entities.job import Job
 from app.domain.services.scheduler import Scheduler
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from tests.support.jobs import make_job
 from tests.support.nodes import make_node
 
 
@@ -46,7 +46,7 @@ def test_scheduler_selects_best_fit_node() -> None:
         ),
     )
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=4,
@@ -116,7 +116,7 @@ def test_scheduler_prefers_tighter_fit_on_vram_not_cpu() -> None:
         ),
     )
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=1,
@@ -164,7 +164,7 @@ def test_scheduler_ignores_unrequested_dimensions_in_scoring() -> None:
         ),
     )
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=2,

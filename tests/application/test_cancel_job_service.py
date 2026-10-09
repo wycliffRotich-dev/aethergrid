@@ -3,7 +3,6 @@ import pytest
 from app.application.services.cancel_job_service import (
     CancelJobService,
 )
-from app.domain.entities.job import Job
 from app.domain.enums.job_status import JobStatus
 from app.domain.exceptions.invalid_job_transition import (
     InvalidJobTransition,
@@ -16,6 +15,7 @@ from app.domain.value_objects.resource_requirements import (
 from app.infrastructure.repositories.in_memory_job_repository import (
     InMemoryJobRepository,
 )
+from tests.support.jobs import make_job
 
 
 def test_cancel_job_service_cancels_a_queued_job() -> None:
@@ -23,7 +23,7 @@ def test_cancel_job_service_cancels_a_queued_job() -> None:
     A queued job can be cancelled.
     """
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=4,
@@ -59,7 +59,7 @@ def test_cancel_job_service_requests_cancellation_of_a_running_job() -> None:
     later, asynchronously, on the worker's next lease
     renewal.
     """
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=4,
@@ -95,7 +95,7 @@ def test_cancel_job_service_is_idempotent_when_already_cancelling() -> None:
     before the subprocess is actually confirmed dead, ahead
     of the worker ever having a chance to terminate it.
     """
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=4,
@@ -147,7 +147,7 @@ def test_cancel_job_service_raises_for_already_completed_job() -> None:
     rather than silently succeed (see InvalidJobTransition's
     409 mapping in the jobs router).
     """
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=4,
@@ -183,7 +183,7 @@ def test_cancel_job_service_raises_for_already_failed_job() -> None:
     outcome is already settled and must not be overwritten
     by a stale or duplicate cancel request.
     """
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=4,
@@ -219,7 +219,7 @@ def test_cancel_job_service_raises_for_already_cancelled_job() -> None:
     duplicate cancel request (e.g. a retried client call)
     must not be treated as a second, silent success.
     """
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=4,

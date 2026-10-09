@@ -1,8 +1,8 @@
-from app.domain.entities.job import Job
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from tests.support.jobs import make_job
 
 
 def test_job_can_retry_until_max_retries() -> None:
@@ -11,7 +11,7 @@ def test_job_can_retry_until_max_retries() -> None:
     configured retry limit.
     """
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=1,

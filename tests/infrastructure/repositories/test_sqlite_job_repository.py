@@ -18,6 +18,7 @@ from app.infrastructure.repositories.sqlite_connection import (
 from app.infrastructure.repositories.sqlite_job_repository import (
     SqliteJobRepository,
 )
+from tests.support.jobs import make_job
 
 
 @pytest.fixture()
@@ -42,7 +43,7 @@ def _make_job(
     constraints: dict[str, str] | None = None,
     max_retries: int = 3,
 ) -> Job:
-    return Job(
+    return make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=cpu_cores,

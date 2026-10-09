@@ -9,10 +9,11 @@ from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from tests.support.jobs import make_job
 
 
 def create_job() -> Job:
-    return Job(
+    return make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=1,

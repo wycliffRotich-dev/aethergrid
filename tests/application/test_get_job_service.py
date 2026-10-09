@@ -5,7 +5,6 @@ import pytest
 from app.application.services.get_job_service import (
     GetJobService,
 )
-from app.domain.entities.job import Job
 from app.domain.exceptions.job_not_found_error import (
     JobNotFoundError,
 )
@@ -16,12 +15,13 @@ from app.domain.value_objects.resource_requirements import (
 from app.infrastructure.repositories.in_memory_job_repository import (
     InMemoryJobRepository,
 )
+from tests.support.jobs import make_job
 
 
 def test_get_job_service_returns_existing_job() -> None:
     repository = InMemoryJobRepository()
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=4,

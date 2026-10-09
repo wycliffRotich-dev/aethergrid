@@ -1,7 +1,6 @@
 from app.application.services.fail_job_service import (
     FailJobService,
 )
-from app.domain.entities.job import Job
 from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.enums.job_status import JobStatus
 from app.domain.value_objects.job_id import JobId
@@ -15,6 +14,7 @@ from app.infrastructure.repositories.in_memory_job_repository import (
 from app.infrastructure.repositories.in_memory_node_repository import (
     InMemoryNodeRepository,
 )
+from tests.support.jobs import make_job
 from tests.support.nodes import make_node
 
 
@@ -33,7 +33,7 @@ def test_fail_job_service_marks_running_job_as_failed() -> None:
         ),
     )
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=4,
@@ -114,7 +114,7 @@ def test_fail_job_service_persists_released_node_resources(
         vram_mib=0,
     )
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=job_resources,
     )

@@ -9,7 +9,6 @@ from app.application.services.acquire_lease_service import (
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
-from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
 from app.domain.entities.node import Node
 from app.domain.entities.tenant import DEFAULT_TENANT_ID
@@ -37,6 +36,7 @@ from app.infrastructure.repositories.in_memory_node_repository import (
 from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
+from tests.support.jobs import make_job
 from tests.support.nodes import make_node
 
 
@@ -67,7 +67,7 @@ def test_recover_offline_node_requeues_job_with_retries_remaining() -> None:
 
     worker.ready()
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=1,
@@ -124,7 +124,7 @@ def test_recover_offline_node_fails_job_once_retries_exhausted() -> None:
 
     worker.ready()
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=1,
@@ -178,7 +178,7 @@ def test_recover_offline_node_records_job_reclaimed_event() -> None:
 
     worker.ready()
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=1,
@@ -250,7 +250,7 @@ def test_recover_offline_node_skips_a_job_whose_lease_is_still_valid() -> (
 
     worker.ready()
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=1,
@@ -336,7 +336,7 @@ def test_recover_offline_node_deletes_lease_so_job_can_be_reacquired() -> (
 
     worker.ready()
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=1,
@@ -425,7 +425,7 @@ def test_recover_offline_node_releases_node_resources() -> None:
 
     worker.ready()
 
-    job = Job(
+    job = make_job(
         id=JobId.new(),
         resources=job_resources,
         max_retries=1,

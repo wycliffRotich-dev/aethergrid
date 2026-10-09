@@ -17,6 +17,7 @@ from app.infrastructure.repositories.postgres_job_repository import (
 from app.infrastructure.repositories.postgres_node_repository import (
     PostgresNodeRepository,
 )
+from tests.support.jobs import make_job
 from tests.support.nodes import make_node
 
 
@@ -52,7 +53,7 @@ def _make_job(
     constraints: dict[str, str] | None = None,
     max_retries: int = 3,
 ) -> Job:
-    return Job(
+    return make_job(
         id=JobId.new(),
         resources=ResourceRequirements(
             cpu_cores=cpu_cores,

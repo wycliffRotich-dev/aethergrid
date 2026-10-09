@@ -3,7 +3,6 @@ from __future__ import annotations
 import pytest
 from psycopg_pool import ConnectionPool
 
-from app.domain.entities.job import Job
 from app.domain.entities.lease import DEFAULT_LEASE_DURATION
 from app.domain.entities.worker import Worker
 from app.domain.value_objects.node_id import NodeId
@@ -25,6 +24,7 @@ from app.infrastructure.repositories.postgres_worker_repository import (
 from tests.infrastructure.repositories.contract.lease_repository_contract import (
     LeaseRepositoryContract,
 )
+from tests.support.jobs import make_job
 from tests.support.nodes import make_node
 
 
@@ -89,7 +89,7 @@ class TestPostgresLeaseRepositoryContract(LeaseRepositoryContract):
             )
             worker_repository.save(worker)
 
-            job = Job(
+            job = make_job(
                 id=lease.job_id,
                 resources=ResourceRequirements(
                     cpu_cores=1,

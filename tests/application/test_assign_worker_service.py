@@ -9,7 +9,6 @@ from app.application.services.assign_worker_service import (
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
-from app.domain.entities.job import Job
 from app.domain.entities.worker import Worker
 from app.domain.enums.job_status import JobStatus
 from app.domain.enums.worker_status import WorkerStatus
@@ -29,6 +28,7 @@ from app.domain.value_objects.resource_requirements import (
 from app.infrastructure.repositories.in_memory_event_repository import (
     InMemoryEventRepository,
 )
+from tests.support.jobs import make_job
 from tests.support.nodes import make_node
 
 
@@ -100,7 +100,7 @@ def test_assign_worker_service_assigns_job_to_idle_worker() -> None:
         worker,
     )
 
-    job = Job(
+    job = make_job(
         id="job-1",
         resources=ResourceRequirements(
             cpu_cores=2,
@@ -159,7 +159,7 @@ def test_assign_worker_service_records_worker_assigned_event() -> None:
         worker,
     )
 
-    job = Job(
+    job = make_job(
         id="job-1",
         resources=ResourceRequirements(
             cpu_cores=2,
@@ -254,7 +254,7 @@ def test_assign_worker_service_raises_no_available_node_when_worker_vanishes() -
         worker,
     )
 
-    job = Job(
+    job = make_job(
         id="job-1",
         resources=ResourceRequirements(
             cpu_cores=2,
