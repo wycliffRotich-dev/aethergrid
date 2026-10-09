@@ -5,7 +5,7 @@
 Accepted. This ADR records how ADR 0064, points 2 and 7, were applied
 to nodes, as far as this change goes. It does not scope node reads
 (see Consequences). ADR 0064 stays Proposed, and nothing here changes
-that.
+that. Scoping node reads followed in ADR 0067.
 
 ## Context
 
