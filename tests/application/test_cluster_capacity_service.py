@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from app.application.services.cluster_capacity_service import (
     ClusterCapacityService,
 )
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
@@ -48,7 +49,7 @@ def test_cluster_capacity_sums_available_resources() -> None:
         repository,
     )
 
-    capacity = service.execute()
+    capacity = service.execute(DEFAULT_TENANT_ID)
 
     assert capacity.cpu_cores == 24
     assert capacity.memory_mib == 24576
@@ -95,7 +96,7 @@ def test_cluster_capacity_includes_offline_nodes() -> None:
         repository,
     )
 
-    capacity = service.execute()
+    capacity = service.execute(DEFAULT_TENANT_ID)
 
     assert capacity.cpu_cores == 24
     assert capacity.memory_mib == 24576

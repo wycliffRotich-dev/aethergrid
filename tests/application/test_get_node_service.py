@@ -5,6 +5,7 @@ import pytest
 from app.application.services.get_node_service import (
     GetNodeService,
 )
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.exceptions.node_not_found_error import (
     NodeNotFoundError,
 )
@@ -40,7 +41,7 @@ def test_get_node_service_returns_existing_node() -> None:
         node_repository=repository,
     )
 
-    result = service.execute(node.id)
+    result = service.execute(node.id, DEFAULT_TENANT_ID)
 
     assert result is node
 
@@ -57,4 +58,4 @@ def test_get_node_service_raises_when_node_does_not_exist() -> None:
     )
 
     with pytest.raises(NodeNotFoundError):
-        service.execute(NodeId.new())
+        service.execute(NodeId.new(), DEFAULT_TENANT_ID)

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from app.domain.repositories.node_repository import (
     NodeRepository,
 )
+from app.domain.value_objects.tenant_id import TenantId
 
 
 @dataclass(slots=True)
@@ -32,11 +33,12 @@ class ClusterHealthService:
 
     def execute(
         self,
+        tenant_id: TenantId,
     ) -> ClusterHealth:
         """
-        Return a summary of the cluster health.
+        Return a summary of the health of this tenant's nodes.
         """
-        nodes = self._node_repository.list()
+        nodes = self._node_repository.list(tenant_id)
 
         total_nodes = len(nodes)
         alive_nodes = sum(1 for node in nodes if node.is_alive())

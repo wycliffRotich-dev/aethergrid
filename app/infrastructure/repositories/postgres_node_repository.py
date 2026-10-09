@@ -80,41 +80,29 @@ class PostgresNodeRepository(NodeRepository):
                     f"node {node.id} belongs to another tenant"
                 )
 
-    def list(self) -> list[Node]:
+    def list(self, tenant_id: TenantId) -> list[Node]:
         with self._pool.connection() as conn:
             conn.row_factory = dict_row
-            rows = conn.execute("SELECT * FROM nodes").fetchall()
+            rows = conn.execute(
+                "SELECT * FROM nodes WHERE tenant_id = %s",
+                (str(tenant_id),),
+            ).fetchall()
         return [self._to_entity(row) for row in rows]
 
-    def list_available(self) -> list[Node]:
-        """
-        Returns non-draining nodes.
-
-        NOTE: this mirrors ADR 0003's stated direction that
-        "available" is a domain concept -- but the exact
-        definition (draining check only, vs. also requiring
-        is_alive()) should be confirmed against how the
-        scheduler actually calls this today.
-        """
-        with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            rows = conn.execute("SELECT * FROM nodes WHERE draining = false").fetchall()
-        return [self._to_entity(row) for row in rows]
-
-    def get_by_id(self, node_id: NodeId) -> Node | None:
+    def get_by_id(self, node_id: NodeId, tenant_id: TenantId) -> Node | None:
         with self._pool.connection() as conn:
             conn.row_factory = dict_row
             row = conn.execute(
-                "SELECT * FROM nodes WHERE id = %s",
-                (str(node_id),),
+                "SELECT * FROM nodes WHERE id = %s AND tenant_id = %s",
+                (str(node_id), str(tenant_id)),
             ).fetchone()
         return self._to_entity(row) if row else None
 
-    def delete(self, node_id: NodeId) -> None:
+    def delete(self, node_id: NodeId, tenant_id: TenantId) -> None:
         with self._pool.connection() as conn:
             conn.execute(
-                "DELETE FROM nodes WHERE id = %s",
-                (str(node_id),),
+                "DELETE FROM nodes WHERE id = %s AND tenant_id = %s",
+                (str(node_id), str(tenant_id)),
             )
 
     def get_by_id_across_tenants(self, node_id: NodeId) -> Node | None:

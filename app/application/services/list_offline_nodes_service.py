@@ -4,6 +4,7 @@ from app.domain.entities.node import Node
 from app.domain.repositories.node_repository import (
     NodeRepository,
 )
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class ListOfflineNodesService:
@@ -20,8 +21,13 @@ class ListOfflineNodesService:
 
     def execute(
         self,
+        tenant_id: TenantId,
     ) -> list[Node]:
         """
-        Retrieve all offline compute nodes.
+        Retrieve all offline compute nodes in this tenant.
         """
-        return [node for node in self._node_repository.list() if not node.is_alive()]
+        return [
+            node
+            for node in self._node_repository.list(tenant_id)
+            if not node.is_alive()
+        ]

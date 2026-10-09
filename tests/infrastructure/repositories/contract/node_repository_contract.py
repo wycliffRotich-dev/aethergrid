@@ -41,7 +41,7 @@ class NodeRepositoryContract:
         node = self._make_node()
 
         repository.save(node)
-        fetched = repository.get_by_id(node.id)
+        fetched = repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
         assert fetched is not None
         assert fetched.id == node.id
@@ -49,7 +49,7 @@ class NodeRepositoryContract:
         assert fetched.available == node.available
 
     def test_get_by_id_returns_none_when_missing(self, repository):
-        assert repository.get_by_id(NodeId.new()) is None
+        assert repository.get_by_id(NodeId.new(), DEFAULT_TENANT_ID) is None
 
     def test_save_preserves_partial_allocation(self, repository):
         """
@@ -68,7 +68,7 @@ class NodeRepositoryContract:
         )
 
         repository.save(node)
-        fetched = repository.get_by_id(node.id)
+        fetched = repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
         assert fetched.available.cpu_cores == 5
         assert fetched.available.memory_mib == 12288
@@ -81,7 +81,7 @@ class NodeRepositoryContract:
         node.drain()
         repository.save(node)
 
-        fetched = repository.get_by_id(node.id)
+        fetched = repository.get_by_id(node.id, DEFAULT_TENANT_ID)
         assert fetched.is_draining() is True
 
     def test_list_returns_all_saved_nodes(self, repository):
@@ -91,29 +91,17 @@ class NodeRepositoryContract:
         repository.save(node_a)
         repository.save(node_b)
 
-        ids = {n.id for n in repository.list()}
+        ids = {n.id for n in repository.list(DEFAULT_TENANT_ID)}
         assert ids == {node_a.id, node_b.id}
-
-    def test_list_available_excludes_draining_nodes(self, repository):
-        available_node = self._make_node()
-        draining_node = self._make_node()
-        draining_node.drain()
-
-        repository.save(available_node)
-        repository.save(draining_node)
-
-        ids = {n.id for n in repository.list_available()}
-        assert available_node.id in ids
-        assert draining_node.id not in ids
 
     def test_delete_removes_node(self, repository):
         node = self._make_node()
         repository.save(node)
 
-        repository.delete(node.id)
+        repository.delete(node.id, DEFAULT_TENANT_ID)
 
-        assert repository.get_by_id(node.id) is None
-        assert node.id not in {n.id for n in repository.list()}
+        assert repository.get_by_id(node.id, DEFAULT_TENANT_ID) is None
+        assert node.id not in {n.id for n in repository.list(DEFAULT_TENANT_ID)}
 
     def test_labels_round_trip(self, repository):
         node = self._make_node(
@@ -121,7 +109,7 @@ class NodeRepositoryContract:
         )
 
         repository.save(node)
-        fetched = repository.get_by_id(node.id)
+        fetched = repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
         assert fetched.labels == {"gpu": "a100", "zone": "nrb-1"}
 
@@ -142,7 +130,7 @@ class NodeRepositoryContract:
         node = self._make_node(tenant_id=second_tenant_id)
         repository.save(node)
 
-        fetched = repository.get_by_id(node.id)
+        fetched = repository.get_by_id(node.id, second_tenant_id)
 
         assert fetched is not None
         assert fetched.tenant_id == second_tenant_id
@@ -166,7 +154,7 @@ class NodeRepositoryContract:
         with pytest.raises(NodeTenantConflictError):
             repository.save(impostor)
 
-        fetched = repository.get_by_id(node.id)
+        fetched = repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
         assert fetched is not None
         assert fetched.tenant_id == DEFAULT_TENANT_ID
@@ -207,3 +195,39 @@ class NodeRepositoryContract:
 
         assert ready.id in available
         assert draining.id not in available
+
+    def test_get_by_id_in_another_tenant_returns_none(
+        self,
+        repository,
+        second_tenant_id,
+    ) -> None:
+        node = self._make_node()
+        repository.save(node)
+
+        assert repository.get_by_id(node.id, second_tenant_id) is None
+        assert repository.get_by_id(node.id, DEFAULT_TENANT_ID) is not None
+
+    def test_list_returns_only_the_callers_tenant(
+        self,
+        repository,
+        second_tenant_id,
+    ) -> None:
+        mine = self._make_node()
+        theirs = self._make_node(tenant_id=second_tenant_id)
+        repository.save(mine)
+        repository.save(theirs)
+
+        assert {n.id for n in repository.list(DEFAULT_TENANT_ID)} == {mine.id}
+        assert {n.id for n in repository.list(second_tenant_id)} == {theirs.id}
+
+    def test_delete_in_another_tenant_leaves_the_node(
+        self,
+        repository,
+        second_tenant_id,
+    ) -> None:
+        node = self._make_node()
+        repository.save(node)
+
+        repository.delete(node.id, second_tenant_id)
+
+        assert repository.get_by_id(node.id, DEFAULT_TENANT_ID) is not None

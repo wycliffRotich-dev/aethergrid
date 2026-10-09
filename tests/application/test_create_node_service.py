@@ -35,7 +35,7 @@ def test_create_node_service_creates_and_persists_node() -> None:
 
     assert isinstance(node, Node)
 
-    stored = repository.get_by_id(node.id)
+    stored = repository.get_by_id(node.id, tenant_id)
 
     assert stored is node
     assert stored.capacity == capacity
@@ -62,7 +62,7 @@ def test_create_node_service_keeps_the_tenant_on_a_named_node() -> None:
         name="gpu-box-1",
     )
 
-    stored = repository.get_by_id(node.id)
+    stored = repository.get_by_id(node.id, tenant_id)
 
     assert stored is not None
     assert stored.name == "gpu-box-1"

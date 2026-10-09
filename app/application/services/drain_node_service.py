@@ -8,6 +8,7 @@ from app.domain.repositories.node_repository import (
     NodeRepository,
 )
 from app.domain.value_objects.node_id import NodeId
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class DrainNodeService:
@@ -25,6 +26,7 @@ class DrainNodeService:
     def execute(
         self,
         node_id: NodeId,
+        tenant_id: TenantId,
     ) -> Node:
         """
         Mark a compute node as draining.
@@ -35,10 +37,11 @@ class DrainNodeService:
 
         Raises:
             NodeNotFoundError:
-                If the node does not exist.
+                If the node does not exist in this tenant.
         """
         node = self._node_repository.get_by_id(
             node_id,
+            tenant_id,
         )
 
         if node is None:

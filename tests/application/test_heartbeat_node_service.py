@@ -1,6 +1,7 @@
 from app.application.services.heartbeat_node_service import (
     HeartbeatNodeService,
 )
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
@@ -40,6 +41,7 @@ def test_heartbeat_node_service_updates_last_seen_at() -> None:
 
     service.execute(
         node.id,
+        DEFAULT_TENANT_ID,
     )
 
     assert node.last_seen_at > before

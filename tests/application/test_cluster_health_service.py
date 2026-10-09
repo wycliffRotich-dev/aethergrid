@@ -1,6 +1,7 @@
 from app.application.services.cluster_health_service import (
     ClusterHealthService,
 )
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
@@ -50,7 +51,7 @@ def test_cluster_health_reports_alive_and_offline_nodes() -> None:
         repository,
     )
 
-    health = service.execute()
+    health = service.execute(DEFAULT_TENANT_ID)
 
     assert health.total_nodes == 2
     assert health.alive_nodes == 1

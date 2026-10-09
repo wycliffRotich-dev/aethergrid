@@ -29,7 +29,9 @@ def created_node_ids():
 
     app.dependency_overrides.pop(require_api_key, None)
     for node_id in node_ids:
-        get_node_repository().delete(node_id)
+        node = get_node_repository().get_by_id_across_tenants(node_id)
+        if node is not None:
+            get_node_repository().delete(node_id, node.tenant_id)
 
 
 def test_a_created_node_belongs_to_the_callers_tenant(
@@ -55,7 +57,7 @@ def test_a_created_node_belongs_to_the_callers_tenant(
     node_id = NodeId.from_string(response.json()["id"])
     created_node_ids.append(node_id)
 
-    node = get_node_repository().get_by_id(node_id)
+    node = get_node_repository().get_by_id(node_id, tenant.id)
     assert node is not None
     assert node.tenant_id == tenant.id
     assert node.tenant_id != DEFAULT_TENANT_ID
@@ -91,7 +93,7 @@ def test_a_tenant_in_the_request_body_is_ignored(
     node_id = NodeId.from_string(response.json()["id"])
     created_node_ids.append(node_id)
 
-    node = get_node_repository().get_by_id(node_id)
+    node = get_node_repository().get_by_id(node_id, callers_tenant.id)
     assert node is not None
     assert node.tenant_id == callers_tenant.id
     assert node.tenant_id != other_tenant.id

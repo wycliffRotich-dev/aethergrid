@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from app.application.services.cluster_utilization_service import (
     ClusterUtilizationService,
 )
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
@@ -46,7 +47,7 @@ def test_cluster_utilization_reports_allocated_resources() -> None:
         repository,
     )
 
-    utilization = service.execute()
+    utilization = service.execute(DEFAULT_TENANT_ID)
 
     assert utilization.cpu_cores == 2
     assert utilization.memory_mib == 2048
@@ -105,7 +106,7 @@ def test_cluster_utilization_includes_offline_nodes() -> None:
         repository,
     )
 
-    utilization = service.execute()
+    utilization = service.execute(DEFAULT_TENANT_ID)
 
     assert utilization.cpu_cores == 5
     assert utilization.memory_mib == 5120

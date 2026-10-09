@@ -11,6 +11,7 @@ from app.application.services.record_job_events_service import (
 from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
 from app.domain.entities.node import Node
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.entities.worker import Worker
 from app.domain.enums.job_status import JobStatus
 from app.domain.enums.worker_status import WorkerStatus
@@ -523,7 +524,7 @@ def test_recover_expired_lease_releases_node_resources() -> None:
 
     service.execute()
 
-    recovered_node = node_repository.get_by_id(node.id)
+    recovered_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
     assert recovered_node.available.cpu_cores == 8
     assert recovered_node.available.memory_mib == 16384

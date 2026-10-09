@@ -5,6 +5,7 @@ import pytest
 from app.application.services.remove_offline_node_service import (
     RemoveOfflineNodeService,
 )
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.exceptions.node_not_found_error import (
     NodeNotFoundError,
 )
@@ -48,11 +49,13 @@ def test_remove_offline_node_service_removes_offline_node() -> None:
 
     service.execute(
         node.id,
+        DEFAULT_TENANT_ID,
     )
 
     assert (
         repository.get_by_id(
             node.id,
+            DEFAULT_TENANT_ID,
         )
         is None
     )
@@ -68,6 +71,7 @@ def test_remove_offline_node_service_raises_when_node_missing() -> None:
     with pytest.raises(NodeNotFoundError):
         service.execute(
             NodeId.new(),
+            DEFAULT_TENANT_ID,
         )
 
 
@@ -94,11 +98,13 @@ def test_remove_offline_node_service_raises_when_node_still_alive() -> None:
     with pytest.raises(NodeStillAliveError):
         service.execute(
             node.id,
+            DEFAULT_TENANT_ID,
         )
 
     assert (
         repository.get_by_id(
             node.id,
+            DEFAULT_TENANT_ID,
         )
         is not None
     )

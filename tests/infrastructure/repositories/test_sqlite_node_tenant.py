@@ -50,7 +50,7 @@ def test_a_saved_node_keeps_its_tenant(db_path) -> None:
 
     repository.save(node)
 
-    fetched = repository.get_by_id(node.id)
+    fetched = repository.get_by_id(node.id, tenant_id)
     connection.close()
     assert fetched is not None
     assert fetched.tenant_id == tenant_id
@@ -70,7 +70,7 @@ def test_saving_a_node_id_held_by_another_tenant_conflicts(db_path) -> None:
     with pytest.raises(NodeTenantConflictError):
         repository.save(intruder)
 
-    stored = repository.get_by_id(node.id)
+    stored = repository.get_by_id(node.id, DEFAULT_TENANT_ID)
     connection.close()
     assert stored is not None
     assert stored.tenant_id == DEFAULT_TENANT_ID
@@ -110,7 +110,7 @@ def test_upgrade_assigns_pre_tenant_rows_to_the_default_tenant(
     connection = create_connection(db_path)
     repository = SqliteNodeRepository(connection)
 
-    fetched = repository.get_by_id(node_id)
+    fetched = repository.get_by_id(node_id, DEFAULT_TENANT_ID)
     connection.close()
     assert fetched is not None
     assert fetched.tenant_id == DEFAULT_TENANT_ID
@@ -151,3 +151,48 @@ def test_list_available_across_tenants_skips_draining_nodes(db_path) -> None:
 
     assert ready.id in available
     assert draining.id not in available
+
+
+def test_get_by_id_in_another_tenant_returns_none(db_path) -> None:
+    connection = create_connection(db_path)
+    repository = SqliteNodeRepository(connection)
+    other_tenant = TenantId.new()
+    node = make_node()
+    repository.save(node)
+
+    foreign = repository.get_by_id(node.id, other_tenant)
+    own = repository.get_by_id(node.id, DEFAULT_TENANT_ID)
+    connection.close()
+
+    assert foreign is None
+    assert own is not None
+
+
+def test_list_returns_only_the_callers_tenant(db_path) -> None:
+    connection = create_connection(db_path)
+    repository = SqliteNodeRepository(connection)
+    other_tenant = TenantId.new()
+    mine = make_node()
+    theirs = make_node(tenant_id=other_tenant)
+    repository.save(mine)
+    repository.save(theirs)
+
+    own = repository.list(DEFAULT_TENANT_ID)
+    foreign = repository.list(other_tenant)
+    connection.close()
+
+    assert {node.id for node in own} == {mine.id}
+    assert {node.id for node in foreign} == {theirs.id}
+
+
+def test_delete_in_another_tenant_leaves_the_node(db_path) -> None:
+    connection = create_connection(db_path)
+    repository = SqliteNodeRepository(connection)
+    node = make_node()
+    repository.save(node)
+
+    repository.delete(node.id, TenantId.new())
+
+    stored = repository.get_by_id(node.id, DEFAULT_TENANT_ID)
+    connection.close()
+    assert stored is not None

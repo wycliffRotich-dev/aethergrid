@@ -146,32 +146,23 @@ class SqliteNodeRepository(NodeRepository):
 
     def list(
         self,
+        tenant_id: TenantId,
     ) -> list[Node]:
         rows = self._connection.execute(
-            "SELECT * FROM nodes",
+            "SELECT * FROM nodes WHERE tenant_id = ?",
+            (str(tenant_id),),
         ).fetchall()
 
         return [self._row_to_node(row) for row in rows]
 
-    def list_available(
-        self,
-    ) -> list[Node]:
-        """
-        Return all healthy nodes.
-
-        Resource suitability is determined by the
-        Scheduler through Node.can_host(), so this
-        repository only filters unhealthy nodes.
-        """
-        return [node for node in self.list() if node.is_alive() and not node.is_draining()]
-
     def get_by_id(
         self,
         node_id: NodeId,
+        tenant_id: TenantId,
     ) -> Node | None:
         row = self._connection.execute(
-            "SELECT * FROM nodes WHERE id = ?",
-            (str(node_id),),
+            "SELECT * FROM nodes WHERE id = ? AND tenant_id = ?",
+            (str(node_id), str(tenant_id)),
         ).fetchone()
 
         if row is None:
@@ -182,10 +173,11 @@ class SqliteNodeRepository(NodeRepository):
     def delete(
         self,
         node_id: NodeId,
+        tenant_id: TenantId,
     ) -> None:
         self._connection.execute(
-            "DELETE FROM nodes WHERE id = ?",
-            (str(node_id),),
+            "DELETE FROM nodes WHERE id = ? AND tenant_id = ?",
+            (str(node_id), str(tenant_id)),
         )
         self._connection.commit()
 
