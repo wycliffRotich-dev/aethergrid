@@ -22,6 +22,7 @@ from app.application.workers.worker_execution_loop import (
 from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
 from app.domain.entities.node import Node
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.entities.worker import Worker
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
@@ -187,7 +188,7 @@ def test_run_once_with_no_command_completes_successfully() -> None:
 
     saved_worker = worker_repository.get_by_id(worker.id)
     saved_job = job_repository.get_by_id(job.id)
-    saved_node = node_repository.get_by_id(node.id)
+    saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
     assert saved_worker is not None
     assert saved_worker.is_idle()
@@ -224,7 +225,7 @@ def test_run_once_executes_real_successful_command() -> None:
 
     saved_worker = worker_repository.get_by_id(worker.id)
     saved_job = job_repository.get_by_id(job.id)
-    saved_node = node_repository.get_by_id(node.id)
+    saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
     assert saved_worker is not None
     assert saved_worker.is_idle()
@@ -258,7 +259,7 @@ def test_run_once_marks_job_and_worker_failed_on_nonzero_exit() -> None:
 
     saved_worker = worker_repository.get_by_id(worker.id)
     saved_job = job_repository.get_by_id(job.id)
-    saved_node = node_repository.get_by_id(node.id)
+    saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
     assert saved_worker is not None
     assert saved_worker.is_idle()
@@ -299,7 +300,7 @@ def test_run_once_marks_job_failed_when_command_exceeds_timeout() -> None:
 
     saved_worker = worker_repository.get_by_id(worker.id)
     saved_job = job_repository.get_by_id(job.id)
-    saved_node = node_repository.get_by_id(node.id)
+    saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
     assert saved_worker is not None
     assert saved_worker.is_idle()
@@ -508,7 +509,7 @@ def test_run_once_cancels_job_requested_to_cancel_during_execution() -> None:
 
     saved_worker = worker_repository.get_by_id(worker.id)
     saved_job = job_repository.get_by_id(job.id)
-    saved_node = node_repository.get_by_id(node.id)
+    saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
     assert saved_worker is not None
     assert saved_worker.is_idle()

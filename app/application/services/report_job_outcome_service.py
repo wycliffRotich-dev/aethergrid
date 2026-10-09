@@ -114,7 +114,7 @@ class ReportJobOutcomeService:
         )
 
         if job.assigned_node_id is not None:
-            node = self._node_repository.get_by_id(
+            node = self._node_repository.get_by_id_across_tenants(
                 job.assigned_node_id,
             )
 

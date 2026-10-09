@@ -8,6 +8,7 @@ from app.domain.repositories.node_repository import (
     NodeRepository,
 )
 from app.domain.value_objects.node_id import NodeId
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class GetNodeService:
@@ -25,6 +26,7 @@ class GetNodeService:
     def execute(
         self,
         node_id: NodeId,
+        tenant_id: TenantId,
     ) -> Node:
         """
         Retrieve an existing compute node.
@@ -32,6 +34,8 @@ class GetNodeService:
         Args:
             node_id:
                 Identifier of the compute node.
+            tenant_id:
+                Tenant the node must belong to.
 
         Returns:
             The matching compute node.
@@ -39,10 +43,11 @@ class GetNodeService:
         Raises:
             NodeNotFoundError:
                 If no compute node exists with the
-                given identifier.
+                given identifier in this tenant.
         """
         node = self._node_repository.get_by_id(
             node_id,
+            tenant_id,
         )
 
         if node is None:

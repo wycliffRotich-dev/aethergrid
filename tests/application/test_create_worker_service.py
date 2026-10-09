@@ -5,6 +5,7 @@ from app.application.services.create_worker_service import (
 )
 from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.entities.worker import Worker
 from app.domain.enums.worker_status import WorkerStatus
 from app.domain.value_objects.job_id import JobId
@@ -213,7 +214,7 @@ def test_create_worker_service_reclaim_releases_lease_and_node_resources() -> (
 
     assert lease_repository.get_by_job_id(job.id) is None
 
-    recovered_node = node_repository.get_by_id(node.id)
+    recovered_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
     assert recovered_node.available.cpu_cores == 8
     assert recovered_node.available.memory_mib == 16384
 

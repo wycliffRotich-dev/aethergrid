@@ -8,6 +8,7 @@ from app.application.services.job_execution_support import (
 from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
 from app.domain.entities.node import Node
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
@@ -103,7 +104,7 @@ def test_reclaim_job_deletes_lease_releases_node_and_reclaims_job(
     assert lease_repository.get_by_job_id(job.id) is None
 
     read_connection = create_connection(db_path)
-    reloaded = SqliteNodeRepository(read_connection).get_by_id(node.id)
+    reloaded = SqliteNodeRepository(read_connection).get_by_id(node.id, DEFAULT_TENANT_ID)
     read_connection.close()
 
     assert reloaded is not None

@@ -33,6 +33,7 @@ from app.application.services.start_job_service import (
 from app.application.services.worker_heartbeat_service import (
     WorkerHeartbeatService,
 )
+from app.domain.entities.api_key import ApiKey
 from app.domain.entities.lease import Lease
 from app.domain.enums.worker_management import WorkerManagement
 from app.domain.exceptions.lease_not_found_error import (
@@ -171,9 +172,10 @@ def create_worker(
             get_register_worker_service,
         ),
     ],
+    caller: Annotated[ApiKey, Depends(require_api_key)],
 ) -> CreateWorkerResponse:
     """
-    Register a worker for an existing node.
+    Register a worker for an existing node in the caller's tenant.
     """
 
     try:
@@ -181,6 +183,7 @@ def create_worker(
             NodeId.from_string(
                 request.node_id,
             ),
+            caller.tenant_id,
         )
     except NodeNotFoundError as exc:
         raise HTTPException(

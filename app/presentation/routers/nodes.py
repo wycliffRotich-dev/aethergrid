@@ -113,16 +113,17 @@ def list_nodes(
         ListNodesService,
         Depends(get_list_nodes_service),
     ],
+    caller: Annotated[ApiKey, Depends(require_api_key)],
 ) -> ListNodesResponse:
     """
-    Return all registered compute nodes, regardless of
+    Return the compute nodes in the caller's tenant, regardless of
     whether they are currently alive. Health is exposed
     per-node via is_alive rather than by omitting nodes
     that have missed a heartbeat, so a caller can always
     tell the difference between "no nodes registered" and
     "a registered node has gone offline".
     """
-    nodes = service.execute()
+    nodes = service.execute(caller.tenant_id)
 
     return ListNodesResponse(
         nodes=[
@@ -151,12 +152,13 @@ def list_offline_nodes(
         ListOfflineNodesService,
         Depends(get_list_offline_nodes_service),
     ],
+    caller: Annotated[ApiKey, Depends(require_api_key)],
 ) -> ListNodesResponse:
     """
     Return all compute nodes that have missed their
     heartbeat and are considered offline.
     """
-    nodes = service.execute()
+    nodes = service.execute(caller.tenant_id)
 
     return ListNodesResponse(
         nodes=[
@@ -186,6 +188,7 @@ def get_node(
         GetNodeService,
         Depends(get_get_node_service),
     ],
+    caller: Annotated[ApiKey, Depends(require_api_key)],
 ) -> GetNodeResponse:
     """
     Retrieve a compute node by its identifier.
@@ -193,6 +196,7 @@ def get_node(
     try:
         node = service.execute(
             NodeId.from_string(node_id),
+            caller.tenant_id,
         )
     except NodeNotFoundError as err:
         raise HTTPException(
@@ -223,6 +227,7 @@ def heartbeat_node(
         HeartbeatNodeService,
         Depends(get_heartbeat_node_service),
     ],
+    caller: Annotated[ApiKey, Depends(require_api_key)],
 ) -> GetNodeResponse:
     """
     Record a heartbeat for a compute node, keeping
@@ -230,6 +235,7 @@ def heartbeat_node(
     """
     node = service.execute(
         NodeId.from_string(node_id),
+        caller.tenant_id,
     )
 
     if node is None:
@@ -261,6 +267,7 @@ def drain_node(
         DrainNodeService,
         Depends(get_drain_node_service),
     ],
+    caller: Annotated[ApiKey, Depends(require_api_key)],
 ) -> GetNodeResponse:
     """
     Mark a compute node as draining, so it stops
@@ -270,6 +277,7 @@ def drain_node(
     try:
         node = service.execute(
             NodeId.from_string(node_id),
+            caller.tenant_id,
         )
     except NodeNotFoundError as exc:
         raise HTTPException(
@@ -298,6 +306,7 @@ def remove_offline_node(
         RemoveOfflineNodeService,
         Depends(get_remove_offline_node_service),
     ],
+    caller: Annotated[ApiKey, Depends(require_api_key)],
 ) -> None:
     """
     Permanently remove a node that is confirmed offline.
@@ -310,6 +319,7 @@ def remove_offline_node(
     try:
         service.execute(
             NodeId.from_string(node_id),
+            caller.tenant_id,
         )
     except NodeNotFoundError as exc:
         raise HTTPException(

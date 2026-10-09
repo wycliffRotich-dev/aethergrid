@@ -10,6 +10,7 @@ from app.domain.repositories.node_repository import (
     NodeRepository,
 )
 from app.domain.value_objects.node_id import NodeId
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class RemoveOfflineNodeService:
@@ -27,18 +28,20 @@ class RemoveOfflineNodeService:
     def execute(
         self,
         node_id: NodeId,
+        tenant_id: TenantId,
     ) -> None:
         """
-        Remove an offline compute node.
+        Remove an offline compute node in this tenant.
 
         Raises:
             NodeNotFoundError:
-                If the node does not exist.
+                If the node does not exist in this tenant.
             NodeStillAliveError:
                 If the node is still sending heartbeats.
         """
         node = self._node_repository.get_by_id(
             node_id,
+            tenant_id,
         )
 
         if node is None:
@@ -51,4 +54,5 @@ class RemoveOfflineNodeService:
 
         self._node_repository.delete(
             node_id,
+            tenant_id,
         )

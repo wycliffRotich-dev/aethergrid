@@ -8,6 +8,7 @@ from app.domain.repositories.node_repository import (
     NodeRepository,
 )
 from app.domain.value_objects.node_id import NodeId
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class InMemoryNodeRepository(NodeRepository):
@@ -50,12 +51,52 @@ class InMemoryNodeRepository(NodeRepository):
 
     def list(
         self,
+        tenant_id: TenantId,
+    ) -> list[Node]:
+        return [
+            node
+            for node in self._nodes.values()
+            if node.tenant_id == tenant_id
+        ]
+
+    def get_by_id(
+        self,
+        node_id: NodeId,
+        tenant_id: TenantId,
+    ) -> Node | None:
+        node = self._nodes.get(node_id)
+
+        if node is None or node.tenant_id != tenant_id:
+            return None
+
+        return node
+
+    def delete(
+        self,
+        node_id: NodeId,
+        tenant_id: TenantId,
+    ) -> None:
+        node = self._nodes.get(node_id)
+
+        if node is not None and node.tenant_id == tenant_id:
+            del self._nodes[node_id]
+
+    def get_by_id_across_tenants(
+        self,
+        node_id: NodeId,
+    ) -> Node | None:
+        return self._nodes.get(
+            node_id,
+        )
+
+    def list_across_tenants(
+        self,
     ) -> list[Node]:
         return list(
             self._nodes.values(),
         )
 
-    def list_available(
+    def list_available_across_tenants(
         self,
     ) -> list[Node]:
         return [
@@ -64,20 +105,3 @@ class InMemoryNodeRepository(NodeRepository):
             if node.is_alive()
             and not node.is_draining()
         ]
-
-    def get_by_id(
-        self,
-        node_id: NodeId,
-    ) -> Node | None:
-        return self._nodes.get(
-            node_id,
-        )
-
-    def delete(
-        self,
-        node_id: NodeId,
-    ) -> None:
-        self._nodes.pop(
-            node_id,
-            None,
-        )

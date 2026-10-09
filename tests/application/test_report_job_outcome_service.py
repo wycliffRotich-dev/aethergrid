@@ -16,6 +16,7 @@ from app.application.services.report_job_outcome_service import (
 from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
 from app.domain.entities.node import Node
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.entities.worker import Worker
 from app.domain.exceptions.worker_job_mismatch_error import (
     WorkerJobMismatchError,
@@ -159,7 +160,7 @@ def test_complete_marks_job_completed_releases_lease_and_node() -> None:
 
     saved_worker = worker_repository.get_by_id(worker.id)
     saved_job = job_repository.get_by_id(job.id)
-    saved_node = node_repository.get_by_id(node.id)
+    saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
     assert saved_worker is not None
     assert saved_worker.is_idle()
@@ -196,7 +197,7 @@ def test_fail_marks_job_failed_releases_lease_and_node() -> None:
 
     saved_worker = worker_repository.get_by_id(worker.id)
     saved_job = job_repository.get_by_id(job.id)
-    saved_node = node_repository.get_by_id(node.id)
+    saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
     assert saved_worker is not None
     assert saved_worker.is_idle()
@@ -363,7 +364,7 @@ def test_cancel_marks_job_cancelled_releases_lease_and_node() -> None:
 
     saved_worker = worker_repository.get_by_id(worker.id)
     saved_job = job_repository.get_by_id(job.id)
-    saved_node = node_repository.get_by_id(node.id)
+    saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
     assert saved_worker is not None
     assert saved_worker.is_idle()

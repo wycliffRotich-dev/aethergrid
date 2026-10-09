@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from app.application.services.list_offline_nodes_service import (
     ListOfflineNodesService,
 )
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
@@ -49,7 +50,7 @@ def test_list_offline_nodes_service_returns_only_offline_nodes() -> None:
         repository,
     )
 
-    nodes = service.execute()
+    nodes = service.execute(DEFAULT_TENANT_ID)
 
     assert offline in nodes
     assert healthy not in nodes

@@ -2,6 +2,7 @@ from app.application.services.fail_job_service import (
     FailJobService,
 )
 from app.domain.entities.job import Job
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.enums.job_status import JobStatus
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
@@ -143,7 +144,7 @@ def test_fail_job_service_persists_released_node_resources(
 
     read_connection = create_connection(db_path)
     read_node_repository = SqliteNodeRepository(read_connection)
-    reloaded = read_node_repository.get_by_id(node.id)
+    reloaded = read_node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
     read_connection.close()
 
     assert reloaded is not None

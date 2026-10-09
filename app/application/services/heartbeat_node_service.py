@@ -5,6 +5,7 @@ from app.domain.repositories.node_repository import (
     NodeRepository,
 )
 from app.domain.value_objects.node_id import NodeId
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class HeartbeatNodeService:
@@ -22,16 +23,18 @@ class HeartbeatNodeService:
     def execute(
         self,
         node_id: NodeId,
+        tenant_id: TenantId,
     ) -> Node | None:
         """
         Record a heartbeat for a node.
 
         Returns:
-            The updated node if found,
+            The updated node if found in this tenant,
             otherwise None.
         """
         node = self._node_repository.get_by_id(
             node_id,
+            tenant_id,
         )
 
         if node is None:

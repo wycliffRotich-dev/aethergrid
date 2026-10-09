@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from app.application.services.list_nodes_service import (
     ListNodesService,
 )
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
@@ -56,7 +57,7 @@ def test_list_nodes_returns_alive_and_offline_nodes() -> None:
         repository,
     )
 
-    nodes = service.execute()
+    nodes = service.execute(DEFAULT_TENANT_ID)
 
     assert alive in nodes
     assert offline in nodes

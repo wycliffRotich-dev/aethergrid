@@ -11,6 +11,7 @@ from app.application.services.cluster_health_service import (
 from app.application.services.cluster_utilization_service import (
     ClusterUtilizationService,
 )
+from app.domain.entities.api_key import ApiKey
 from app.presentation.auth import (
     require_api_key,
     require_rate_limit,
@@ -49,12 +50,14 @@ def get_cluster_health(
         ClusterHealthService,
         Depends(get_cluster_health_service),
     ],
+    caller: Annotated[ApiKey, Depends(require_api_key)],
 ) -> ClusterHealthResponse:
     """
-    Return a summary of cluster health: total nodes,
-    how many are alive, and how many are offline.
+    Return a summary of cluster health for the caller's
+    tenant: total nodes, how many are alive, and how many
+    are offline.
     """
-    health = service.execute()
+    health = service.execute(caller.tenant_id)
 
     return ClusterHealthResponse(
         total_nodes=health.total_nodes,
@@ -72,12 +75,13 @@ def get_cluster_capacity(
         ClusterCapacityService,
         Depends(get_cluster_capacity_service),
     ],
+    caller: Annotated[ApiKey, Depends(require_api_key)],
 ) -> ClusterCapacityResponse:
     """
-    Return the total available resources across all
-    alive compute nodes in the cluster.
+    Return the total available resources across the
+    compute nodes in the caller's tenant.
     """
-    capacity = service.execute()
+    capacity = service.execute(caller.tenant_id)
 
     return ClusterCapacityResponse(
         cpu_cores=capacity.cpu_cores,
@@ -95,12 +99,13 @@ def get_cluster_utilization(
         ClusterUtilizationService,
         Depends(get_cluster_utilization_service),
     ],
+    caller: Annotated[ApiKey, Depends(require_api_key)],
 ) -> ClusterUtilizationResponse:
     """
     Return the total allocated (in-use) resources
-    across all alive compute nodes in the cluster.
+    across the compute nodes in the caller's tenant.
     """
-    utilization = service.execute()
+    utilization = service.execute(caller.tenant_id)
 
     return ClusterUtilizationResponse(
         cpu_cores=utilization.cpu_cores,

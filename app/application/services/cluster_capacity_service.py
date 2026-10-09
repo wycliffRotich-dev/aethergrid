@@ -6,6 +6,7 @@ from app.domain.repositories.node_repository import (
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class ClusterCapacityService:
@@ -22,10 +23,11 @@ class ClusterCapacityService:
 
     def execute(
         self,
+        tenant_id: TenantId,
     ) -> ResourceRequirements:
         """
         Return the total available resources across every
-        registered node.
+        node in this tenant.
 
         Previously this excluded any node that had missed its
         heartbeat, which meant an offline node's committed
@@ -44,7 +46,7 @@ class ClusterCapacityService:
         memory_mib = 0
         vram_mib = 0
 
-        for node in self._node_repository.list():
+        for node in self._node_repository.list(tenant_id):
             cpu_cores += node.available.cpu_cores
             memory_mib += node.available.memory_mib
             vram_mib += node.available.vram_mib

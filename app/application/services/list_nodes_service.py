@@ -4,12 +4,13 @@ from app.domain.entities.node import Node
 from app.domain.repositories.node_repository import (
     NodeRepository,
 )
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class ListNodesService:
     """
     Application service responsible for listing every
-    registered compute node.
+    compute node in a tenant.
     """
 
     def __init__(
@@ -20,9 +21,10 @@ class ListNodesService:
 
     def execute(
         self,
+        tenant_id: TenantId,
     ) -> list[Node]:
         """
-        Retrieve every registered compute node, regardless
+        Retrieve every compute node in this tenant, regardless
         of whether it is currently alive.
 
         Previously this filtered to only alive nodes, which
@@ -34,4 +36,4 @@ class ListNodesService:
         Callers that specifically need only offline nodes
         should use ListOfflineNodesService instead.
         """
-        return list(self._node_repository.list())
+        return list(self._node_repository.list(tenant_id))

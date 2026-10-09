@@ -6,6 +6,7 @@ from app.domain.repositories.node_repository import (
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class ClusterUtilizationService:
@@ -22,10 +23,11 @@ class ClusterUtilizationService:
 
     def execute(
         self,
+        tenant_id: TenantId,
     ) -> ResourceRequirements:
         """
         Return the total allocated resources across every
-        registered node.
+        node in this tenant.
 
         Previously this excluded offline nodes, so jobs still
         genuinely occupying a node that had gone unreachable
@@ -39,7 +41,7 @@ class ClusterUtilizationService:
         memory_mib = 0
         vram_mib = 0
 
-        for node in self._node_repository.list():
+        for node in self._node_repository.list(tenant_id):
             cpu_cores += node.capacity.cpu_cores - node.available.cpu_cores
 
             memory_mib += node.capacity.memory_mib - node.available.memory_mib
