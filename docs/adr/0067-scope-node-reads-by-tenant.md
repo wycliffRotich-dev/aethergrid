@@ -3,7 +3,7 @@
 ## Status
 
 Accepted. This ADR records how ADR 0064, points 4 and 5, were applied
-to nodes. ADR 0064 stays Proposed, and nothing here changes that.
+to nodes. ADR 0064 stays Proposed, and nothing here changes that. Giving jobs a tenant followed in ADR 0068.
 
 ## Context
 
