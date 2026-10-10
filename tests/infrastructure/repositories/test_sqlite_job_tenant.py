@@ -83,6 +83,26 @@ def test_saving_a_job_id_held_by_another_tenant_conflicts(db_path) -> None:
     assert stored.priority == 1
 
 
+def test_across_tenants_reads_see_jobs_in_every_tenant(db_path) -> None:
+    connection = create_connection(db_path)
+    repository = SqliteJobRepository(connection)
+    their_tenant_id = TenantId.new()
+    mine = make_job()
+    theirs = make_job(tenant_id=their_tenant_id)
+    repository.save(mine)
+    repository.save(theirs)
+
+    listed = repository.list_across_tenants()
+    fetched = repository.get_by_id_across_tenants(theirs.id)
+    missing = repository.get_by_id_across_tenants(make_job().id)
+    connection.close()
+
+    assert {job.id for job in listed} == {mine.id, theirs.id}
+    assert fetched is not None
+    assert fetched.tenant_id == their_tenant_id
+    assert missing is None
+
+
 def _insert_pre_tenant_job(db_path: str, job_id: JobId) -> None:
     raw = sqlite3.connect(db_path)
     raw.execute(_PRE_TENANT_TABLE)

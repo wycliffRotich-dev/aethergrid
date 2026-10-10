@@ -148,6 +148,21 @@ class PostgresJobRepository(JobRepository):
             ).fetchall()
         return [self._to_entity(row) for row in rows]
 
+    def get_by_id_across_tenants(self, job_id: JobId) -> Job | None:
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            row = conn.execute(
+                "SELECT * FROM jobs WHERE id = %s",
+                (str(job_id),),
+            ).fetchone()
+        return self._to_entity(row) if row else None
+
+    def list_across_tenants(self) -> list[Job]:
+        with self._pool.connection() as conn:
+            conn.row_factory = dict_row
+            rows = conn.execute("SELECT * FROM jobs").fetchall()
+        return [self._to_entity(row) for row in rows]
+
     @staticmethod
     def _to_entity(row: dict) -> Job:
         constraints = row["constraints"]

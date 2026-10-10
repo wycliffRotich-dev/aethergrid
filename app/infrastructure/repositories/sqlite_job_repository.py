@@ -223,6 +223,29 @@ class SqliteJobRepository(JobRepository):
 
         return [self._row_to_job(row) for row in rows]
 
+    def get_by_id_across_tenants(
+        self,
+        job_id: JobId,
+    ) -> Job | None:
+        row = self._connection.execute(
+            "SELECT * FROM jobs WHERE id = ?",
+            (str(job_id),),
+        ).fetchone()
+
+        if row is None:
+            return None
+
+        return self._row_to_job(row)
+
+    def list_across_tenants(
+        self,
+    ) -> list[Job]:
+        rows = self._connection.execute(
+            "SELECT * FROM jobs",
+        ).fetchall()
+
+        return [self._row_to_job(row) for row in rows]
+
     def _row_to_job(
         self,
         row: sqlite3.Row,

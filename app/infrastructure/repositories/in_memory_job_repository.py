@@ -83,3 +83,18 @@ class InMemoryJobRepository(JobRepository):
             key=lambda job: job.submitted_at,
             reverse=True,
         )[:limit]
+
+    def get_by_id_across_tenants(
+        self,
+        job_id: JobId,
+    ) -> Job | None:
+        return self._jobs.get(
+            str(job_id),
+        )
+
+    def list_across_tenants(
+        self,
+    ) -> list[Job]:
+        return list(
+            self._jobs.values(),
+        )

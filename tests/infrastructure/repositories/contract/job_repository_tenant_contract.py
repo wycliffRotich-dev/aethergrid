@@ -66,3 +66,21 @@ class JobRepositoryTenantContract:
         assert fetched is not None
         assert fetched.tenant_id == DEFAULT_TENANT_ID
         assert fetched.priority == 1
+
+    def test_across_tenants_reads_see_jobs_in_every_tenant(
+        self,
+        repository,
+        second_tenant_id,
+    ) -> None:
+        mine = make_job()
+        theirs = make_job(tenant_id=second_tenant_id)
+        repository.save(mine)
+        repository.save(theirs)
+
+        listed = repository.list_across_tenants()
+        fetched = repository.get_by_id_across_tenants(theirs.id)
+
+        assert {job.id for job in listed} == {mine.id, theirs.id}
+        assert fetched is not None
+        assert fetched.tenant_id == second_tenant_id
+        assert repository.get_by_id_across_tenants(make_job().id) is None

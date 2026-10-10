@@ -56,3 +56,26 @@ class JobRepository(ABC):
         memory and discarding most of it.
         """
         ...
+
+    @abstractmethod
+    def get_by_id_across_tenants(
+        self,
+        job_id: JobId,
+    ) -> Job | None:
+        """
+        Retrieve a job in any tenant.
+
+        Reserved for system actors that act on the whole fleet by
+        design, and for callers that hold a job id but no tenant
+        yet (ADR 0064, point 4). Route-facing code must not use it.
+        """
+        ...
+
+    @abstractmethod
+    def list_across_tenants(
+        self,
+    ) -> list[Job]:
+        """
+        List every job in every tenant. System actors only.
+        """
+        ...
