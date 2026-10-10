@@ -6,6 +6,7 @@ from pathlib import Path
 # ADR 0064, point 4: a method named *_across_tenants acts on the whole
 # fleet, so who may call one is decided here, in one visible place.
 # A new caller fails this test until it is added with a reason.
+# The match is by file, so it does not tell a node read from a job read.
 APP = Path(__file__).resolve().parents[2] / "app"
 ACROSS_TENANTS_CALL = re.compile(r"(?<!def )\b\w+_across_tenants\(")
 
@@ -17,7 +18,8 @@ ALLOWED_CALLERS = {
     "application/reconciliation/recover_offline_node_service.py",
     "application/reconciliation/recover_expired_lease_service.py",
     # Interim: these read a node from a job or worker that carries no
-    # tenant yet. Each entry leaves when jobs and workers get one.
+    # tenant, or read a job by an id that arrives without one. Each
+    # entry leaves when its caller can pass a tenant.
     "application/services/complete_job_service.py",
     "application/services/fail_job_service.py",
     "application/services/report_job_outcome_service.py",

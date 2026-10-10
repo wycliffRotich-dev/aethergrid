@@ -32,7 +32,7 @@ class FailJobService:
         Returns:
             The failed job if found, otherwise None.
         """
-        job = self._job_repository.get_by_id(
+        job = self._job_repository.get_by_id_across_tenants(
             job_id,
         )
 

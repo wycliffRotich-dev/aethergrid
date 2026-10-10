@@ -50,7 +50,7 @@ class SchedulerLoopService:
         queued_jobs = sorted(
             (
                 job
-                for job in self._job_repository.list()
+                for job in self._job_repository.list_across_tenants()
                 if job.status == JobStatus.QUEUED
             ),
             key=lambda job: job.priority,

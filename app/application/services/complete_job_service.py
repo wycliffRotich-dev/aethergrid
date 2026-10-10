@@ -30,7 +30,7 @@ class CompleteJobService:
         Returns:
             The completed job if found, otherwise None.
         """
-        job = self._job_repository.get_by_id(job_id)
+        job = self._job_repository.get_by_id_across_tenants(job_id)
 
         if job is None:
             return None
