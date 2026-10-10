@@ -218,6 +218,6 @@ def test_create_worker_service_reclaim_releases_lease_and_node_resources() -> (
     assert recovered_node.available.cpu_cores == 8
     assert recovered_node.available.memory_mib == 16384
 
-    recovered_job = job_repository.get_by_id(job.id)
+    recovered_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     assert recovered_job.is_queued()
     assert recovered_job.retry_count == 1

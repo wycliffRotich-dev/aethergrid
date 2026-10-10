@@ -4,6 +4,7 @@ from app.domain.entities.job import Job
 from app.domain.repositories.job_repository import (
     JobRepository,
 )
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class ListQueuedJobsService:
@@ -20,8 +21,9 @@ class ListQueuedJobsService:
 
     def execute(
         self,
+        tenant_id: TenantId,
     ) -> list[Job]:
         """
-        Return all queued jobs.
+        Return the queued jobs in this tenant.
         """
-        return self._job_repository.list_queued()
+        return self._job_repository.list_queued(tenant_id)

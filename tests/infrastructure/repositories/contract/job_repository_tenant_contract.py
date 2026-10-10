@@ -38,7 +38,7 @@ class JobRepositoryTenantContract:
         job = make_job(tenant_id=second_tenant_id)
         repository.save(job)
 
-        fetched = repository.get_by_id(job.id)
+        fetched = repository.get_by_id(job.id, second_tenant_id)
 
         assert fetched is not None
         assert fetched.tenant_id == second_tenant_id
@@ -61,7 +61,7 @@ class JobRepositoryTenantContract:
         with pytest.raises(JobTenantConflictError):
             repository.save(impostor)
 
-        fetched = repository.get_by_id(job.id)
+        fetched = repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
         assert fetched is not None
         assert fetched.tenant_id == DEFAULT_TENANT_ID
@@ -84,3 +84,48 @@ class JobRepositoryTenantContract:
         assert fetched is not None
         assert fetched.tenant_id == second_tenant_id
         assert repository.get_by_id_across_tenants(make_job().id) is None
+
+    def test_get_by_id_in_another_tenant_returns_none(
+        self,
+        repository,
+        second_tenant_id,
+    ) -> None:
+        job = make_job()
+        repository.save(job)
+
+        assert repository.get_by_id(job.id, second_tenant_id) is None
+        assert repository.get_by_id(job.id, DEFAULT_TENANT_ID) is not None
+
+    def test_list_recent_returns_only_the_callers_tenant(
+        self,
+        repository,
+        second_tenant_id,
+    ) -> None:
+        mine = make_job()
+        theirs = make_job(tenant_id=second_tenant_id)
+        repository.save(mine)
+        repository.save(theirs)
+
+        in_default = repository.list_recent(10, DEFAULT_TENANT_ID)
+        in_second = repository.list_recent(10, second_tenant_id)
+
+        assert [job.id for job in in_default] == [mine.id]
+        assert [job.id for job in in_second] == [theirs.id]
+
+    def test_list_queued_returns_only_the_callers_tenant(
+        self,
+        repository,
+        second_tenant_id,
+    ) -> None:
+        mine = make_job()
+        theirs = make_job(tenant_id=second_tenant_id)
+        mine.queue()
+        theirs.queue()
+        repository.save(mine)
+        repository.save(theirs)
+
+        in_default = repository.list_queued(DEFAULT_TENANT_ID)
+        in_second = repository.list_queued(second_tenant_id)
+
+        assert [job.id for job in in_default] == [mine.id]
+        assert [job.id for job in in_second] == [theirs.id]

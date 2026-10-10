@@ -4,6 +4,7 @@ from app.domain.entities.job import Job
 from app.domain.repositories.job_repository import (
     JobRepository,
 )
+from app.domain.value_objects.tenant_id import TenantId
 
 MAX_JOBS_RETURNED = 50
 
@@ -26,7 +27,9 @@ class ListJobsService:
 
     def execute(
         self,
+        tenant_id: TenantId,
     ) -> list[Job]:
         return self._job_repository.list_recent(
             MAX_JOBS_RETURNED,
+            tenant_id,
         )

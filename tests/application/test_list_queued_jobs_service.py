@@ -1,6 +1,7 @@
 from app.application.services.list_queued_jobs_service import (
     ListQueuedJobsService,
 )
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
@@ -46,7 +47,7 @@ def test_list_queued_jobs_returns_only_queued_jobs() -> None:
         repository,
     )
 
-    jobs = service.execute()
+    jobs = service.execute(DEFAULT_TENANT_ID)
 
     assert queued in jobs
     assert submitted not in jobs

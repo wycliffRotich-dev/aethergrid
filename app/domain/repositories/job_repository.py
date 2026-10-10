@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 
 from app.domain.entities.job import Job
 from app.domain.value_objects.job_id import JobId
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class JobRepository(ABC):
@@ -21,19 +22,21 @@ class JobRepository(ABC):
     def get_by_id(
         self,
         job_id: JobId,
-    ) -> Job | None: ...
-
-    @abstractmethod
-    def list(
-        self,
-    ) -> list[Job]: ...
+        tenant_id: TenantId,
+    ) -> Job | None:
+        """
+        Retrieve a job in this tenant. A job in another tenant is
+        reported exactly like a missing one (ADR 0064, point 5).
+        """
+        ...
 
     @abstractmethod
     def list_queued(
         self,
+        tenant_id: TenantId,
     ) -> list[Job]:
         """
-        Return all queued jobs.
+        Return the queued jobs in this tenant.
         """
         ...
 
@@ -41,10 +44,11 @@ class JobRepository(ABC):
     def list_recent(
         self,
         limit: int,
+        tenant_id: TenantId,
     ) -> list[Job]:
         """
-        Return the most recently submitted jobs, ordered
-        newest first, capped at `limit`.
+        Return the most recently submitted jobs in this tenant,
+        ordered newest first, capped at `limit`.
 
         This is a genuine domain-level query, not a
         persistence detail leaking upward: "give me the

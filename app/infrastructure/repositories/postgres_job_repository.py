@@ -108,34 +108,32 @@ class PostgresJobRepository(JobRepository):
                     f"job {job.id} belongs to another tenant"
                 )
 
-    def get_by_id(self, job_id: JobId) -> Job | None:
+    def get_by_id(
+        self,
+        job_id: JobId,
+        tenant_id: TenantId,
+    ) -> Job | None:
         with self._pool.connection() as conn:
             conn.row_factory = dict_row
             row = conn.execute(
-                "SELECT * FROM jobs WHERE id = %s",
-                (str(job_id),),
+                "SELECT * FROM jobs WHERE id = %s AND tenant_id = %s",
+                (str(job_id), str(tenant_id)),
             ).fetchone()
         return self._to_entity(row) if row else None
 
-    def list(self) -> list[Job]:
-        with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            rows = conn.execute("SELECT * FROM jobs").fetchall()
-        return [self._to_entity(row) for row in rows]
-
-    def list_queued(self) -> list[Job]:
+    def list_queued(self, tenant_id: TenantId) -> list[Job]:
         with self._pool.connection() as conn:
             conn.row_factory = dict_row
             rows = conn.execute(
-                "SELECT * FROM jobs WHERE status = %s",
-                (JobStatus.QUEUED.value,),
+                "SELECT * FROM jobs WHERE status = %s AND tenant_id = %s",
+                (JobStatus.QUEUED.value, str(tenant_id)),
             ).fetchall()
         return [self._to_entity(row) for row in rows]
 
-    def list_recent(self, limit: int) -> list[Job]:
+    def list_recent(self, limit: int, tenant_id: TenantId) -> list[Job]:
         """
-        Return the most recently submitted jobs, newest
-        first, capped at `limit`. Ordering and the limit
+        Return the most recently submitted jobs in this tenant,
+        newest first, capped at `limit`. Ordering and the limit
         are both pushed down to PostgreSQL via ORDER
         BY/LIMIT, rather than loading every row and slicing
         in Python.
@@ -143,8 +141,9 @@ class PostgresJobRepository(JobRepository):
         with self._pool.connection() as conn:
             conn.row_factory = dict_row
             rows = conn.execute(
-                "SELECT * FROM jobs ORDER BY submitted_at DESC LIMIT %s",
-                (limit,),
+                "SELECT * FROM jobs WHERE tenant_id = %s "
+                "ORDER BY submitted_at DESC LIMIT %s",
+                (str(tenant_id), limit),
             ).fetchall()
         return [self._to_entity(row) for row in rows]
 

@@ -173,10 +173,11 @@ class SqliteJobRepository(JobRepository):
     def get_by_id(
         self,
         job_id: JobId,
+        tenant_id: TenantId,
     ) -> Job | None:
         row = self._connection.execute(
-            "SELECT * FROM jobs WHERE id = ?",
-            (str(job_id),),
+            "SELECT * FROM jobs WHERE id = ? AND tenant_id = ?",
+            (str(job_id), str(tenant_id)),
         ).fetchone()
 
         if row is None:
@@ -184,24 +185,16 @@ class SqliteJobRepository(JobRepository):
 
         return self._row_to_job(row)
 
-    def list(
-        self,
-    ) -> list[Job]:
-        rows = self._connection.execute(
-            "SELECT * FROM jobs",
-        ).fetchall()
-
-        return [self._row_to_job(row) for row in rows]
-
     def list_queued(
         self,
+        tenant_id: TenantId,
     ) -> list[Job]:
         """
-        Return all queued jobs.
+        Return the queued jobs in this tenant.
         """
         rows = self._connection.execute(
-            "SELECT * FROM jobs WHERE status = ?",
-            (JobStatus.QUEUED.value,),
+            "SELECT * FROM jobs WHERE status = ? AND tenant_id = ?",
+            (JobStatus.QUEUED.value, str(tenant_id)),
         ).fetchall()
 
         return [self._row_to_job(row) for row in rows]
@@ -209,16 +202,18 @@ class SqliteJobRepository(JobRepository):
     def list_recent(
         self,
         limit: int,
+        tenant_id: TenantId,
     ) -> list[Job]:
         """
-        Return the most recently submitted jobs, newest
-        first, capped at `limit`. Ordering and the limit
+        Return the most recently submitted jobs in this tenant,
+        newest first, capped at `limit`. Ordering and the limit
         are both pushed down to SQLite via ORDER BY/LIMIT,
         rather than loading every row and slicing in Python.
         """
         rows = self._connection.execute(
-            "SELECT * FROM jobs ORDER BY submitted_at DESC LIMIT ?",
-            (limit,),
+            "SELECT * FROM jobs WHERE tenant_id = ? "
+            "ORDER BY submitted_at DESC LIMIT ?",
+            (str(tenant_id), limit),
         ).fetchall()
 
         return [self._row_to_job(row) for row in rows]

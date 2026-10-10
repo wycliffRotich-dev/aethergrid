@@ -1,6 +1,7 @@
 from app.application.services.retry_job_service import (
     RetryJobService,
 )
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.enums.job_status import JobStatus
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
@@ -56,6 +57,7 @@ def test_retry_service_requeues_failed_job() -> None:
 
     retried = service.execute(
         job.id,
+        DEFAULT_TENANT_ID,
     )
 
     assert retried is not None

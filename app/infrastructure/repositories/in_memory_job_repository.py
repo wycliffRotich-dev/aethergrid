@@ -7,6 +7,7 @@ from app.domain.exceptions.job_tenant_conflict_error import (
 )
 from app.domain.repositories.job_repository import JobRepository
 from app.domain.value_objects.job_id import JobId
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class InMemoryJobRepository(JobRepository):
@@ -50,36 +51,44 @@ class InMemoryJobRepository(JobRepository):
     def get_by_id(
         self,
         job_id: JobId,
+        tenant_id: TenantId,
     ) -> Job | None:
-        return self._jobs.get(str(job_id))
+        job = self._jobs.get(str(job_id))
 
-    def list(
-        self,
-    ) -> list[Job]:
-        return list(self._jobs.values())
+        if job is None or job.tenant_id != tenant_id:
+            return None
+
+        return job
 
     def list_queued(
         self,
+        tenant_id: TenantId,
     ) -> list[Job]:
         """
-        Return all queued jobs.
+        Return the queued jobs in this tenant.
         """
         return [
             job
             for job in self._jobs.values()
-            if job.status == JobStatus.QUEUED
+            if job.tenant_id == tenant_id
+            and job.status == JobStatus.QUEUED
         ]
 
     def list_recent(
         self,
         limit: int,
+        tenant_id: TenantId,
     ) -> list[Job]:
         """
-        Return the most recently submitted jobs, newest
-        first, capped at `limit`.
+        Return the most recently submitted jobs in this tenant,
+        newest first, capped at `limit`.
         """
         return sorted(
-            self._jobs.values(),
+            (
+                job
+                for job in self._jobs.values()
+                if job.tenant_id == tenant_id
+            ),
             key=lambda job: job.submitted_at,
             reverse=True,
         )[:limit]
