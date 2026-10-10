@@ -196,3 +196,49 @@ def test_a_node_cannot_name_a_tenant_that_does_not_exist(scratch):
             ") VALUES (%s, 'n', 8, 16384, 0, 8, 16384, 0, now(), %s)",
             (str(uuid.uuid4()), str(uuid.uuid4())),
         )
+
+
+_JOB_WITHOUT_TENANT = (
+    "INSERT INTO jobs (id, cpu_cores, memory_mib, status, submitted_at) "
+    "VALUES (%s, 1, 512, 'QUEUED', now())"
+)
+
+
+def test_upgrading_assigns_existing_jobs_to_the_default_tenant(scratch):
+    scratch.execute(PRE_TENANCY_SCHEMA)
+    job_id = str(uuid.uuid4())
+    scratch.execute(_JOB_WITHOUT_TENANT, (job_id,))
+
+    scratch.execute(CURRENT_SCHEMA)
+
+    rows = scratch.execute(
+        "SELECT id::text, tenant_id::text FROM jobs"
+    ).fetchall()
+    assert rows == [(job_id, str(DEFAULT_TENANT_ID))]
+
+
+def test_a_job_must_name_a_tenant_after_the_upgrade(scratch):
+    scratch.execute(PRE_TENANCY_SCHEMA)
+    scratch.execute(CURRENT_SCHEMA)
+
+    with pytest.raises(psycopg.errors.NotNullViolation):
+        scratch.execute(_JOB_WITHOUT_TENANT, (str(uuid.uuid4()),))
+
+
+def test_a_job_must_name_a_tenant_in_a_fresh_schema(scratch):
+    scratch.execute(CURRENT_SCHEMA)
+
+    with pytest.raises(psycopg.errors.NotNullViolation):
+        scratch.execute(_JOB_WITHOUT_TENANT, (str(uuid.uuid4()),))
+
+
+def test_a_job_cannot_name_a_tenant_that_does_not_exist(scratch):
+    scratch.execute(CURRENT_SCHEMA)
+
+    with pytest.raises(psycopg.errors.ForeignKeyViolation):
+        scratch.execute(
+            "INSERT INTO jobs "
+            "(id, cpu_cores, memory_mib, status, submitted_at, tenant_id) "
+            "VALUES (%s, 1, 512, 'QUEUED', now(), %s)",
+            (str(uuid.uuid4()), str(uuid.uuid4())),
+        )
