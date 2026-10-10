@@ -195,7 +195,7 @@ class WorkerExecutionLoop:
                 # request_cancellation() twice and raise on an
                 # already-CANCELLING job.
                 if not cancel_event.is_set():
-                    current = self._job_repository.get_by_id(
+                    current = self._job_repository.get_by_id_across_tenants(
                         job.id,
                     )
 
@@ -332,7 +332,7 @@ class WorkerExecutionLoop:
         # unconditional save. A direct field assignment, not a
         # state transition: cancellation_requested_at is a plain
         # timestamp, not a status this job is moving through.
-        current = self._job_repository.get_by_id(job.id)
+        current = self._job_repository.get_by_id_across_tenants(job.id)
 
         if (
             current is not None

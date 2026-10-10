@@ -155,15 +155,20 @@ def create_job(
     response_model=ListJobsResponse,
 )
 def list_jobs(
+    caller: Annotated[
+        ApiKey,
+        Depends(require_api_key),
+    ],
     service: Annotated[
         ListJobsService,
         Depends(get_list_jobs_service),
     ],
 ) -> ListJobsResponse:
     """
-    Return the most recently submitted jobs.
+    Return the most recently submitted jobs in the caller's
+    tenant.
     """
-    jobs = service.execute()
+    jobs = service.execute(caller.tenant_id)
 
     return ListJobsResponse(
         jobs=[
@@ -188,16 +193,20 @@ def list_jobs(
     response_model=ListJobsResponse,
 )
 def list_queued_jobs(
+    caller: Annotated[
+        ApiKey,
+        Depends(require_api_key),
+    ],
     service: Annotated[
         ListQueuedJobsService,
         Depends(get_list_queued_jobs_service),
     ],
 ) -> ListJobsResponse:
     """
-    Return every job currently sitting in the queue,
-    waiting to be scheduled onto a node.
+    Return every job in the caller's tenant currently sitting in
+    the queue, waiting to be scheduled onto a node.
     """
-    jobs = service.execute()
+    jobs = service.execute(caller.tenant_id)
 
     return ListJobsResponse(
         jobs=[
@@ -224,19 +233,25 @@ def list_queued_jobs(
 )
 def get_job(
     job_id: str,
+    caller: Annotated[
+        ApiKey,
+        Depends(require_api_key),
+    ],
     service: Annotated[
         GetJobService,
         Depends(get_get_job_service),
     ],
 ) -> GetJobResponse:
     """
-    Retrieve an existing job.
+    Retrieve an existing job. A job in another tenant answers
+    404, exactly like a missing one.
     """
     try:
         job = service.execute(
             JobId(
                 value=UUID(job_id),
             ),
+            caller.tenant_id,
         )
     except JobNotFoundError as exc:
         raise HTTPException(
@@ -264,6 +279,10 @@ def get_job(
 )
 def get_job_history(
     job_id: str,
+    caller: Annotated[
+        ApiKey,
+        Depends(require_api_key),
+    ],
     service: Annotated[
         GetJobHistoryService,
         Depends(get_get_job_history_service),
@@ -276,6 +295,7 @@ def get_job_history(
 
     events = service.execute(
         aggregate_id=job_id,
+        tenant_id=caller.tenant_id,
     )
 
     return ListEventsResponse(
@@ -300,6 +320,10 @@ def get_job_history(
 )
 def cancel_job(
     job_id: str,
+    caller: Annotated[
+        ApiKey,
+        Depends(require_api_key),
+    ],
     service: Annotated[
         CancelJobService,
         Depends(get_cancel_job_service),
@@ -324,7 +348,7 @@ def cancel_job(
     )
 
     try:
-        job = service.execute(job_uuid)
+        job = service.execute(job_uuid, caller.tenant_id)
     except InvalidJobTransition as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -357,6 +381,10 @@ def cancel_job(
 )
 def retry_job(
     job_id: str,
+    caller: Annotated[
+        ApiKey,
+        Depends(require_api_key),
+    ],
     service: Annotated[
         RetryJobService,
         Depends(get_retry_job_service),
@@ -375,7 +403,7 @@ def retry_job(
         value=UUID(job_id),
     )
 
-    job = service.execute(job_uuid)
+    job = service.execute(job_uuid, caller.tenant_id)
 
     if job is None:
         raise HTTPException(

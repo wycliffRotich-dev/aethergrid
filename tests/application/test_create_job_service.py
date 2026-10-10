@@ -60,6 +60,7 @@ def test_create_job_service_creates_and_persists_job() -> None:
 
     stored = job_repository.get_by_id(
         job.id,
+        tenant_id,
     )
 
     assert stored is not None
@@ -136,6 +137,7 @@ def test_create_job_service_does_not_schedule_job() -> None:
 
     stored = job_repository.get_by_id(
         job.id,
+        DEFAULT_TENANT_ID,
     )
 
     assert stored is not None
@@ -186,6 +188,7 @@ def test_create_job_service_persists_command() -> None:
 
     stored = job_repository.get_by_id(
         job.id,
+        DEFAULT_TENANT_ID,
     )
 
     assert stored is not None

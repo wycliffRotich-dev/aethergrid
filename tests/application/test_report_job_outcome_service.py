@@ -160,7 +160,7 @@ def test_complete_marks_job_completed_releases_lease_and_node() -> None:
     )
 
     saved_worker = worker_repository.get_by_id(worker.id)
-    saved_job = job_repository.get_by_id(job.id)
+    saved_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
     assert saved_worker is not None
@@ -197,7 +197,7 @@ def test_fail_marks_job_failed_releases_lease_and_node() -> None:
     )
 
     saved_worker = worker_repository.get_by_id(worker.id)
-    saved_job = job_repository.get_by_id(job.id)
+    saved_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
     assert saved_worker is not None
@@ -364,7 +364,7 @@ def test_cancel_marks_job_cancelled_releases_lease_and_node() -> None:
     )
 
     saved_worker = worker_repository.get_by_id(worker.id)
-    saved_job = job_repository.get_by_id(job.id)
+    saved_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
     assert saved_worker is not None

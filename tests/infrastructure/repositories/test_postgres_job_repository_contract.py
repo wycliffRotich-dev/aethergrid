@@ -5,6 +5,7 @@ from psycopg_pool import ConnectionPool
 
 from app.domain.entities.job import Job
 from app.domain.entities.node import Node
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.enums.job_status import JobStatus
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
@@ -89,7 +90,7 @@ def test_save_and_get_by_id_round_trips_full_job(
 
     repository.save(job)
 
-    reloaded = repository.get_by_id(job.id)
+    reloaded = repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert reloaded is not None
     assert reloaded.id == job.id
@@ -106,24 +107,24 @@ def test_round_trips_job_with_no_assigned_node(repository) -> None:
     job = _make_job()
 
     repository.save(job)
-    reloaded = repository.get_by_id(job.id)
+    reloaded = repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert reloaded is not None
     assert reloaded.assigned_node_id is None
 
 
 def test_get_by_id_returns_none_when_not_found(repository) -> None:
-    result = repository.get_by_id(JobId.new())
+    result = repository.get_by_id(JobId.new(), DEFAULT_TENANT_ID)
     assert result is None
 
 
-def test_list_returns_all_saved_jobs(repository) -> None:
+def test_list_across_tenants_returns_all_saved_jobs(repository) -> None:
     first = _make_job()
     second = _make_job()
     repository.save(first)
     repository.save(second)
 
-    result = repository.list()
+    result = repository.list_across_tenants()
 
     assert {job.id for job in result} == {first.id, second.id}
 
@@ -137,7 +138,7 @@ def test_list_queued_returns_only_queued_jobs(repository) -> None:
     repository.save(queued)
     repository.save(submitted)
 
-    result = repository.list_queued()
+    result = repository.list_queued(DEFAULT_TENANT_ID)
 
     assert queued.id in {job.id for job in result}
     assert submitted.id not in {job.id for job in result}
@@ -152,7 +153,7 @@ def test_save_twice_updates_existing_job_instead_of_duplicating(
     job.queue()
     repository.save(job)
 
-    result = repository.list()
+    result = repository.list_across_tenants()
     matching = [j for j in result if j.id == job.id]
 
     assert len(matching) == 1
@@ -170,7 +171,7 @@ def test_round_trips_command_and_exit_code(repository) -> None:
     job.command = ["python3", "-c", "print('hi')"]
 
     repository.save(job)
-    reloaded = repository.get_by_id(job.id)
+    reloaded = repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert reloaded is not None
     assert reloaded.command == ["python3", "-c", "print('hi')"]
@@ -178,7 +179,7 @@ def test_round_trips_command_and_exit_code(repository) -> None:
 
     job.exit_code = 0
     repository.save(job)
-    reloaded_after_update = repository.get_by_id(job.id)
+    reloaded_after_update = repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert reloaded_after_update is not None
     assert reloaded_after_update.exit_code == 0
@@ -194,7 +195,7 @@ def test_round_trips_job_with_no_command(repository) -> None:
     assert job.command is None
 
     repository.save(job)
-    reloaded = repository.get_by_id(job.id)
+    reloaded = repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert reloaded is not None
     assert reloaded.command is None

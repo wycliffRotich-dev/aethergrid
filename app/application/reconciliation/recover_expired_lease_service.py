@@ -119,7 +119,7 @@ class RecoverExpiredLeaseService:
             worker = self._worker_repository.get_by_id(
                 lease.worker_id,
             )
-            job = self._job_repository.get_by_id(
+            job = self._job_repository.get_by_id_across_tenants(
                 lease.job_id,
             )
 

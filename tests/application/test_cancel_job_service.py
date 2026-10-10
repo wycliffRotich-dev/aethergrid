@@ -3,6 +3,7 @@ import pytest
 from app.application.services.cancel_job_service import (
     CancelJobService,
 )
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.enums.job_status import JobStatus
 from app.domain.exceptions.invalid_job_transition import (
     InvalidJobTransition,
@@ -46,6 +47,7 @@ def test_cancel_job_service_cancels_a_queued_job() -> None:
 
     service.execute(
         job.id,
+        DEFAULT_TENANT_ID,
     )
 
     assert job.status == JobStatus.CANCELLED
@@ -82,6 +84,7 @@ def test_cancel_job_service_requests_cancellation_of_a_running_job() -> None:
 
     service.execute(
         job.id,
+        DEFAULT_TENANT_ID,
     )
 
     assert job.status == JobStatus.CANCELLING
@@ -119,6 +122,7 @@ def test_cancel_job_service_is_idempotent_when_already_cancelling() -> None:
 
     service.execute(
         job.id,
+        DEFAULT_TENANT_ID,
     )
 
     assert job.status == JobStatus.CANCELLING
@@ -134,6 +138,7 @@ def test_cancel_job_service_returns_none_for_missing_job() -> None:
 
     result = service.execute(
         JobId.new(),
+        DEFAULT_TENANT_ID,
     )
 
     assert result is None
@@ -172,6 +177,7 @@ def test_cancel_job_service_raises_for_already_completed_job() -> None:
     with pytest.raises(InvalidJobTransition):
         service.execute(
             job.id,
+            DEFAULT_TENANT_ID,
         )
 
     assert job.status == JobStatus.COMPLETED
@@ -208,6 +214,7 @@ def test_cancel_job_service_raises_for_already_failed_job() -> None:
     with pytest.raises(InvalidJobTransition):
         service.execute(
             job.id,
+            DEFAULT_TENANT_ID,
         )
 
     assert job.status == JobStatus.FAILED
@@ -242,6 +249,7 @@ def test_cancel_job_service_raises_for_already_cancelled_job() -> None:
     with pytest.raises(InvalidJobTransition):
         service.execute(
             job.id,
+            DEFAULT_TENANT_ID,
         )
 
     assert job.status == JobStatus.CANCELLED

@@ -109,7 +109,7 @@ def test_recover_expired_lease_requeues_job_with_retries_remaining() -> None:
     service.execute()
 
     recovered_worker = worker_repository.get_by_id(worker.id)
-    recovered_job = job_repository.get_by_id(job.id)
+    recovered_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert recovered_worker is not None
     assert recovered_worker.is_idle()
@@ -198,7 +198,7 @@ def test_recover_expired_lease_skips_a_job_whose_lease_was_renewed_mid_pass() ->
     service.execute()
 
     recovered_worker = worker_repository.get_by_id(worker.id)
-    recovered_job = job_repository.get_by_id(job.id)
+    recovered_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert recovered_worker is not None
     assert recovered_worker.status is WorkerStatus.BUSY
@@ -263,7 +263,7 @@ def test_recover_expired_lease_fails_job_once_retries_exhausted() -> None:
     service.execute()
 
     recovered_worker = worker_repository.get_by_id(worker.id)
-    recovered_job = job_repository.get_by_id(job.id)
+    recovered_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert recovered_worker is not None
     assert recovered_worker.is_idle()
@@ -388,7 +388,7 @@ def test_recover_expired_lease_finalizes_cancelling_job_as_cancelled() -> None:
     service.execute()
 
     recovered_worker = worker_repository.get_by_id(worker.id)
-    recovered_job = job_repository.get_by_id(job.id)
+    recovered_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert recovered_worker is not None
     assert recovered_worker.is_idle()

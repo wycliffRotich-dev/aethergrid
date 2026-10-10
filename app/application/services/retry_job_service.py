@@ -6,6 +6,7 @@ from app.domain.repositories.job_repository import (
     JobRepository,
 )
 from app.domain.value_objects.job_id import JobId
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class RetryJobService:
@@ -23,17 +24,19 @@ class RetryJobService:
     def execute(
         self,
         job_id: JobId,
+        tenant_id: TenantId,
     ) -> Job | None:
         """
         Retry a failed job if it still has
         retries remaining.
 
         Returns:
-            The updated job if found,
+            The updated job if found in the tenant,
             otherwise None.
         """
         job = self._job_repository.get_by_id(
             job_id,
+            tenant_id,
         )
 
         if job is None:

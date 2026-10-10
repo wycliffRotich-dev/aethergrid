@@ -188,7 +188,7 @@ def test_run_once_with_no_command_completes_successfully() -> None:
     loop.execute(worker.id)
 
     saved_worker = worker_repository.get_by_id(worker.id)
-    saved_job = job_repository.get_by_id(job.id)
+    saved_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
     assert saved_worker is not None
@@ -225,7 +225,7 @@ def test_run_once_executes_real_successful_command() -> None:
     loop.execute(worker.id)
 
     saved_worker = worker_repository.get_by_id(worker.id)
-    saved_job = job_repository.get_by_id(job.id)
+    saved_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
     assert saved_worker is not None
@@ -259,7 +259,7 @@ def test_run_once_marks_job_and_worker_failed_on_nonzero_exit() -> None:
     loop.execute(worker.id)
 
     saved_worker = worker_repository.get_by_id(worker.id)
-    saved_job = job_repository.get_by_id(job.id)
+    saved_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
     assert saved_worker is not None
@@ -300,7 +300,7 @@ def test_run_once_marks_job_failed_when_command_exceeds_timeout() -> None:
     loop.execute(worker.id)
 
     saved_worker = worker_repository.get_by_id(worker.id)
-    saved_job = job_repository.get_by_id(job.id)
+    saved_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
     assert saved_worker is not None
@@ -382,7 +382,7 @@ def test_run_once_does_not_restart_a_job_already_running() -> None:
     loop.execute(worker.id)
 
     saved_worker = worker_repository.get_by_id(worker.id)
-    saved_job = job_repository.get_by_id(job.id)
+    saved_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert saved_worker is not None
     assert saved_worker.is_idle()
@@ -496,7 +496,7 @@ def test_run_once_cancels_job_requested_to_cancel_during_execution() -> None:
 
     def request_cancellation_soon() -> None:
         time.sleep(0.2)
-        stored = job_repository.get_by_id(job.id)
+        stored = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
         assert stored is not None
         stored.request_cancellation()
         job_repository.save(stored)
@@ -509,7 +509,7 @@ def test_run_once_cancels_job_requested_to_cancel_during_execution() -> None:
     loop.execute(worker.id)
 
     saved_worker = worker_repository.get_by_id(worker.id)
-    saved_job = job_repository.get_by_id(job.id)
+    saved_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
     assert saved_worker is not None
@@ -578,7 +578,7 @@ def test_run_once_records_job_cancelled_event() -> None:
 
     def request_cancellation_soon() -> None:
         time.sleep(0.2)
-        stored = job_repository.get_by_id(job.id)
+        stored = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
         assert stored is not None
         stored.request_cancellation()
         job_repository.save(stored)
@@ -671,7 +671,7 @@ def test_run_once_preserves_cancellation_request_lost_by_renewal_thread() -> (
 
     def request_cancellation_soon() -> None:
         time.sleep(0.1)
-        stored = job_repository.get_by_id(job.id)
+        stored = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
         assert stored is not None
         stored.request_cancellation()
         job_repository.save(stored)
@@ -683,7 +683,7 @@ def test_run_once_preserves_cancellation_request_lost_by_renewal_thread() -> (
 
     loop.execute(worker.id)
 
-    saved_job = job_repository.get_by_id(job.id)
+    saved_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     assert saved_job is not None
 
     # The outcome-decision race is intentional per ADR 0029:
@@ -811,7 +811,7 @@ def test_run_once_preserves_cancellation_request_against_sqlite_repository() -> 
             cancel_repository = SqliteJobRepository(
                 cancel_connection,
             )
-            stored = cancel_repository.get_by_id(job.id)
+            stored = cancel_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
             assert stored is not None
             stored.request_cancellation()
             cancel_repository.save(stored)
@@ -832,7 +832,7 @@ def test_run_once_preserves_cancellation_request_against_sqlite_repository() -> 
         # object happens to hold.
         verify_connection = create_connection(db_path)
         verify_repository = SqliteJobRepository(verify_connection)
-        saved_job = verify_repository.get_by_id(job.id)
+        saved_job = verify_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
         verify_connection.close()
 
         assert saved_job is not None

@@ -56,7 +56,7 @@ def test_a_saved_job_keeps_its_tenant(db_path) -> None:
 
     repository.save(job)
 
-    fetched = repository.get_by_id(job.id)
+    fetched = repository.get_by_id(job.id, tenant_id)
     connection.close()
     assert fetched is not None
     assert fetched.tenant_id == tenant_id
@@ -76,11 +76,81 @@ def test_saving_a_job_id_held_by_another_tenant_conflicts(db_path) -> None:
     with pytest.raises(JobTenantConflictError):
         repository.save(intruder)
 
-    stored = repository.get_by_id(job.id)
+    stored = repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     connection.close()
     assert stored is not None
     assert stored.tenant_id == DEFAULT_TENANT_ID
     assert stored.priority == 1
+
+
+def test_across_tenants_reads_see_jobs_in_every_tenant(db_path) -> None:
+    connection = create_connection(db_path)
+    repository = SqliteJobRepository(connection)
+    their_tenant_id = TenantId.new()
+    mine = make_job()
+    theirs = make_job(tenant_id=their_tenant_id)
+    repository.save(mine)
+    repository.save(theirs)
+
+    listed = repository.list_across_tenants()
+    fetched = repository.get_by_id_across_tenants(theirs.id)
+    missing = repository.get_by_id_across_tenants(make_job().id)
+    connection.close()
+
+    assert {job.id for job in listed} == {mine.id, theirs.id}
+    assert fetched is not None
+    assert fetched.tenant_id == their_tenant_id
+    assert missing is None
+
+
+def test_get_by_id_in_another_tenant_returns_none(db_path) -> None:
+    connection = create_connection(db_path)
+    repository = SqliteJobRepository(connection)
+    job = make_job()
+    repository.save(job)
+
+    foreign = repository.get_by_id(job.id, TenantId.new())
+    owner = repository.get_by_id(job.id, DEFAULT_TENANT_ID)
+    connection.close()
+
+    assert foreign is None
+    assert owner is not None
+
+
+def test_list_recent_returns_only_the_callers_tenant(db_path) -> None:
+    connection = create_connection(db_path)
+    repository = SqliteJobRepository(connection)
+    their_tenant_id = TenantId.new()
+    mine = make_job()
+    theirs = make_job(tenant_id=their_tenant_id)
+    repository.save(mine)
+    repository.save(theirs)
+
+    in_default = repository.list_recent(10, DEFAULT_TENANT_ID)
+    in_theirs = repository.list_recent(10, their_tenant_id)
+    connection.close()
+
+    assert [job.id for job in in_default] == [mine.id]
+    assert [job.id for job in in_theirs] == [theirs.id]
+
+
+def test_list_queued_returns_only_the_callers_tenant(db_path) -> None:
+    connection = create_connection(db_path)
+    repository = SqliteJobRepository(connection)
+    their_tenant_id = TenantId.new()
+    mine = make_job()
+    theirs = make_job(tenant_id=their_tenant_id)
+    mine.queue()
+    theirs.queue()
+    repository.save(mine)
+    repository.save(theirs)
+
+    in_default = repository.list_queued(DEFAULT_TENANT_ID)
+    in_theirs = repository.list_queued(their_tenant_id)
+    connection.close()
+
+    assert [job.id for job in in_default] == [mine.id]
+    assert [job.id for job in in_theirs] == [theirs.id]
 
 
 def _insert_pre_tenant_job(db_path: str, job_id: JobId) -> None:
@@ -120,7 +190,7 @@ def test_upgrade_assigns_pre_tenant_rows_to_the_default_tenant(
     connection = create_connection(db_path)
     repository = SqliteJobRepository(connection)
 
-    fetched = repository.get_by_id(job_id)
+    fetched = repository.get_by_id(job_id, DEFAULT_TENANT_ID)
     connection.close()
     assert fetched is not None
     assert fetched.tenant_id == DEFAULT_TENANT_ID
@@ -137,7 +207,7 @@ def test_opening_an_upgraded_file_again_changes_nothing(db_path) -> None:
 
     connection = create_connection(db_path)
     repository = SqliteJobRepository(connection)
-    fetched = repository.get_by_id(job_id)
+    fetched = repository.get_by_id(job_id, DEFAULT_TENANT_ID)
     connection.close()
 
     assert fetched is not None

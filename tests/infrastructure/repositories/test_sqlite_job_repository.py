@@ -6,6 +6,7 @@ import tempfile
 import pytest
 
 from app.domain.entities.job import Job
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.enums.job_status import JobStatus
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
@@ -71,7 +72,7 @@ def test_save_and_get_by_id_round_trips_full_job(db_path) -> None:
     # the round trip survives independent of any in-memory state.
     read_connection = create_connection(db_path)
     read_repository = SqliteJobRepository(read_connection)
-    reloaded = read_repository.get_by_id(job.id)
+    reloaded = read_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     read_connection.close()
 
     assert reloaded is not None
@@ -92,7 +93,7 @@ def test_round_trips_job_with_no_assigned_node(db_path) -> None:
     repository = SqliteJobRepository(connection)
     repository.save(job)
 
-    reloaded = repository.get_by_id(job.id)
+    reloaded = repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert reloaded is not None
     assert reloaded.assigned_node_id is None
@@ -102,12 +103,12 @@ def test_get_by_id_returns_none_when_not_found(db_path) -> None:
     connection = create_connection(db_path)
     repository = SqliteJobRepository(connection)
 
-    result = repository.get_by_id(JobId.new())
+    result = repository.get_by_id(JobId.new(), DEFAULT_TENANT_ID)
 
     assert result is None
 
 
-def test_list_returns_all_saved_jobs(db_path) -> None:
+def test_list_across_tenants_returns_all_saved_jobs(db_path) -> None:
     connection = create_connection(db_path)
     repository = SqliteJobRepository(connection)
 
@@ -116,7 +117,7 @@ def test_list_returns_all_saved_jobs(db_path) -> None:
     repository.save(first)
     repository.save(second)
 
-    result = repository.list()
+    result = repository.list_across_tenants()
 
     assert {job.id for job in result} == {first.id, second.id}
 
@@ -133,7 +134,7 @@ def test_list_queued_returns_only_queued_jobs(db_path) -> None:
     repository.save(queued)
     repository.save(submitted)
 
-    result = repository.list_queued()
+    result = repository.list_queued(DEFAULT_TENANT_ID)
 
     assert queued.id in {job.id for job in result}
     assert submitted.id not in {job.id for job in result}
@@ -151,7 +152,7 @@ def test_save_twice_updates_existing_job_instead_of_duplicating(
     job.queue()
     repository.save(job)
 
-    result = repository.list()
+    result = repository.list_across_tenants()
     matching = [j for j in result if j.id == job.id]
 
     assert len(matching) == 1
@@ -176,7 +177,7 @@ def test_round_trips_command_and_exit_code(db_path) -> None:
 
     read_connection = create_connection(db_path)
     read_repository = SqliteJobRepository(read_connection)
-    reloaded = read_repository.get_by_id(job.id)
+    reloaded = read_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     read_connection.close()
 
     assert reloaded is not None
@@ -194,7 +195,7 @@ def test_round_trips_command_and_exit_code(db_path) -> None:
 
     read_connection = create_connection(db_path)
     read_repository = SqliteJobRepository(read_connection)
-    reloaded_after_update = read_repository.get_by_id(job.id)
+    reloaded_after_update = read_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     read_connection.close()
 
     assert reloaded_after_update is not None
@@ -214,7 +215,7 @@ def test_round_trips_job_with_no_command(db_path) -> None:
     repository = SqliteJobRepository(connection)
     repository.save(job)
 
-    reloaded = repository.get_by_id(job.id)
+    reloaded = repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert reloaded is not None
     assert reloaded.command is None
@@ -239,7 +240,7 @@ def test_round_trips_started_at_and_completed_at(db_path) -> None:
 
     read_connection = create_connection(db_path)
     read_repository = SqliteJobRepository(read_connection)
-    reloaded = read_repository.get_by_id(job.id)
+    reloaded = read_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     read_connection.close()
 
     assert reloaded is not None
@@ -256,7 +257,7 @@ def test_round_trips_started_at_and_completed_at(db_path) -> None:
 
     read_connection = create_connection(db_path)
     read_repository = SqliteJobRepository(read_connection)
-    reloaded_after_completion = read_repository.get_by_id(job.id)
+    reloaded_after_completion = read_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     read_connection.close()
 
     assert reloaded_after_completion is not None

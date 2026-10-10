@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.domain.entities.job import Job
 from app.domain.repositories.job_repository import JobRepository
 from app.domain.value_objects.job_id import JobId
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class CancelJobService:
@@ -30,17 +31,19 @@ class CancelJobService:
     def execute(
         self,
         job_id: JobId,
+        tenant_id: TenantId,
     ) -> Job | None:
         """
         Cancel a job, or request cancellation of a running
         one.
 
         Returns:
-            The job in its resulting state if found,
-            otherwise None.
+            The job in its resulting state if found in the
+            tenant, otherwise None.
         """
         job = self._job_repository.get_by_id(
             job_id,
+            tenant_id,
         )
 
         if job is None:

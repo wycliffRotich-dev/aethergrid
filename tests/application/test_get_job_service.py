@@ -5,6 +5,7 @@ import pytest
 from app.application.services.get_job_service import (
     GetJobService,
 )
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.exceptions.job_not_found_error import (
     JobNotFoundError,
 )
@@ -36,7 +37,7 @@ def test_get_job_service_returns_existing_job() -> None:
         job_repository=repository,
     )
 
-    retrieved = service.execute(job.id)
+    retrieved = service.execute(job.id, DEFAULT_TENANT_ID)
 
     assert retrieved is job
 
@@ -51,4 +52,4 @@ def test_get_job_service_raises_when_job_does_not_exist() -> None:
     missing_job_id = JobId.new()
 
     with pytest.raises(JobNotFoundError):
-        service.execute(missing_job_id)
+        service.execute(missing_job_id, DEFAULT_TENANT_ID)

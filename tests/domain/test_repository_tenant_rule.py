@@ -7,20 +7,22 @@ from abc import ABC, abstractmethod
 import pytest
 
 from app.domain.entities.api_key import ApiKey
+from app.domain.entities.job import Job
 from app.domain.entities.node import Node
 from app.domain.repositories.api_key_repository import (
     ApiKeyRepository,
 )
+from app.domain.repositories.job_repository import JobRepository
 from app.domain.repositories.node_repository import NodeRepository
 from app.domain.value_objects.tenant_id import TenantId
 
 # Repositories already held to ADR 0064, point 4. A repository
 # joins this list in the same change that scopes it.
-SCOPED_REPOSITORIES = [ApiKeyRepository, NodeRepository]
+SCOPED_REPOSITORIES = [ApiKeyRepository, JobRepository, NodeRepository]
 
 # Entity types that carry their own tenant_id, so a method
 # that takes one is scoped by that entity.
-TENANT_CARRYING_ENTITIES = (ApiKey, Node)
+TENANT_CARRYING_ENTITIES = (ApiKey, Job, Node)
 
 ACROSS_TENANTS_SUFFIX = "_across_tenants"
 

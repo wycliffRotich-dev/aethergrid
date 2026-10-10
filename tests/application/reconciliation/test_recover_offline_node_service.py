@@ -98,7 +98,7 @@ def test_recover_offline_node_requeues_job_with_retries_remaining() -> None:
     service.execute()
 
     recovered_worker = worker_repository.get_by_id(worker.id)
-    recovered_job = job_repository.get_by_id(job.id)
+    recovered_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert recovered_worker is not None
     assert recovered_worker.is_idle()
@@ -155,7 +155,7 @@ def test_recover_offline_node_fails_job_once_retries_exhausted() -> None:
     service.execute()
 
     recovered_worker = worker_repository.get_by_id(worker.id)
-    recovered_job = job_repository.get_by_id(job.id)
+    recovered_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert recovered_worker is not None
     assert recovered_worker.is_idle()
@@ -288,7 +288,7 @@ def test_recover_offline_node_skips_a_job_whose_lease_is_still_valid() -> (
     service.execute()
 
     recovered_worker = worker_repository.get_by_id(worker.id)
-    recovered_job = job_repository.get_by_id(job.id)
+    recovered_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert recovered_worker is not None
     assert recovered_worker.status is WorkerStatus.BUSY
@@ -374,7 +374,7 @@ def test_recover_offline_node_deletes_lease_so_job_can_be_reacquired() -> (
 
     service.execute()
 
-    recovered_job = job_repository.get_by_id(job.id)
+    recovered_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     assert recovered_job is not None
     assert recovered_job.is_queued()
 
