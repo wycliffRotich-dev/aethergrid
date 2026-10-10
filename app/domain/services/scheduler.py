@@ -28,6 +28,21 @@ class Scheduler:
 
         return True
 
+    def _same_tenant(
+        self,
+        job: Job,
+        node: Node,
+    ) -> bool:
+        """
+        Return True if the node belongs to the job's tenant.
+
+        A job's command must never run on another tenant's
+        hardware, so this is checked before anything about fit
+        (ADR 0064, point 6). Nodes are tenant-owned and there is
+        no shared pool.
+        """
+        return node.tenant_id == job.tenant_id
+
     def _fit_score(
         self,
         job: Job,
@@ -79,6 +94,7 @@ class Scheduler:
         the given job.
 
         A node must:
+        - belong to the job's tenant
         - be alive
         - not be draining
         - satisfy all job constraints
@@ -93,7 +109,11 @@ class Scheduler:
             node
             for node in nodes
             if (
-                node.is_alive()
+                self._same_tenant(
+                    job,
+                    node,
+                )
+                and node.is_alive()
                 and not node.is_draining()
                 and self._matches_constraints(
                     job,
