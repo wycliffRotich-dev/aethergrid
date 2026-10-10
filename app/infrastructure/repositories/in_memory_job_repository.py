@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from app.domain.entities.job import Job
 from app.domain.enums.job_status import JobStatus
+from app.domain.exceptions.job_tenant_conflict_error import (
+    JobTenantConflictError,
+)
 from app.domain.repositories.job_repository import JobRepository
 from app.domain.value_objects.job_id import JobId
 
@@ -25,6 +28,13 @@ class InMemoryJobRepository(JobRepository):
         self,
         job: Job,
     ) -> None:
+        existing = self._jobs.get(str(job.id))
+
+        if existing is not None and existing.tenant_id != job.tenant_id:
+            raise JobTenantConflictError(
+                f"job {job.id} belongs to another tenant"
+            )
+
         self._jobs[str(job.id)] = job
 
     def clear(

@@ -140,6 +140,7 @@ def create_job(
 
     job = service.execute(
         resources,
+        caller.tenant_id,
         request.command,
     )
 

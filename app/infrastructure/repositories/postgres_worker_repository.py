@@ -178,6 +178,7 @@ class PostgresWorkerRepository(WorkerRepository):
 
         return Job(
             id=JobId(row["id"]),
+            tenant_id=TenantId(row["tenant_id"]),
             resources=ResourceRequirements(
                 cpu_cores=row["cpu_cores"],
                 memory_mib=row["memory_mib"],

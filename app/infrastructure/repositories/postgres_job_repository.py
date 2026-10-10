@@ -7,12 +7,16 @@ from psycopg_pool import ConnectionPool
 
 from app.domain.entities.job import Job
 from app.domain.enums.job_status import JobStatus
+from app.domain.exceptions.job_tenant_conflict_error import (
+    JobTenantConflictError,
+)
 from app.domain.repositories.job_repository import JobRepository
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class PostgresJobRepository(JobRepository):
@@ -41,14 +45,15 @@ class PostgresJobRepository(JobRepository):
         )
 
         with self._pool.connection() as conn:
-            conn.execute(
+            cursor = conn.execute(
                 """
                 INSERT INTO jobs (
                     id, cpu_cores, memory_mib, vram_mib,
                     priority, constraints, max_retries,
                     retry_count, status, assigned_node_id,
                     submitted_at, started_at, completed_at,
-                    command, exit_code, cancellation_requested_at
+                    command, exit_code, cancellation_requested_at,
+                    tenant_id
                 ) VALUES (
                     %(id)s, %(cpu_cores)s, %(memory_mib)s,
                     %(vram_mib)s, %(priority)s, %(constraints)s,
@@ -56,7 +61,8 @@ class PostgresJobRepository(JobRepository):
                     %(assigned_node_id)s, %(submitted_at)s,
                     %(started_at)s, %(completed_at)s,
                     %(command)s, %(exit_code)s,
-                    %(cancellation_requested_at)s
+                    %(cancellation_requested_at)s,
+                    %(tenant_id)s
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     cpu_cores = EXCLUDED.cpu_cores,
@@ -74,6 +80,7 @@ class PostgresJobRepository(JobRepository):
                     command = EXCLUDED.command,
                     exit_code = EXCLUDED.exit_code,
                     cancellation_requested_at = EXCLUDED.cancellation_requested_at
+                WHERE jobs.tenant_id = EXCLUDED.tenant_id
                 """,
                 {
                     "id": str(job.id),
@@ -92,8 +99,14 @@ class PostgresJobRepository(JobRepository):
                     "command": command,
                     "exit_code": job.exit_code,
                     "cancellation_requested_at": job.cancellation_requested_at,
+                    "tenant_id": str(job.tenant_id),
                 },
             )
+
+            if cursor.rowcount == 0:
+                raise JobTenantConflictError(
+                    f"job {job.id} belongs to another tenant"
+                )
 
     def get_by_id(self, job_id: JobId) -> Job | None:
         with self._pool.connection() as conn:
@@ -153,6 +166,7 @@ class PostgresJobRepository(JobRepository):
 
         return Job(
             id=JobId(row["id"]),
+            tenant_id=TenantId(row["tenant_id"]),
             resources=ResourceRequirements(
                 cpu_cores=row["cpu_cores"],
                 memory_mib=row["memory_mib"],

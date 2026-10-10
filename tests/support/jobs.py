@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.domain.entities.job import Job
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
@@ -28,6 +29,9 @@ def make_job(**overrides: Any) -> Job:
             memory_mib=512,
             vram_mib=0,
         ),
+        # The default tenant, so a test only names a tenant when
+        # tenancy is what it is testing (ADR 0064).
+        "tenant_id": DEFAULT_TENANT_ID,
     }
     defaults.update(overrides)
 
