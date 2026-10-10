@@ -248,3 +248,33 @@ COMMIT;
 -- that gives those tables a tenant.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_id_tenant
 ON jobs (id, tenant_id);
+
+-- ADR 0064, point 7: a job must be assigned to a node in its own
+-- tenant, and the database refuses the link even if the application
+-- is wrong. The composite key points at the unique index on nodes
+-- (id, tenant_id). ON DELETE SET NULL names the column, so deleting a
+-- node clears the link and never tries to null the NOT NULL tenant_id
+-- (the column list form needs PostgreSQL 15, and compose pins 16). A
+-- job with no node has a NULL assigned_node_id and is not checked.
+-- The new key is added before the old one is dropped, in one block, so
+-- the column is never unprotected. An existing job assigned to a node
+-- in another tenant makes the upgrade fail instead of being ignored.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'jobs_assigned_node_same_tenant'
+          AND conrelid = 'jobs'::regclass
+    ) THEN
+        ALTER TABLE jobs
+        ADD CONSTRAINT jobs_assigned_node_same_tenant
+        FOREIGN KEY (assigned_node_id, tenant_id)
+        REFERENCES nodes (id, tenant_id)
+        ON DELETE SET NULL (assigned_node_id);
+
+        ALTER TABLE jobs
+        DROP CONSTRAINT IF EXISTS jobs_assigned_node_id_fkey;
+    END IF;
+END
+$$;
