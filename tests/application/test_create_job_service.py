@@ -7,10 +7,12 @@ from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
 from app.domain.entities.job import Job
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.enums.job_status import JobStatus
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from app.domain.value_objects.tenant_id import TenantId
 from app.infrastructure.repositories.in_memory_event_repository import (
     InMemoryEventRepository,
 )
@@ -27,6 +29,7 @@ def test_create_job_service_creates_and_persists_job() -> None:
     created jobs are left queued until the background
     SchedulerLoopService processes them.
     """
+    tenant_id = TenantId.new()
     job_repository = InMemoryJobRepository()
     event_repository = InMemoryEventRepository()
 
@@ -47,6 +50,7 @@ def test_create_job_service_creates_and_persists_job() -> None:
 
     job = service.execute(
         resources,
+        tenant_id,
     )
 
     assert isinstance(
@@ -62,6 +66,7 @@ def test_create_job_service_creates_and_persists_job() -> None:
     assert stored.id == job.id
     assert stored.resources == resources
     assert stored.status == JobStatus.QUEUED
+    assert stored.tenant_id == tenant_id
 
 
 def test_create_job_service_records_job_created_event() -> None:
@@ -90,6 +95,7 @@ def test_create_job_service_records_job_created_event() -> None:
 
     job = service.execute(
         resources,
+        DEFAULT_TENANT_ID,
     )
 
     events = event_repository.list_by_aggregate(
@@ -125,6 +131,7 @@ def test_create_job_service_does_not_schedule_job() -> None:
             memory_mib=512,
             vram_mib=0,
         ),
+        DEFAULT_TENANT_ID,
     )
 
     stored = job_repository.get_by_id(
@@ -173,6 +180,7 @@ def test_create_job_service_persists_command() -> None:
             memory_mib=512,
             vram_mib=0,
         ),
+        DEFAULT_TENANT_ID,
         command=["python", "train.py"],
     )
 
@@ -208,6 +216,7 @@ def test_create_job_service_defaults_command_to_none() -> None:
             memory_mib=512,
             vram_mib=0,
         ),
+        DEFAULT_TENANT_ID,
     )
 
     assert job.command is None

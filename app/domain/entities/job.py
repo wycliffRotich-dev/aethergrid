@@ -12,6 +12,7 @@ from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from app.domain.value_objects.tenant_id import TenantId
 
 
 def utc_now() -> datetime:
@@ -31,6 +32,14 @@ class Job:
 
     id: JobId
     resources: ResourceRequirements
+
+    tenant_id: TenantId
+    """
+    The tenant this job belongs to (ADR 0064). Required and fixed
+    at creation: a job never moves between tenants, and there is
+    no unscoped job. No method on this class changes it, so a
+    retry, a reclaim or an unschedule keeps the job in its tenant.
+    """
 
     priority: int = 0
 

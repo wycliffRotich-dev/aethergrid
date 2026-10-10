@@ -6,7 +6,11 @@ from datetime import datetime
 from uuid import UUID
 
 from app.domain.entities.job import Job
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.enums.job_status import JobStatus
+from app.domain.exceptions.job_tenant_conflict_error import (
+    JobTenantConflictError,
+)
 from app.domain.repositories.job_repository import (
     JobRepository,
 )
@@ -15,6 +19,7 @@ from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from app.domain.value_objects.tenant_id import TenantId
 
 _CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS jobs (
@@ -33,7 +38,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     completed_at TEXT,
     command TEXT,
     exit_code INTEGER,
-    cancellation_requested_at TEXT
+    cancellation_requested_at TEXT,
+    tenant_id TEXT NOT NULL
 );
 """
 
@@ -49,7 +55,39 @@ class SqliteJobRepository(JobRepository):
     ) -> None:
         self._connection = connection
         self._connection.execute(_CREATE_TABLE_SQL)
+        self._upgrade_tenant_column()
         self._connection.commit()
+
+    def _upgrade_tenant_column(self) -> None:
+        """
+        Bring a jobs table that predates tenancy up to date
+        (ADR 0064).
+
+        SQLite only accepts NOT NULL on an added column that has a
+        default, and a default would let an insert that forgets the
+        tenant land in the default tenant. So an upgraded file keeps
+        a nullable column, while a fresh one is NOT NULL. The
+        repository always writes the tenant, and ADR 0064 point 7
+        makes no database-constraint claim for SQLite. The backfill
+        runs on every start and is idempotent, so a crash between
+        the two statements is repaired by the next start.
+        """
+        columns = {
+            row["name"]
+            for row in self._connection.execute(
+                "PRAGMA table_info(jobs)",
+            )
+        }
+
+        if "tenant_id" not in columns:
+            self._connection.execute(
+                "ALTER TABLE jobs ADD COLUMN tenant_id TEXT",
+            )
+
+        self._connection.execute(
+            "UPDATE jobs SET tenant_id = ? WHERE tenant_id IS NULL",
+            (str(DEFAULT_TENANT_ID),),
+        )
 
     def save(
         self,
@@ -61,7 +99,7 @@ class SqliteJobRepository(JobRepository):
             else None
         )
 
-        self._connection.execute(
+        cursor = self._connection.execute(
             """
             INSERT INTO jobs (
                 id,
@@ -79,8 +117,9 @@ class SqliteJobRepository(JobRepository):
                 completed_at,
                 command,
                 exit_code,
-                cancellation_requested_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                cancellation_requested_at,
+                tenant_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 cpu_cores = excluded.cpu_cores,
                 memory_mib = excluded.memory_mib,
@@ -97,6 +136,7 @@ class SqliteJobRepository(JobRepository):
                 command = excluded.command,
                 exit_code = excluded.exit_code,
                 cancellation_requested_at = excluded.cancellation_requested_at
+            WHERE jobs.tenant_id = excluded.tenant_id
             """,
             (
                 str(job.id),
@@ -119,8 +159,15 @@ class SqliteJobRepository(JobRepository):
                     if job.cancellation_requested_at is not None
                     else None
                 ),
+                str(job.tenant_id),
             ),
         )
+
+        if cursor.rowcount == 0:
+            raise JobTenantConflictError(
+                f"job {job.id} belongs to another tenant"
+            )
+
         self._connection.commit()
 
     def get_by_id(
@@ -194,6 +241,7 @@ class SqliteJobRepository(JobRepository):
 
         return Job(
             id=JobId(value=UUID(row["id"])),
+            tenant_id=TenantId(row["tenant_id"]),
             resources=ResourceRequirements(
                 cpu_cores=row["cpu_cores"],
                 memory_mib=row["memory_mib"],

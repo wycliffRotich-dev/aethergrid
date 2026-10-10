@@ -11,6 +11,7 @@ from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class CreateJobService:
@@ -43,11 +44,18 @@ class CreateJobService:
     def execute(
         self,
         resources: ResourceRequirements,
+        tenant_id: TenantId,
         command: list[str] | None = None,
     ) -> Job:
+        """
+        Create a QUEUED job that belongs to tenant_id for its whole
+        life (ADR 0064). Callers take the tenant from the
+        authenticated key, never from request input.
+        """
         job = Job(
             id=JobId.new(),
             resources=resources,
+            tenant_id=tenant_id,
             command=command,
         )
 
