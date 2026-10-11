@@ -27,7 +27,7 @@ AetherGrid takes workloads, matches them against available compute nodes based o
 </p>
 <p align="center"><sub>Click the diagram to open it full-size.</sub></p>
 
-**Try it live**: the full console is deployed and reachable at [aethergrid-dashboard.onrender.com](https://aethergrid-dashboard.onrender.com) with real Postgres, real auth, and real API-key-gated endpoints.
+**Try it live**: the full console is deployed and reachable at <a href="https://aethergrid-dashboard.onrender.com"><img src="https://img.shields.io/badge/Live%20Demo-aethergrid--dashboard.onrender.com-brightgreen?logo=render&logoColor=white" alt="Live Demo" align="absmiddle"></a> with real Postgres, real auth, and real API-key-gated endpoints.
 
 ---
 
