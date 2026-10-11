@@ -4,7 +4,7 @@ import copy
 
 import pytest
 
-from app.domain.entities.node import Node
+from app.domain.entities.node import HEARTBEAT_TIMEOUT, Node
 from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.exceptions.node_tenant_conflict_error import (
     NodeTenantConflictError,
@@ -195,6 +195,28 @@ class NodeRepositoryContract:
 
         assert ready.id in available
         assert draining.id not in available
+
+    def test_list_available_across_tenants_skips_stale_nodes(
+        self,
+        repository,
+    ) -> None:
+        """
+        "Available" means alive and not draining, on every backend.
+        A node whose heartbeat is older than the liveness timeout
+        must not be offered to the scheduler.
+        """
+        healthy = self._make_node()
+        stale = self._make_node()
+        stale.last_seen_at = stale.last_seen_at - HEARTBEAT_TIMEOUT * 2
+        repository.save(healthy)
+        repository.save(stale)
+
+        available = {
+            node.id for node in repository.list_available_across_tenants()
+        }
+
+        assert healthy.id in available
+        assert stale.id not in available
 
     def test_get_by_id_in_another_tenant_returns_none(
         self,

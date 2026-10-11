@@ -126,7 +126,11 @@ class PostgresNodeRepository(NodeRepository):
             rows = conn.execute(
                 "SELECT * FROM nodes WHERE draining = false"
             ).fetchall()
-        return [self._to_entity(row) for row in rows]
+        return [
+            node
+            for node in (self._to_entity(row) for row in rows)
+            if node.is_alive()
+        ]
 
     @staticmethod
     def _to_entity(row: dict) -> Node:
