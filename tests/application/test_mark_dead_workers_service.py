@@ -3,7 +3,6 @@ from datetime import timedelta
 from app.application.services.mark_dead_workers_service import (
     MarkDeadWorkersService,
 )
-from app.domain.entities.worker import Worker
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
@@ -13,6 +12,7 @@ from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
 from tests.support.nodes import make_node
+from tests.support.workers import make_worker
 
 
 def test_execute_marks_expired_workers_offline() -> None:
@@ -25,7 +25,7 @@ def test_execute_marks_expired_workers_offline() -> None:
         ),
     )
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )

@@ -16,6 +16,7 @@ from app.domain.value_objects.resource_requirements import (
 from app.domain.value_objects.worker_id import WorkerId
 from tests.support.jobs import make_job
 from tests.support.nodes import make_node
+from tests.support.workers import make_worker
 
 
 def create_worker() -> Worker:
@@ -28,7 +29,7 @@ def create_worker() -> Worker:
         ),
     )
 
-    return Worker(
+    return make_worker(
         id=WorkerId.new(),
         node=node,
     )

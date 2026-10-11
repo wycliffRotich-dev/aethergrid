@@ -47,6 +47,7 @@ from app.infrastructure.repositories.in_memory_worker_repository import (
 )
 from tests.support.jobs import make_job
 from tests.support.nodes import make_node
+from tests.support.workers import make_worker
 
 
 def _make_running_worker_and_job() -> tuple[Worker, Job, Node]:
@@ -66,7 +67,7 @@ def _make_running_worker_and_job() -> tuple[Worker, Job, Node]:
         ),
     )
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )
@@ -300,7 +301,7 @@ def test_complete_raises_worker_job_mismatch_when_worker_holds_no_job() -> None:
             vram_mib=0,
         ),
     )
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )

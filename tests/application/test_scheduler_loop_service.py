@@ -7,7 +7,6 @@ from app.application.services.record_job_events_service import (
 from app.application.services.scheduler_loop_service import (
     SchedulerLoopService,
 )
-from app.domain.entities.worker import Worker
 from app.domain.enums.job_status import JobStatus
 from app.domain.enums.worker_status import WorkerStatus
 from app.domain.services.scheduler import Scheduler
@@ -31,6 +30,7 @@ from app.infrastructure.repositories.in_memory_worker_repository import (
 )
 from tests.support.jobs import make_job
 from tests.support.nodes import make_node
+from tests.support.workers import make_worker
 
 
 def test_scheduler_loop_schedules_queued_jobs() -> None:
@@ -93,7 +93,7 @@ def test_scheduler_loop_assigns_idle_worker_and_starts_job() -> None:
         ),
     )
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
         status=WorkerStatus.IDLE,

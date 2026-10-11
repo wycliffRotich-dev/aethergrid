@@ -4,7 +4,6 @@ from app.application.services.acquire_lease_service import (
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
-from app.domain.entities.worker import Worker
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
@@ -19,6 +18,7 @@ from app.infrastructure.repositories.in_memory_lease_repository import (
 )
 from tests.support.jobs import make_job
 from tests.support.nodes import make_node
+from tests.support.workers import make_worker
 
 
 def test_worker_can_acquire_job_lease() -> None:
@@ -31,7 +31,7 @@ def test_worker_can_acquire_job_lease() -> None:
         ),
     )
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )
@@ -73,7 +73,7 @@ def test_acquire_lease_service_records_lease_acquired_event() -> None:
         ),
     )
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )

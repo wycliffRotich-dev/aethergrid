@@ -38,6 +38,7 @@ from app.infrastructure.repositories.in_memory_worker_repository import (
 )
 from tests.support.jobs import make_job
 from tests.support.nodes import make_node
+from tests.support.workers import make_worker
 
 
 def _make_node() -> Node:
@@ -67,7 +68,7 @@ def test_recover_expired_lease_requeues_job_with_retries_remaining() -> None:
     """
     node = _make_node()
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )
@@ -147,7 +148,7 @@ def test_recover_expired_lease_skips_a_job_whose_lease_was_renewed_mid_pass() ->
     """
     node = _make_node()
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )
@@ -221,7 +222,7 @@ def test_recover_expired_lease_fails_job_once_retries_exhausted() -> None:
     """
     node = _make_node()
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )
@@ -281,7 +282,7 @@ def test_recover_expired_lease_records_job_reclaimed_event() -> None:
     """
     node = _make_node()
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )
@@ -345,7 +346,7 @@ def test_recover_expired_lease_finalizes_cancelling_job_as_cancelled() -> None:
     """
     node = _make_node()
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )
@@ -412,7 +413,7 @@ def test_recover_expired_lease_records_job_cancelled_event_for_cancelling_job() 
     """
     node = _make_node()
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )
@@ -488,7 +489,7 @@ def test_recover_expired_lease_releases_node_resources() -> None:
     )
     node.allocate(job_resources)
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )

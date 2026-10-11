@@ -30,6 +30,7 @@ from app.infrastructure.repositories.in_memory_event_repository import (
 )
 from tests.support.jobs import make_job
 from tests.support.nodes import make_node
+from tests.support.workers import make_worker
 
 
 class InMemoryWorkerRepository(
@@ -87,7 +88,7 @@ def test_assign_worker_service_assigns_job_to_idle_worker() -> None:
         ),
     )
 
-    worker = Worker(
+    worker = make_worker(
         id="worker-1",
         node=node,
     )
@@ -148,7 +149,7 @@ def test_assign_worker_service_records_worker_assigned_event() -> None:
         ),
     )
 
-    worker = Worker(
+    worker = make_worker(
         id="worker-1",
         node=node,
     )
@@ -243,7 +244,7 @@ def test_assign_worker_service_raises_no_available_node_when_worker_vanishes() -
         ),
     )
 
-    worker = Worker(
+    worker = make_worker(
         id="worker-1",
         node=node,
     )

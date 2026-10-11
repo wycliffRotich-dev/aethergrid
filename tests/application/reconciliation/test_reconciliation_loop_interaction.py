@@ -12,7 +12,6 @@ from app.application.reconciliation.recover_offline_node_service import (
 from app.application.services.mark_dead_workers_service import (
     MarkDeadWorkersService,
 )
-from app.domain.entities.worker import Worker
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
@@ -31,6 +30,7 @@ from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
 from tests.support.nodes import make_node
+from tests.support.workers import make_worker
 
 
 def test_stale_jobless_worker_on_stale_node_stays_offline_across_cycles() -> (
@@ -57,7 +57,7 @@ def test_stale_jobless_worker_on_stale_node_stays_offline_across_cycles() -> (
     )
     node.last_seen_at = stale
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )

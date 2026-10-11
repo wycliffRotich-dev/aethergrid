@@ -4,7 +4,6 @@ import pytest
 from psycopg_pool import ConnectionPool
 
 from app.domain.entities.lease import DEFAULT_LEASE_DURATION
-from app.domain.entities.worker import Worker
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
@@ -26,6 +25,7 @@ from tests.infrastructure.repositories.contract.lease_repository_contract import
 )
 from tests.support.jobs import make_job
 from tests.support.nodes import make_node
+from tests.support.workers import make_worker
 
 
 @pytest.fixture(scope="session")
@@ -83,7 +83,7 @@ class TestPostgresLeaseRepositoryContract(LeaseRepositoryContract):
             )
             node_repository.save(node)
 
-            worker = Worker(
+            worker = make_worker(
                 id=lease.worker_id,
                 node=node,
             )
