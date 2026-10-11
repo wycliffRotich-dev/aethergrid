@@ -179,3 +179,71 @@ def test_scheduler_ignores_unrequested_dimensions_in_scoring() -> None:
     }
 
     assert scores[modest_vram.id] == scores[huge_vram.id]
+
+
+def test_scheduler_rejects_zero_capacity_dimension_before_scoring() -> None:
+    """
+    _fit_score divides by node capacity for every dimension the
+    job requests. A node with zero VRAM must be rejected by
+    can_host before scoring, so a VRAM job never reaches that
+    division. If the guard is lost, this raises ZeroDivisionError.
+    """
+    scheduler = Scheduler()
+
+    no_vram = make_node(
+        id=NodeId.new(),
+        capacity=ResourceRequirements(
+            cpu_cores=8,
+            memory_mib=16384,
+            vram_mib=0,
+        ),
+    )
+
+    job = make_job(
+        id=JobId.new(),
+        resources=ResourceRequirements(
+            cpu_cores=2,
+            memory_mib=2048,
+            vram_mib=1024,
+        ),
+    )
+
+    assert scheduler.select_node(job, [no_vram]) is None
+
+
+def test_scheduler_picks_valid_node_over_zero_capacity_node() -> None:
+    """
+    A zero-capacity node in the candidate list must not break
+    selection of a node that can host the job. The scorer only
+    ever sees nodes that passed can_host.
+    """
+    scheduler = Scheduler()
+
+    no_vram = make_node(
+        id=NodeId.new(),
+        capacity=ResourceRequirements(
+            cpu_cores=8,
+            memory_mib=16384,
+            vram_mib=0,
+        ),
+    )
+
+    with_vram = make_node(
+        id=NodeId.new(),
+        capacity=ResourceRequirements(
+            cpu_cores=8,
+            memory_mib=16384,
+            vram_mib=8192,
+        ),
+    )
+
+    job = make_job(
+        id=JobId.new(),
+        resources=ResourceRequirements(
+            cpu_cores=2,
+            memory_mib=2048,
+            vram_mib=1024,
+        ),
+    )
+
+    assert scheduler.select_node(job, [no_vram, with_vram]) == with_vram
