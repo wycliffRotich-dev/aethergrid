@@ -242,3 +242,103 @@ def test_a_job_cannot_name_a_tenant_that_does_not_exist(scratch):
             "VALUES (%s, 1, 512, 'QUEUED', now(), %s)",
             (str(uuid.uuid4()), str(uuid.uuid4())),
         )
+
+
+def _insert_tenant(conn, name):
+    tenant_id = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO tenants (id, name, created_at) VALUES (%s, %s, now())",
+        (tenant_id, name),
+    )
+    return tenant_id
+
+
+def _insert_node(conn, tenant_id):
+    node_id = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO nodes ("
+        "id, name, capacity_cpu_cores, capacity_memory_mib, "
+        "capacity_vram_mib, available_cpu_cores, available_memory_mib, "
+        "available_vram_mib, last_seen_at, tenant_id"
+        ") VALUES (%s, 'n', 8, 16384, 0, 8, 16384, 0, now(), %s)",
+        (node_id, tenant_id),
+    )
+    return node_id
+
+
+def _insert_job(conn, tenant_id, node_id=None):
+    job_id = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO jobs ("
+        "id, cpu_cores, memory_mib, status, submitted_at, "
+        "tenant_id, assigned_node_id"
+        ") VALUES (%s, 1, 512, 'SCHEDULED', now(), %s, %s)",
+        (job_id, tenant_id, node_id),
+    )
+    return job_id
+
+
+def test_a_job_cannot_be_assigned_to_another_tenants_node(scratch):
+    scratch.execute(CURRENT_SCHEMA)
+    other = _insert_tenant(scratch, "other")
+    node_id = _insert_node(scratch, str(DEFAULT_TENANT_ID))
+
+    with pytest.raises(psycopg.errors.ForeignKeyViolation):
+        _insert_job(scratch, other, node_id)
+
+
+def test_a_job_can_be_assigned_to_a_node_in_its_own_tenant(scratch):
+    scratch.execute(CURRENT_SCHEMA)
+    node_id = _insert_node(scratch, str(DEFAULT_TENANT_ID))
+
+    job_id = _insert_job(scratch, str(DEFAULT_TENANT_ID), node_id)
+
+    rows = scratch.execute(
+        "SELECT id::text, assigned_node_id::text FROM jobs"
+    ).fetchall()
+    assert rows == [(job_id, node_id)]
+
+
+def test_deleting_a_node_clears_only_the_link_on_its_jobs(scratch):
+    scratch.execute(CURRENT_SCHEMA)
+    other = _insert_tenant(scratch, "other")
+    node_id = _insert_node(scratch, other)
+    job_id = _insert_job(scratch, other, node_id)
+
+    scratch.execute("DELETE FROM nodes WHERE id = %s", (node_id,))
+
+    rows = scratch.execute(
+        "SELECT id::text, assigned_node_id::text, tenant_id::text FROM jobs"
+    ).fetchall()
+    assert rows == [(job_id, None, other)]
+
+
+def test_upgrading_keeps_an_existing_assignment_and_drops_the_old_key(
+    scratch,
+):
+    scratch.execute(PRE_TENANCY_SCHEMA)
+    node_id = str(uuid.uuid4())
+    job_id = str(uuid.uuid4())
+    scratch.execute(_NODE_WITHOUT_TENANT, (node_id,))
+    scratch.execute(
+        "INSERT INTO jobs (id, cpu_cores, memory_mib, status, "
+        "submitted_at, assigned_node_id) "
+        "VALUES (%s, 1, 512, 'SCHEDULED', now(), %s)",
+        (job_id, node_id),
+    )
+
+    scratch.execute(CURRENT_SCHEMA)
+
+    rows = scratch.execute(
+        "SELECT id::text, assigned_node_id::text, tenant_id::text FROM jobs"
+    ).fetchall()
+    assert rows == [(job_id, node_id, str(DEFAULT_TENANT_ID))]
+    names = {
+        row[0]
+        for row in scratch.execute(
+            "SELECT conname FROM pg_constraint "
+            "WHERE conrelid = 'jobs'::regclass"
+        ).fetchall()
+    }
+    assert "jobs_assigned_node_same_tenant" in names
+    assert "jobs_assigned_node_id_fkey" not in names
