@@ -7,7 +7,6 @@ from app.application.services.renew_lease_service import (
     RenewLeaseService,
 )
 from app.domain.entities.lease import Lease
-from app.domain.entities.worker import Worker
 from app.domain.exceptions.lease_not_found_error import (
     LeaseNotFoundError,
 )
@@ -25,6 +24,7 @@ from app.infrastructure.repositories.in_memory_lease_repository import (
 )
 from tests.support.jobs import make_job
 from tests.support.nodes import make_node
+from tests.support.workers import make_worker
 
 
 def test_execute_renews_worker_lease() -> None:
@@ -37,7 +37,7 @@ def test_execute_renews_worker_lease() -> None:
         ),
     )
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )

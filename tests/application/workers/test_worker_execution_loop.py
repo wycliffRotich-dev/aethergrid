@@ -47,6 +47,7 @@ from app.infrastructure.repositories.in_memory_worker_repository import (
 )
 from tests.support.jobs import make_job
 from tests.support.nodes import make_node
+from tests.support.workers import make_worker
 
 
 def _make_worker_and_job(
@@ -61,7 +62,7 @@ def _make_worker_and_job(
         ),
     )
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )
@@ -325,7 +326,7 @@ def test_run_once_returns_early_when_worker_has_no_running_job() -> None:
         ),
     )
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )

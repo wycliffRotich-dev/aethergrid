@@ -15,6 +15,7 @@ from app.infrastructure.repositories.in_memory_worker_repository import (
 )
 from tests.support.jobs import make_job
 from tests.support.nodes import make_node
+from tests.support.workers import make_worker
 
 
 class FakeSchedulerLoopService:
@@ -61,7 +62,7 @@ def _make_worker_with_running_job(
             vram_mib=0,
         ),
     )
-    return Worker(
+    return make_worker(
         id=WorkerId.new(),
         node=node,
         status=WorkerStatus.BUSY,

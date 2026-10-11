@@ -1,7 +1,6 @@
 from app.application.services.worker_heartbeat_service import (
     WorkerHeartbeatService,
 )
-from app.domain.entities.worker import Worker
 from app.domain.enums.worker_status import WorkerStatus
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
@@ -14,6 +13,7 @@ from app.infrastructure.repositories.in_memory_worker_repository import (
 )
 from tests.support.jobs import make_job
 from tests.support.nodes import make_node
+from tests.support.workers import make_worker
 
 
 def test_execute_refreshes_worker_heartbeat() -> None:
@@ -26,7 +26,7 @@ def test_execute_refreshes_worker_heartbeat() -> None:
         ),
     )
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )
@@ -70,7 +70,7 @@ def test_execute_recovers_offline_worker_with_no_running_job() -> None:
         ),
     )
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )
@@ -113,7 +113,7 @@ def test_execute_does_not_recover_offline_worker_with_running_job() -> None:
         ),
     )
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )

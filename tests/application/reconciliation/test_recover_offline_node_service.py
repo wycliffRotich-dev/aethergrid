@@ -12,7 +12,6 @@ from app.application.services.record_job_events_service import (
 from app.domain.entities.lease import Lease
 from app.domain.entities.node import Node
 from app.domain.entities.tenant import DEFAULT_TENANT_ID
-from app.domain.entities.worker import Worker
 from app.domain.enums.job_status import JobStatus
 from app.domain.enums.worker_status import WorkerStatus
 from app.domain.value_objects.job_id import JobId
@@ -38,6 +37,7 @@ from app.infrastructure.repositories.in_memory_worker_repository import (
 )
 from tests.support.jobs import make_job
 from tests.support.nodes import make_node
+from tests.support.workers import make_worker
 
 
 def _make_offline_node() -> Node:
@@ -60,7 +60,7 @@ def test_recover_offline_node_requeues_job_with_retries_remaining() -> None:
     """
     node = _make_offline_node()
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )
@@ -117,7 +117,7 @@ def test_recover_offline_node_fails_job_once_retries_exhausted() -> None:
     """
     node = _make_offline_node()
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )
@@ -171,7 +171,7 @@ def test_recover_offline_node_records_job_reclaimed_event() -> None:
     """
     node = _make_offline_node()
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )
@@ -243,7 +243,7 @@ def test_recover_offline_node_skips_a_job_whose_lease_is_still_valid() -> (
     """
     node = _make_offline_node()
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )
@@ -329,7 +329,7 @@ def test_recover_offline_node_deletes_lease_so_job_can_be_reacquired() -> (
     """
     node = _make_offline_node()
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )
@@ -388,7 +388,7 @@ def test_recover_offline_node_deletes_lease_so_job_can_be_reacquired() -> (
         lease_repository=lease_repository,
     )
 
-    new_worker = Worker(
+    new_worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )
@@ -418,7 +418,7 @@ def test_recover_offline_node_releases_node_resources() -> None:
     )
     node.allocate(job_resources)
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )
@@ -469,7 +469,7 @@ def test_recover_offline_node_keeps_jobless_worker_offline() -> None:
     """
     node = _make_offline_node()
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )

@@ -4,7 +4,6 @@ from app.application.services.worker_heartbeat_service import (
 from app.application.workers.worker_heartbeat_loop import (
     WorkerHeartbeatLoop,
 )
-from app.domain.entities.worker import Worker
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
@@ -14,6 +13,7 @@ from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
 from tests.support.nodes import make_node
+from tests.support.workers import make_worker
 
 
 def test_run_once_sends_heartbeat() -> None:
@@ -26,7 +26,7 @@ def test_run_once_sends_heartbeat() -> None:
         ),
     )
 
-    worker = Worker(
+    worker = make_worker(
         id=WorkerId.new(),
         node=node,
     )

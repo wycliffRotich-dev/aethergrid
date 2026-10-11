@@ -8,6 +8,7 @@ from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
 from tests.support.nodes import make_node
+from tests.support.workers import make_worker
 
 
 class InMemoryWorkerRepository:
@@ -49,7 +50,7 @@ def test_register_worker_service_registers_worker() -> None:
         ),
     )
 
-    worker = Worker(
+    worker = make_worker(
         id="worker-1",
         node=node,
     )

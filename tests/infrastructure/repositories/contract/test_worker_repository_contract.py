@@ -9,6 +9,7 @@ from app.domain.value_objects.resource_requirements import (
 )
 from app.domain.value_objects.worker_id import WorkerId
 from tests.support.nodes import make_node
+from tests.support.workers import make_worker
 
 
 class WorkerRepositoryContract:
@@ -37,7 +38,7 @@ class WorkerRepositoryContract:
             ),
         )
 
-        return Worker(
+        return make_worker(
             id=WorkerId.new(),
             node=node,
         )
