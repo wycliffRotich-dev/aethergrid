@@ -81,6 +81,7 @@ class NodeRepository(ABC):
     ) -> list[Node]:
         """
         List nodes that are eligible for scheduling, in every
-        tenant. System actors only.
+        tenant: alive (a recent heartbeat) and not draining.
+        Every backend must apply both rules. System actors only.
         """
         ...
