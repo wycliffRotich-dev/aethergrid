@@ -4,7 +4,7 @@
 
 Accepted. This ADR records how ADR 0064, points 2, 4 and 5, were
 applied to jobs. ADR 0064 stays Proposed, and nothing here changes
-that.
+that. Keeping a job on its own tenant's nodes followed in ADR 0069.
 
 ## Context
 
