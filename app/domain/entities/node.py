@@ -93,6 +93,15 @@ class Node:
         if self.available is None:
             self.available = self.capacity
 
+        if self.available.cpu_cores > self.capacity.cpu_cores:
+            raise ValueError("available cpu_cores cannot exceed capacity")
+
+        if self.available.memory_mib > self.capacity.memory_mib:
+            raise ValueError("available memory_mib cannot exceed capacity")
+
+        if self.available.vram_mib > self.capacity.vram_mib:
+            raise ValueError("available vram_mib cannot exceed capacity")
+
     def heartbeat(self) -> None:
         """
         Record that this node is alive.
