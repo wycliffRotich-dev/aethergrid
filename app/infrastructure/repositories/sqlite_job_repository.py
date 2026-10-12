@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
-from app.domain.entities.job import Job
+from app.domain.entities.job import DEFAULT_EXECUTION_TIMEOUT, Job
 from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.enums.job_status import JobStatus
 from app.domain.exceptions.job_tenant_conflict_error import (
@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     command TEXT,
     exit_code INTEGER,
     cancellation_requested_at TEXT,
+    execution_timeout_seconds REAL,
     tenant_id TEXT NOT NULL
 );
 """
@@ -56,6 +57,7 @@ class SqliteJobRepository(JobRepository):
         self._connection = connection
         self._connection.execute(_CREATE_TABLE_SQL)
         self._upgrade_tenant_column()
+        self._upgrade_execution_timeout_column()
         self._connection.commit()
 
     def _upgrade_tenant_column(self) -> None:
@@ -89,6 +91,24 @@ class SqliteJobRepository(JobRepository):
             (str(DEFAULT_TENANT_ID),),
         )
 
+    def _upgrade_execution_timeout_column(self) -> None:
+        """
+        Add the execution timeout column to a jobs table that
+        predates it. The column is nullable and NULL means the
+        domain default, so no backfill is needed.
+        """
+        columns = {
+            row["name"]
+            for row in self._connection.execute(
+                "PRAGMA table_info(jobs)",
+            )
+        }
+
+        if "execution_timeout_seconds" not in columns:
+            self._connection.execute(
+                "ALTER TABLE jobs ADD COLUMN execution_timeout_seconds REAL",
+            )
+
     def save(
         self,
         job: Job,
@@ -118,8 +138,9 @@ class SqliteJobRepository(JobRepository):
                 command,
                 exit_code,
                 cancellation_requested_at,
+                execution_timeout_seconds,
                 tenant_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 cpu_cores = excluded.cpu_cores,
                 memory_mib = excluded.memory_mib,
@@ -135,7 +156,8 @@ class SqliteJobRepository(JobRepository):
                 completed_at = excluded.completed_at,
                 command = excluded.command,
                 exit_code = excluded.exit_code,
-                cancellation_requested_at = excluded.cancellation_requested_at
+                cancellation_requested_at = excluded.cancellation_requested_at,
+                execution_timeout_seconds = excluded.execution_timeout_seconds
             WHERE jobs.tenant_id = excluded.tenant_id
             """,
             (
@@ -159,6 +181,7 @@ class SqliteJobRepository(JobRepository):
                     if job.cancellation_requested_at is not None
                     else None
                 ),
+                job.execution_timeout.total_seconds(),
                 str(job.tenant_id),
             ),
         )
@@ -290,5 +313,10 @@ class SqliteJobRepository(JobRepository):
                 datetime.fromisoformat(row["cancellation_requested_at"])
                 if row["cancellation_requested_at"] is not None
                 else None
+            ),
+            execution_timeout=(
+                timedelta(seconds=row["execution_timeout_seconds"])
+                if row["execution_timeout_seconds"] is not None
+                else DEFAULT_EXECUTION_TIMEOUT
             ),
         )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
@@ -160,7 +161,7 @@ class PostgresWorkerRepository(WorkerRepository):
     @staticmethod
     def _job_from_row(row: dict):
 
-        from app.domain.entities.job import Job
+        from app.domain.entities.job import DEFAULT_EXECUTION_TIMEOUT, Job
         from app.domain.enums.job_status import JobStatus
         from app.domain.value_objects.resource_requirements import (
             ResourceRequirements,
@@ -196,4 +197,9 @@ class PostgresWorkerRepository(WorkerRepository):
             command=command,
             exit_code=row["exit_code"],
             cancellation_requested_at=row["cancellation_requested_at"],
+            execution_timeout=(
+                timedelta(seconds=row["execution_timeout_seconds"])
+                if row["execution_timeout_seconds"] is not None
+                else DEFAULT_EXECUTION_TIMEOUT
+            ),
         )
