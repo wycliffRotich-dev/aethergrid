@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 from psycopg_pool import ConnectionPool
 
-from app.domain.entities.job import Job
+from app.domain.entities.job import DEFAULT_EXECUTION_TIMEOUT, Job
 from app.domain.entities.node import Node
 from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.enums.job_status import JobStatus
@@ -199,3 +201,49 @@ def test_round_trips_job_with_no_command(repository) -> None:
 
     assert reloaded is not None
     assert reloaded.command is None
+
+
+def test_round_trips_execution_timeout(repository) -> None:
+    """
+    execution_timeout drives the real subprocess timeout, and
+    sub-second values are valid, so it must survive save and load
+    without truncating to whole seconds.
+    """
+    job = make_job(execution_timeout=timedelta(seconds=0.5))
+
+    repository.save(job)
+    reloaded = repository.get_by_id(job.id, DEFAULT_TENANT_ID)
+
+    assert reloaded is not None
+    assert reloaded.execution_timeout == timedelta(seconds=0.5)
+
+
+def test_default_execution_timeout_round_trips(repository) -> None:
+    job = make_job()
+
+    repository.save(job)
+    reloaded = repository.get_by_id(job.id, DEFAULT_TENANT_ID)
+
+    assert reloaded is not None
+    assert reloaded.execution_timeout == DEFAULT_EXECUTION_TIMEOUT
+
+
+def test_null_execution_timeout_loads_the_default(pool, repository) -> None:
+    """
+    A row written before the column existed has NULL there. It must
+    load with the domain default, the timeout it was already running
+    with, and not fail.
+    """
+    job = make_job(execution_timeout=timedelta(seconds=5))
+    repository.save(job)
+
+    with pool.connection() as conn:
+        conn.execute(
+            "UPDATE jobs SET execution_timeout_seconds = NULL WHERE id = %s",
+            (str(job.id),),
+        )
+
+    reloaded = repository.get_by_id(job.id, DEFAULT_TENANT_ID)
+
+    assert reloaded is not None
+    assert reloaded.execution_timeout == DEFAULT_EXECUTION_TIMEOUT

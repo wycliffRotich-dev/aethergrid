@@ -139,7 +139,8 @@ bypass ADR 0064 rejects.
   worker routes, and remove the interim entries from the allowlist.
 - No job repository persists `execution_timeout`. Neither SQL backend
   has a column for it, so a job loaded from storage always gets the
-  one hour default.
+  one hour default. ADR 0070 adds
+  the column and persists it.
 - Apply `schema.sql` to an existing database as part of deployment.
   Today it reaches a database only through the compose init mount,
   which runs when the data volume is first created.

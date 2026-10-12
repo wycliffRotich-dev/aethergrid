@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import os
 import tempfile
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from app.domain.entities.job import Job
+from app.domain.entities.job import DEFAULT_EXECUTION_TIMEOUT, Job
 from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.enums.job_status import JobStatus
 from app.domain.value_objects.job_id import JobId
@@ -263,3 +264,88 @@ def test_round_trips_started_at_and_completed_at(db_path) -> None:
     assert reloaded_after_completion is not None
     assert reloaded_after_completion.completed_at is not None
     assert reloaded_after_completion.completed_at == job.completed_at
+
+
+def test_round_trips_execution_timeout(db_path) -> None:
+    job = make_job(execution_timeout=timedelta(seconds=0.5))
+
+    write_connection = create_connection(db_path)
+    SqliteJobRepository(write_connection).save(job)
+    write_connection.close()
+
+    read_connection = create_connection(db_path)
+    read_repository = SqliteJobRepository(read_connection)
+    reloaded = read_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
+    read_connection.close()
+
+    assert reloaded is not None
+    assert reloaded.execution_timeout == timedelta(seconds=0.5)
+
+
+def test_upgrades_a_jobs_table_that_predates_execution_timeout(db_path) -> None:
+    """
+    A SQLite file created before the column existed must be upgraded in
+    place. Its old row loads with the default, and a new job saved to
+    the upgraded table keeps its own timeout.
+    """
+    connection = create_connection(db_path)
+    connection.execute(
+        """
+        CREATE TABLE jobs (
+            id TEXT PRIMARY KEY,
+            cpu_cores INTEGER NOT NULL,
+            memory_mib INTEGER NOT NULL,
+            vram_mib INTEGER NOT NULL,
+            priority INTEGER NOT NULL,
+            constraints TEXT NOT NULL,
+            max_retries INTEGER NOT NULL,
+            retry_count INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            assigned_node_id TEXT,
+            submitted_at TEXT NOT NULL,
+            started_at TEXT,
+            completed_at TEXT,
+            command TEXT,
+            exit_code INTEGER,
+            cancellation_requested_at TEXT,
+            tenant_id TEXT NOT NULL
+        )
+        """
+    )
+    old_job_id = JobId.new()
+    connection.execute(
+        """
+        INSERT INTO jobs (
+            id, cpu_cores, memory_mib, vram_mib, priority, constraints,
+            max_retries, retry_count, status, submitted_at, tenant_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            str(old_job_id),
+            1,
+            512,
+            0,
+            0,
+            "{}",
+            0,
+            0,
+            JobStatus.QUEUED.value,
+            datetime.now(UTC).isoformat(),
+            str(DEFAULT_TENANT_ID),
+        ),
+    )
+    connection.commit()
+
+    repository = SqliteJobRepository(connection)
+
+    old = repository.get_by_id(old_job_id, DEFAULT_TENANT_ID)
+    assert old is not None
+    assert old.execution_timeout == DEFAULT_EXECUTION_TIMEOUT
+
+    new_job = make_job(execution_timeout=timedelta(seconds=30))
+    repository.save(new_job)
+    reloaded = repository.get_by_id(new_job.id, DEFAULT_TENANT_ID)
+    connection.close()
+
+    assert reloaded is not None
+    assert reloaded.execution_timeout == timedelta(seconds=30)

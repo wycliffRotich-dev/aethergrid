@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-from app.domain.entities.job import Job
+from app.domain.entities.job import DEFAULT_EXECUTION_TIMEOUT, Job
 from app.domain.enums.job_status import JobStatus
 from app.domain.exceptions.job_tenant_conflict_error import (
     JobTenantConflictError,
@@ -53,7 +54,7 @@ class PostgresJobRepository(JobRepository):
                     retry_count, status, assigned_node_id,
                     submitted_at, started_at, completed_at,
                     command, exit_code, cancellation_requested_at,
-                    tenant_id
+                    execution_timeout_seconds, tenant_id
                 ) VALUES (
                     %(id)s, %(cpu_cores)s, %(memory_mib)s,
                     %(vram_mib)s, %(priority)s, %(constraints)s,
@@ -62,6 +63,7 @@ class PostgresJobRepository(JobRepository):
                     %(started_at)s, %(completed_at)s,
                     %(command)s, %(exit_code)s,
                     %(cancellation_requested_at)s,
+                    %(execution_timeout_seconds)s,
                     %(tenant_id)s
                 )
                 ON CONFLICT (id) DO UPDATE SET
@@ -79,7 +81,8 @@ class PostgresJobRepository(JobRepository):
                     completed_at = EXCLUDED.completed_at,
                     command = EXCLUDED.command,
                     exit_code = EXCLUDED.exit_code,
-                    cancellation_requested_at = EXCLUDED.cancellation_requested_at
+                    cancellation_requested_at = EXCLUDED.cancellation_requested_at,
+                    execution_timeout_seconds = EXCLUDED.execution_timeout_seconds
                 WHERE jobs.tenant_id = EXCLUDED.tenant_id
                 """,
                 {
@@ -99,6 +102,9 @@ class PostgresJobRepository(JobRepository):
                     "command": command,
                     "exit_code": job.exit_code,
                     "cancellation_requested_at": job.cancellation_requested_at,
+                    "execution_timeout_seconds": (
+                        job.execution_timeout.total_seconds()
+                    ),
                     "tenant_id": str(job.tenant_id),
                 },
             )
@@ -198,4 +204,9 @@ class PostgresJobRepository(JobRepository):
             command=command,
             exit_code=row["exit_code"],
             cancellation_requested_at=row["cancellation_requested_at"],
+            execution_timeout=(
+                timedelta(seconds=row["execution_timeout_seconds"])
+                if row["execution_timeout_seconds"] is not None
+                else DEFAULT_EXECUTION_TIMEOUT
+            ),
         )

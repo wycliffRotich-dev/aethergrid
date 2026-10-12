@@ -48,7 +48,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     completed_at       TIMESTAMPTZ,
     command            JSONB,
     exit_code          INTEGER,
-    cancellation_requested_at TIMESTAMPTZ
+    cancellation_requested_at TIMESTAMPTZ,
+    execution_timeout_seconds DOUBLE PRECISION
 );
 
 CREATE TABLE IF NOT EXISTS workers (
@@ -73,6 +74,14 @@ ADD COLUMN IF NOT EXISTS managed_by TEXT NOT NULL DEFAULT 'DASHBOARD';
 -- whose jobs table predates this column.
 ALTER TABLE jobs
 ADD COLUMN IF NOT EXISTS cancellation_requested_at TIMESTAMPTZ;
+
+-- Per-job execution timeout in seconds. NULL means the job uses the
+-- domain default (DEFAULT_EXECUTION_TIMEOUT), so the default is not
+-- copied into SQL and a row that predates this column keeps the
+-- timeout it was already running with. DOUBLE PRECISION because the
+-- domain value is a timedelta and sub-second timeouts are valid.
+ALTER TABLE jobs
+ADD COLUMN IF NOT EXISTS execution_timeout_seconds DOUBLE PRECISION;
 
 CREATE TABLE IF NOT EXISTS leases (
     id                UUID PRIMARY KEY,
