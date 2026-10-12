@@ -111,7 +111,8 @@ procedural code.
   there.
 - No job repository persists `execution_timeout`. Neither SQL backend
   has a column for it, so a job loaded from storage always gets the
-  one hour default.
+  one hour default. ADR 0070 adds
+  the column and persists it.
 - The worker repository builds a node without its name, so a node
   loaded through a worker gets a random fallback name.
 - `list_available_across_tenants` means different things per backend.
