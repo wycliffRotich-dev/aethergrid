@@ -19,6 +19,10 @@ import psycopg
 
 NO_TRANSACTION_MARKER = "-- migration: no-transaction"
 
+# The directory that holds the application's migration files, next to this
+# module so it ships with the code in the image.
+MIGRATIONS_DIR = Path(__file__).resolve().parent / "versions"
+
 # The advisory lock key held while migrations run. Advisory locks are per
 # database, so every runner against one database must use the same key.
 # The default is the ASCII bytes of "nm_migra".

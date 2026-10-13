@@ -54,6 +54,9 @@ warn_unused_configs = true
 include = ["app*"]
 exclude = ["frontend*"]
 
+[tool.setuptools.package-data]
+"app.infrastructure.migrations" = ["versions/*.sql"]
+
 [tool.pytest.ini_options]
 markers = [
     "slow: exercises real timing (e.g. connection pool timeouts); excluded from the default fast run",
