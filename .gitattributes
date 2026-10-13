@@ -1,0 +1,5 @@
+# Migration files are hashed byte for byte (ADR 0071). A checkout that
+# rewrites line endings would change a file's checksum and stop every
+# migration run on that machine, so these files are always LF.
+app/infrastructure/migrations/versions/*.sql text eol=lf
+app/infrastructure/repositories/schema.sql text eol=lf
