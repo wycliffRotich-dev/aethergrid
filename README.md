@@ -171,9 +171,9 @@ These commands assume the setup in [Running It](#running-it) is done first: the 
 ```bash
 docker compose up -d postgres
 docker compose exec -T postgres psql -U neuromesh -d neuromesh -c 'CREATE DATABASE neuromesh_test'
-docker compose exec -T postgres psql -U neuromesh -d neuromesh_test < app/infrastructure/repositories/schema.sql
 export NEUROMESH_TEST_DATABASE_URL="postgresql://neuromesh@127.0.0.1:5433/neuromesh_test"
 export NEUROMESH_DATABASE_PASSWORD_FILE=./secrets/postgres_password.local
+NEUROMESH_DATABASE_URL="$NEUROMESH_TEST_DATABASE_URL" python -m app.infrastructure.migrations
 pytest
 ```
 
@@ -188,12 +188,10 @@ mkdir -p secrets
 openssl rand -hex 24 | tr -d '\n' > secrets/postgres_password
 cp secrets/postgres_password secrets/postgres_password.local
 chmod 600 secrets/postgres_password secrets/postgres_password.local
-# A restrictive umask (077) checks files out unreadable to the database user in the container.
-chmod a+r app/infrastructure/repositories/schema.sql
 sudo chown 10001:10001 secrets/postgres_password && docker compose up -d --build --wait --wait-timeout 180
 ```
 
-This starts the API and a Postgres instance, both reachable from the host only (127.0.0.1). The last line asks for your sudo password once, because the container user must own the secret file, and then waits until both services are healthy. The `.local` copy is for tools you run on the host, which cannot read the original. Follow the logs with `docker compose logs -f`. `docker compose up` fails if `secrets/postgres_password` is missing, and the application reads the same file through `NEUROMESH_DATABASE_PASSWORD_FILE`, so the password is in neither the connection URL nor the container environment. A Postgres volume created by an earlier version keeps its old password: reset it with `docker compose down -v` ([ADR 0058](docs/adr/0058-harden-container-defaults-and-keep-credentials-out-of-the-repo.md)). Issue yourself a key before calling anything, every route requires one. Grant both scopes so nothing is gated during local development (ADR 0054, ADR 0055):
+This starts Postgres, applies the database migrations in a one-shot `migrate` container, and then starts the API. Postgres and the API are reachable from the host only (127.0.0.1). The last line asks for your sudo password once, because the container user must own the secret file, and then waits until the migrations have finished and both services are healthy. `migrate` exits when it is done, and `docker compose ps -a` shows it as exited with code 0. If a migration fails, the API does not start, `docker compose up` stops with `service "migrate" didn't complete successfully`, and `docker compose logs migrate` shows the reason ([ADR 0071](docs/adr/0071-apply-schema-changes-with-versioned-migrations.md)). The `.local` copy is for tools you run on the host, which cannot read the original. Follow the logs with `docker compose logs -f`. `docker compose up` fails if `secrets/postgres_password` is missing, and the application reads the same file through `NEUROMESH_DATABASE_PASSWORD_FILE`, so the password is in neither the connection URL nor the container environment. A Postgres volume created by an earlier version keeps its old password: reset it with `docker compose down -v` ([ADR 0058](docs/adr/0058-harden-container-defaults-and-keep-credentials-out-of-the-repo.md)). Issue yourself a key before calling anything, every route requires one. Grant both scopes so nothing is gated during local development (ADR 0054, ADR 0055):
 
 ```bash
 python -m venv .venv && . .venv/bin/activate

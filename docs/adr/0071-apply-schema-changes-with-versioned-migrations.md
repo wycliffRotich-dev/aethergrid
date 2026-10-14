@@ -154,3 +154,41 @@ Implementation, in order, each as its own pull request:
 - The compose step, CI and the README on the runner, and the startup
   check, tested against a database that is behind.
 - A separate ADR for the migration role and the runtime role.
+
+## Progress
+
+2026-10-14. The Status line above was written before any code. Since
+then the runner (#343), the baseline migration (#344) and the command
+(#345) have merged. The startup check in Decision 6 has not.
+
+The compose and CI step is in progress on its own branch:
+
+- Compose has a one-shot `migrate` service, and `neuromesh` waits for
+  it with `service_completed_successfully`. The Postgres init mount is
+  removed, which answers the second open question: the runner is the
+  only route to a schema in compose.
+- `migrate` and `neuromesh` run one image, tagged `neuromesh-app:local`,
+  and `migrate` never pulls it. `docker compose up --build` builds it
+  first. Running `migrate` alone on a machine that has not built the
+  image fails.
+- Both CI jobs, and the README test setup, apply the schema with the
+  runner instead of `psql -f`.
+- Because the startup check is not in yet, nothing in the application
+  looks at the schema. The wait for `migrate` exists only in compose.
+
+Evidence from running it:
+
+- A volume created by the old init script held seven tables with rows
+  and was behind the code: `jobs` had neither `execution_timeout_seconds`
+  nor `tenant_id`. The baseline brought it up to date in place. Row
+  counts were unchanged, and a dump taken before and after differed only
+  in the new columns, keys, index and `schema_migrations`. A second run
+  printed "nothing to apply".
+- With a database name that does not exist, `migrate` exits 1 and the
+  application container is created but never started.
+- The runner connects with a password inside the URL, which is how CI
+  passes it, and refuses a wrong password.
+
+Not shown yet: that the hardening workflow goes red when each property
+of `migrate` is broken on a throwaway branch, as ADR 0061 did for the
+application container.
