@@ -23,7 +23,6 @@ services:
       - "127.0.0.1:5433:5432"
     volumes:
       - neuromesh-postgres-data:/var/lib/postgresql/data
-      - ./app/infrastructure/repositories/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U neuromesh -d neuromesh"]
       interval: 2s
@@ -31,8 +30,33 @@ services:
       retries: 10
       start_period: 30s
 
+  # Applies the database migrations once and exits (ADR 0071). The app
+  # waits for it, so it never starts against a schema that is behind. The
+  # schema is no longer mounted into Postgres as an init script, so this
+  # is the only route to a schema. It runs the app's own image, so it always
+  # applies the migrations that ship with the code that is about to start.
+  migrate:
+    image: neuromesh-app:local
+    pull_policy: never
+    command: ["python", "-m", "app.infrastructure.migrations"]
+    restart: "no"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      NEUROMESH_DATABASE_URL: postgresql://neuromesh@postgres:5432/neuromesh
+      NEUROMESH_DATABASE_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   neuromesh:
     build: .
+    image: neuromesh-app:local
     read_only: true
     cap_drop:
       - ALL
@@ -49,6 +73,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test:
         [

@@ -75,6 +75,25 @@ jobs:
           check_caps "CapAdd" .HostConfig.CapAdd 'CHOWN,DAC_READ_SEARCH,SETGID,SETUID'
           check "SecurityOpt" '{{json .HostConfig.SecurityOpt}}' '["no-new-privileges:true"]'
 
+      - name: Migrations ran once, as a hardened one-shot container
+        run: |
+          # The migrate service applies the schema and exits before the app
+          # starts (ADR 0071). ps -q omits exited containers, so -a is needed.
+          mid=$(docker compose ps -aq migrate)
+          [ -n "$mid" ] || { echo "::error::no migrate container exists"; exit 1; }
+          exit_code=$(docker inspect -f '{{.State.ExitCode}}' "$mid")
+          [ "$exit_code" = "0" ] || { echo "::error::migrate exited with $exit_code"; exit 1; }
+          user=$(docker inspect -f '{{.Config.User}}' "$mid")
+          [ "$user" = "10001" ] || { echo "::error::migrate runs as user $user, expected 10001"; exit 1; }
+          ro=$(docker inspect -f '{{.HostConfig.ReadonlyRootfs}}' "$mid")
+          drop=$(docker inspect -f '{{json .HostConfig.CapDrop}}' "$mid")
+          opt=$(docker inspect -f '{{json .HostConfig.SecurityOpt}}' "$mid")
+          [ "$ro" = "true" ] || { echo "::error::migrate ReadonlyRootfs is $ro"; exit 1; }
+          [ "$drop" = '["ALL"]' ] || { echo "::error::migrate CapDrop is $drop"; exit 1; }
+          echo "$opt" | grep -q 'no-new-privileges' || { echo "::error::migrate SecurityOpt is $opt"; exit 1; }
+          version=$(docker compose exec -T postgres psql -U neuromesh -d neuromesh -tAc "SELECT max(version) FROM schema_migrations")
+          [ "$version" = "1" ] || { echo "::error::schema_migrations holds version $version, expected 1"; exit 1; }
+
       - name: App runs as uid 10001 with no effective capabilities
         run: |
           uid=$(docker compose exec -T neuromesh id -u)
