@@ -107,6 +107,72 @@ def load_migrations(directory: Path) -> list[Migration]:
     return [found[version] for version in sorted(found)]
 
 
+@dataclass(frozen=True, slots=True)
+class MigrationPlan:
+    """
+    What a database needs, given the history it has recorded.
+
+    pending is the migrations to apply, in order. ahead is the recorded
+    versions above the highest version this migration set carries. A
+    database holds those after a newer release migrated it and the code
+    was then rolled back (ADR 0071, Decisions 6 and 7).
+    """
+
+    pending: tuple[Migration, ...]
+    ahead: tuple[int, ...]
+
+
+def plan_migrations(
+    recorded: Sequence[tuple[Any, ...]],
+    migrations: Sequence[Migration],
+) -> MigrationPlan:
+    """
+    Compare the recorded history (version, name, checksum rows in version
+    order) with the migration set, touching no database.
+
+    Raises MigrationError when the recorded versions are not 1..N, when
+    the set is empty but the history is not, when a recorded version
+    below the set's highest has no file, or when a recorded checksum
+    differs from its file. A recorded version above the set's highest is
+    not an error: it is reported in ahead and nothing is pending.
+    """
+    for expected, row in enumerate(recorded, start=1):
+        if row[0] != expected:
+            raise MigrationError(
+                f"the applied history has a hole: migration {expected:04d} is not "
+                f"recorded but {row[0]:04d} is"
+            )
+
+    if recorded and not migrations:
+        raise MigrationError(
+            f"this build carries no migrations, but the database records "
+            f"{len(recorded)} as applied"
+        )
+
+    highest = max((m.version for m in migrations), default=0)
+    by_version = {m.version: m for m in migrations}
+    ahead: list[int] = []
+
+    for version, name, checksum in recorded:
+        known = by_version.get(version)
+        if known is None:
+            if version > highest:
+                ahead.append(version)
+                continue
+            raise MigrationError(
+                f"migration {version:04d} ({name}) is recorded as applied but has "
+                "no file in the migration set"
+            )
+        if known.checksum != checksum:
+            raise MigrationError(
+                f"checksum mismatch for {known.name}: the file changed after "
+                "it was applied"
+            )
+
+    pending = tuple(m for m in migrations if m.version > len(recorded))
+    return MigrationPlan(pending=pending, ahead=tuple(ahead))
+
+
 def apply_migrations(
     conninfo: str,
     migrations: Sequence[Migration],
@@ -213,33 +279,13 @@ def _apply(conn: psycopg.Connection, migrations: Sequence[Migration]) -> list[in
         "applied_at timestamptz NOT NULL DEFAULT now())"
     )
 
-    by_version = {m.version: m for m in migrations}
     recorded = conn.execute(
         "SELECT version, name, checksum FROM schema_migrations ORDER BY version"
     ).fetchall()
-
-    for expected, (version, name, checksum) in enumerate(recorded, start=1):
-        if version != expected:
-            raise MigrationError(
-                f"the applied history has a hole: migration {expected:04d} is not "
-                f"recorded but {version:04d} is"
-            )
-        known = by_version.get(version)
-        if known is None:
-            raise MigrationError(
-                f"migration {version:04d} ({name}) is recorded as applied but has "
-                "no file in the migration set"
-            )
-        if known.checksum != checksum:
-            raise MigrationError(
-                f"checksum mismatch for {known.name}: the file changed after "
-                "it was applied"
-            )
+    plan = plan_migrations(recorded, migrations)
 
     applied: list[int] = []
-    for migration in migrations:
-        if migration.version <= len(recorded):
-            continue
+    for migration in plan.pending:
         try:
             _run_one(conn, migration)
         except psycopg.Error as error:

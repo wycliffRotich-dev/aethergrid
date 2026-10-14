@@ -171,7 +171,35 @@ def test_an_edited_applied_migration_is_refused(db: Db, tmp_path: Path) -> None:
     assert "b" not in _tables(db)
 
 
-def test_a_recorded_version_with_no_file_is_refused(db: Db, tmp_path: Path) -> None:
+def test_a_database_ahead_of_the_image_is_accepted_and_left_alone(
+    db: Db,
+    tmp_path: Path,
+) -> None:
+    """
+    A rollback of the code leaves the database at a version the older image
+    has no file for. The runner must not block that rollback (ADR 0071,
+    Decisions 6 and 7), and it must change nothing.
+    """
+    both = _load(
+        tmp_path,
+        {
+            "0001_a.sql": "CREATE TABLE a (n integer);\n",
+            "0002_b.sql": "CREATE TABLE b (n integer);\n",
+        },
+    )
+    db.run(both)
+    before = _applied(db)
+
+    assert db.run(both[:1]) == []
+
+    assert _applied(db) == before
+    assert "b" in _tables(db)
+
+
+def test_a_recorded_version_with_no_file_below_the_highest_is_refused(
+    db: Db,
+    tmp_path: Path,
+) -> None:
     both = _load(
         tmp_path,
         {
@@ -181,8 +209,9 @@ def test_a_recorded_version_with_no_file_is_refused(db: Db, tmp_path: Path) -> N
     )
     db.run(both)
 
-    with pytest.raises(MigrationError, match="0002"):
-        db.run(both[:1])
+    # load_migrations never produces a gap, so the set is built by hand.
+    with pytest.raises(MigrationError, match="0001"):
+        db.run(both[1:])
 
 
 def test_a_no_transaction_migration_may_contain_its_own_transaction_control(
