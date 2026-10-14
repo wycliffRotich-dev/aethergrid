@@ -192,3 +192,34 @@ Evidence from running it:
 Not shown yet: that the hardening workflow goes red when each property
 of `migrate` is broken on a throwaway branch, as ADR 0061 did for the
 application container.
+
+2026-10-14, the runner and a rollback. Decision 6 allows a database that
+is ahead of the image, and Decision 7 depends on it. The runner did not.
+Run against a database that recorded a version the image has no file
+for, it exited 1 with "recorded as applied but has no file in the
+migration set". In compose the `migrate` service would then fail after a
+rollback of the code, and `neuromesh` waits for it to complete, so the
+application would not start. This was reproduced on a scratch database
+before anything was changed.
+
+The runner now compares the recorded history with the migration set in
+one function that touches no database, and the startup check will call
+the same function:
+
+- A recorded version above the highest version in the image is accepted.
+  Nothing is applied and nothing in the history changes.
+- A hole in the recorded versions, a recorded version below the highest
+  that has no file, and a changed checksum are still refused.
+- An image that carries no migrations is refused when the database has a
+  history, so a broken build cannot start silently.
+
+Accepting a database that is ahead removes a check that happened to
+stop an older image from running on a newer schema. What replaces it is
+Decision 7, which is a convention and not a mechanism. A migration that
+removes or renames something would still break a rolled-back image, and
+nothing here detects that.
+
+Run against the scratch database again, the runner printed "nothing to
+apply", exited 0 and left the recorded history as it was. Ruff is clean
+and 802 tests pass. The rollback has not been run through compose, and
+the startup check is still not in.
