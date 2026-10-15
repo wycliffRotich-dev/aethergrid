@@ -11,11 +11,16 @@ from app.domain.entities.event import Event
 from app.domain.entities.lease import utc_now
 from app.domain.entities.tenant import DEFAULT_TENANT_ID, Tenant
 from app.domain.value_objects.event_id import EventId
+from app.domain.value_objects.job_id import JobId
+from app.domain.value_objects.worker_id import WorkerId
 from app.infrastructure.repositories.postgres_api_key_repository import (
     PostgresApiKeyRepository,
 )
 from app.infrastructure.repositories.postgres_event_repository import (
     PostgresEventRepository,
+)
+from app.infrastructure.repositories.postgres_lease_repository import (
+    PostgresLeaseRepository,
 )
 from app.infrastructure.repositories.postgres_tenant_repository import (
     PostgresTenantRepository,
@@ -106,3 +111,19 @@ def test_the_event_repository_leaves_the_default_row_factory(
     finally:
         with single_connection_pool.connection() as conn:
             conn.execute("DELETE FROM events WHERE id = %s", (str(event.id),))
+
+
+def test_the_lease_repository_leaves_the_default_row_factory(
+    single_connection_pool: ConnectionPool,
+) -> None:
+    """
+    The reads change the connection before they run, so asking for ids
+    that do not exist is enough to expose the leak.
+    """
+    repository = PostgresLeaseRepository(single_connection_pool)
+
+    assert repository.get_by_job_id(JobId.new()) is None
+    assert repository.get_by_worker_id(WorkerId.new()) is None
+    repository.list()
+
+    assert _row_factory_after(single_connection_pool) is tuple_row
