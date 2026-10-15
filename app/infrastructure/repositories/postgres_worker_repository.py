@@ -64,12 +64,11 @@ class PostgresWorkerRepository(WorkerRepository):
 
     def get_by_id(self, worker_id: WorkerId) -> Worker | None:
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            row = conn.execute(
+            row = conn.cursor(row_factory=dict_row).execute(
                 "SELECT * FROM workers WHERE id = %s",
                 (str(worker_id),),
             ).fetchone()
-        return self._to_entity(conn, row) if row else None
+            return self._to_entity(conn, row) if row else None
 
     def get_by_node_id(self, node_id: NodeId) -> Worker | None:
         """
@@ -77,17 +76,19 @@ class PostgresWorkerRepository(WorkerRepository):
         exists (ADR 0030).
         """
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            row = conn.execute(
+            row = conn.cursor(row_factory=dict_row).execute(
                 "SELECT * FROM workers WHERE node_id = %s",
                 (str(node_id),),
             ).fetchone()
-        return self._to_entity(conn, row) if row else None
+            return self._to_entity(conn, row) if row else None
 
     def list(self) -> list[Worker]:
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            rows = conn.execute("SELECT * FROM workers").fetchall()
+            rows = (
+                conn.cursor(row_factory=dict_row)
+                .execute("SELECT * FROM workers")
+                .fetchall()
+            )
             return [self._to_entity(conn, row) for row in rows]
 
     def delete(self, worker_id: WorkerId) -> None:
@@ -107,8 +108,8 @@ class PostgresWorkerRepository(WorkerRepository):
         JOIN if this repository ever needs to serve
         high-frequency list() calls at scale.
         """
-        conn.row_factory = dict_row
-        node_row = conn.execute(
+        cursor = conn.cursor(row_factory=dict_row)
+        node_row = cursor.execute(
             "SELECT * FROM nodes WHERE id = %s",
             (str(row["node_id"]),),
         ).fetchone()
@@ -118,7 +119,7 @@ class PostgresWorkerRepository(WorkerRepository):
         running_job_id = row["running_job_id"]
         running_job = None
         if running_job_id is not None:
-            job_row = conn.execute(
+            job_row = cursor.execute(
                 "SELECT * FROM jobs WHERE id = %s",
                 (str(running_job_id),),
             ).fetchone()

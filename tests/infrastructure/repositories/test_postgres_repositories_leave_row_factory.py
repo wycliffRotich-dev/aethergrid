@@ -22,10 +22,17 @@ from app.infrastructure.repositories.postgres_event_repository import (
 from app.infrastructure.repositories.postgres_lease_repository import (
     PostgresLeaseRepository,
 )
+from app.infrastructure.repositories.postgres_node_repository import (
+    PostgresNodeRepository,
+)
 from app.infrastructure.repositories.postgres_tenant_repository import (
     PostgresTenantRepository,
 )
+from app.infrastructure.repositories.postgres_worker_repository import (
+    PostgresWorkerRepository,
+)
 from tests.support.api_keys import make_api_key
+from tests.support.workers import make_worker
 
 
 @pytest.fixture
@@ -127,3 +134,28 @@ def test_the_lease_repository_leaves_the_default_row_factory(
     repository.list()
 
     assert _row_factory_after(single_connection_pool) is tuple_row
+
+
+def test_the_worker_repository_leaves_the_default_row_factory(
+    single_connection_pool: ConnectionPool,
+) -> None:
+    """
+    Needs a saved worker: the owning node is read inside _to_entity, which
+    only runs when a worker row exists.
+    """
+    worker = make_worker()
+    node_repository = PostgresNodeRepository(single_connection_pool)
+    repository = PostgresWorkerRepository(single_connection_pool)
+    try:
+        node_repository.save(worker.node)
+        repository.save(worker)
+
+        assert repository.get_by_id(worker.id) is not None
+        assert repository.get_by_node_id(worker.node.id) is not None
+        assert any(w.id == worker.id for w in repository.list())
+
+        assert _row_factory_after(single_connection_pool) is tuple_row
+    finally:
+        with single_connection_pool.connection() as conn:
+            conn.execute("DELETE FROM workers WHERE id = %s", (str(worker.id),))
+            conn.execute("DELETE FROM nodes WHERE id = %s", (str(worker.node.id),))
