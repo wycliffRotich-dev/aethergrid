@@ -32,6 +32,7 @@ from app.infrastructure.repositories.postgres_worker_repository import (
     PostgresWorkerRepository,
 )
 from tests.support.api_keys import make_api_key
+from tests.support.nodes import make_node
 from tests.support.workers import make_worker
 
 
@@ -159,3 +160,23 @@ def test_the_worker_repository_leaves_the_default_row_factory(
         with single_connection_pool.connection() as conn:
             conn.execute("DELETE FROM workers WHERE id = %s", (str(worker.id),))
             conn.execute("DELETE FROM nodes WHERE id = %s", (str(worker.node.id),))
+
+
+def test_the_node_repository_leaves_the_default_row_factory(
+    single_connection_pool: ConnectionPool,
+) -> None:
+    node = make_node()
+    repository = PostgresNodeRepository(single_connection_pool)
+    try:
+        repository.save(node)
+
+        assert any(n.id == node.id for n in repository.list(DEFAULT_TENANT_ID))
+        assert repository.get_by_id(node.id, DEFAULT_TENANT_ID) is not None
+        assert repository.get_by_id_across_tenants(node.id) is not None
+        assert any(n.id == node.id for n in repository.list_across_tenants())
+        repository.list_available_across_tenants()
+
+        assert _row_factory_after(single_connection_pool) is tuple_row
+    finally:
+        with single_connection_pool.connection() as conn:
+            conn.execute("DELETE FROM nodes WHERE id = %s", (str(node.id),))

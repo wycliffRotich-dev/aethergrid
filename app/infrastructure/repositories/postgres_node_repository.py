@@ -82,8 +82,7 @@ class PostgresNodeRepository(NodeRepository):
 
     def list(self, tenant_id: TenantId) -> list[Node]:
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            rows = conn.execute(
+            rows = conn.cursor(row_factory=dict_row).execute(
                 "SELECT * FROM nodes WHERE tenant_id = %s",
                 (str(tenant_id),),
             ).fetchall()
@@ -91,8 +90,7 @@ class PostgresNodeRepository(NodeRepository):
 
     def get_by_id(self, node_id: NodeId, tenant_id: TenantId) -> Node | None:
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            row = conn.execute(
+            row = conn.cursor(row_factory=dict_row).execute(
                 "SELECT * FROM nodes WHERE id = %s AND tenant_id = %s",
                 (str(node_id), str(tenant_id)),
             ).fetchone()
@@ -107,8 +105,7 @@ class PostgresNodeRepository(NodeRepository):
 
     def get_by_id_across_tenants(self, node_id: NodeId) -> Node | None:
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            row = conn.execute(
+            row = conn.cursor(row_factory=dict_row).execute(
                 "SELECT * FROM nodes WHERE id = %s",
                 (str(node_id),),
             ).fetchone()
@@ -116,14 +113,16 @@ class PostgresNodeRepository(NodeRepository):
 
     def list_across_tenants(self) -> list[Node]:
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            rows = conn.execute("SELECT * FROM nodes").fetchall()
+            rows = (
+                conn.cursor(row_factory=dict_row)
+                .execute("SELECT * FROM nodes")
+                .fetchall()
+            )
         return [self._to_entity(row) for row in rows]
 
     def list_available_across_tenants(self) -> list[Node]:
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            rows = conn.execute(
+            rows = conn.cursor(row_factory=dict_row).execute(
                 "SELECT * FROM nodes WHERE draining = false"
             ).fetchall()
         return [
