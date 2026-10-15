@@ -19,6 +19,9 @@ from app.infrastructure.repositories.postgres_api_key_repository import (
 from app.infrastructure.repositories.postgres_event_repository import (
     PostgresEventRepository,
 )
+from app.infrastructure.repositories.postgres_job_repository import (
+    PostgresJobRepository,
+)
 from app.infrastructure.repositories.postgres_lease_repository import (
     PostgresLeaseRepository,
 )
@@ -32,6 +35,7 @@ from app.infrastructure.repositories.postgres_worker_repository import (
     PostgresWorkerRepository,
 )
 from tests.support.api_keys import make_api_key
+from tests.support.jobs import make_job
 from tests.support.nodes import make_node
 from tests.support.workers import make_worker
 
@@ -180,3 +184,26 @@ def test_the_node_repository_leaves_the_default_row_factory(
     finally:
         with single_connection_pool.connection() as conn:
             conn.execute("DELETE FROM nodes WHERE id = %s", (str(node.id),))
+
+
+def test_the_job_repository_leaves_the_default_row_factory(
+    single_connection_pool: ConnectionPool,
+) -> None:
+    """
+    Needs a saved job so that every read has a row to turn into an entity.
+    """
+    job = make_job()
+    repository = PostgresJobRepository(single_connection_pool)
+    try:
+        repository.save(job)
+
+        assert repository.get_by_id(job.id, DEFAULT_TENANT_ID) is not None
+        assert repository.get_by_id_across_tenants(job.id) is not None
+        assert any(j.id == job.id for j in repository.list_across_tenants())
+        repository.list_queued(DEFAULT_TENANT_ID)
+        repository.list_recent(10, DEFAULT_TENANT_ID)
+
+        assert _row_factory_after(single_connection_pool) is tuple_row
+    finally:
+        with single_connection_pool.connection() as conn:
+            conn.execute("DELETE FROM jobs WHERE id = %s", (str(job.id),))

@@ -120,8 +120,7 @@ class PostgresJobRepository(JobRepository):
         tenant_id: TenantId,
     ) -> Job | None:
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            row = conn.execute(
+            row = conn.cursor(row_factory=dict_row).execute(
                 "SELECT * FROM jobs WHERE id = %s AND tenant_id = %s",
                 (str(job_id), str(tenant_id)),
             ).fetchone()
@@ -129,8 +128,7 @@ class PostgresJobRepository(JobRepository):
 
     def list_queued(self, tenant_id: TenantId) -> list[Job]:
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            rows = conn.execute(
+            rows = conn.cursor(row_factory=dict_row).execute(
                 "SELECT * FROM jobs WHERE status = %s AND tenant_id = %s",
                 (JobStatus.QUEUED.value, str(tenant_id)),
             ).fetchall()
@@ -145,8 +143,7 @@ class PostgresJobRepository(JobRepository):
         in Python.
         """
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            rows = conn.execute(
+            rows = conn.cursor(row_factory=dict_row).execute(
                 "SELECT * FROM jobs WHERE tenant_id = %s "
                 "ORDER BY submitted_at DESC LIMIT %s",
                 (str(tenant_id), limit),
@@ -155,8 +152,7 @@ class PostgresJobRepository(JobRepository):
 
     def get_by_id_across_tenants(self, job_id: JobId) -> Job | None:
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            row = conn.execute(
+            row = conn.cursor(row_factory=dict_row).execute(
                 "SELECT * FROM jobs WHERE id = %s",
                 (str(job_id),),
             ).fetchone()
@@ -164,8 +160,11 @@ class PostgresJobRepository(JobRepository):
 
     def list_across_tenants(self) -> list[Job]:
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            rows = conn.execute("SELECT * FROM jobs").fetchall()
+            rows = (
+                conn.cursor(row_factory=dict_row)
+                .execute("SELECT * FROM jobs")
+                .fetchall()
+            )
         return [self._to_entity(row) for row in rows]
 
     @staticmethod
