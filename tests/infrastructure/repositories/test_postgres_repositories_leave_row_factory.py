@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+import uuid
 from collections.abc import Iterator
 
 import pytest
 from psycopg.rows import tuple_row
 from psycopg_pool import ConnectionPool
 
+from app.domain.entities.event import Event
+from app.domain.entities.lease import utc_now
 from app.domain.entities.tenant import DEFAULT_TENANT_ID, Tenant
+from app.domain.value_objects.event_id import EventId
 from app.infrastructure.repositories.postgres_api_key_repository import (
     PostgresApiKeyRepository,
+)
+from app.infrastructure.repositories.postgres_event_repository import (
+    PostgresEventRepository,
 )
 from app.infrastructure.repositories.postgres_tenant_repository import (
     PostgresTenantRepository,
@@ -75,3 +82,27 @@ def test_the_api_key_repository_leaves_the_default_row_factory(
     finally:
         with single_connection_pool.connection() as conn:
             conn.execute("DELETE FROM api_keys WHERE id = %s", (str(key.id),))
+
+
+def test_the_event_repository_leaves_the_default_row_factory(
+    single_connection_pool: ConnectionPool,
+) -> None:
+    repository = PostgresEventRepository(single_connection_pool)
+    event = Event(
+        id=EventId.from_string(str(uuid.uuid4())),
+        aggregate_id="row-factory-probe",
+        aggregate_type="probe",
+        event_type="ProbeEvent",
+        occurred_at=utc_now(),
+        payload={},
+    )
+    try:
+        repository.save(event)
+
+        assert len(repository.list_by_aggregate("row-factory-probe")) == 1
+        assert any(e.id == event.id for e in repository.list())
+
+        assert _row_factory_after(single_connection_pool) is tuple_row
+    finally:
+        with single_connection_pool.connection() as conn:
+            conn.execute("DELETE FROM events WHERE id = %s", (str(event.id),))
