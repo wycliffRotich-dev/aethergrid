@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse, Response
 from psycopg_pool import ConnectionPool
 
 from app.presentation.dependencies import (
+    check_database_schema,
     get_cluster_tick_service,
     get_connection_pool,
     get_reconciliation_loop,
@@ -192,6 +193,14 @@ async def lifespan(app: FastAPI):
     pool = get_connection_pool()
     if pool is not None:
         await asyncio.to_thread(pool.wait, timeout=30.0)
+
+    ahead = await asyncio.to_thread(check_database_schema, pool)
+    if ahead:
+        logger.warning(
+            "The database is ahead of this build: migrations %s are "
+            "recorded but not shipped. Starting anyway (ADR 0072).",
+            ", ".join(f"{version:04d}" for version in ahead),
+        )
 
     task = asyncio.create_task(_run_cluster_loop())
 
