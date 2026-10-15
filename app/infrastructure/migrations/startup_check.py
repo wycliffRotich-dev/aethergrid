@@ -37,9 +37,10 @@ def check_schema(
     runner used.
     """
     with pool.connection() as conn:
-        # The repositories set row_factory to dict_row on the connections
-        # they borrow and nothing resets it, so this asks for tuples on its
-        # own cursor and does not depend on what it finds.
+        # Ask for tuples on this cursor so the check does not depend on
+        # the row factory the connection carries. The pool does not reset
+        # connection state, so a borrowed connection can arrive with
+        # another caller's setting (ADR 0072).
         with conn.cursor(row_factory=tuple_row) as cursor:
             exists = cursor.execute(
                 "SELECT to_regclass('schema_migrations') IS NOT NULL"
