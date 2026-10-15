@@ -6,10 +6,14 @@ import pytest
 from psycopg.rows import tuple_row
 from psycopg_pool import ConnectionPool
 
-from app.domain.entities.tenant import Tenant
+from app.domain.entities.tenant import DEFAULT_TENANT_ID, Tenant
+from app.infrastructure.repositories.postgres_api_key_repository import (
+    PostgresApiKeyRepository,
+)
 from app.infrastructure.repositories.postgres_tenant_repository import (
     PostgresTenantRepository,
 )
+from tests.support.api_keys import make_api_key
 
 
 @pytest.fixture
@@ -52,3 +56,22 @@ def test_the_tenant_repository_leaves_the_default_row_factory(
     repository.get_by_name(tenant.name)
 
     assert _row_factory_after(single_connection_pool) is tuple_row
+
+
+def test_the_api_key_repository_leaves_the_default_row_factory(
+    single_connection_pool: ConnectionPool,
+) -> None:
+    repository = PostgresApiKeyRepository(single_connection_pool)
+    key, _raw = make_api_key("row-factory-probe")
+    try:
+        repository.save(key)
+        repository.mark_used(key.id, DEFAULT_TENANT_ID)
+
+        assert repository.get_by_id(key.id, DEFAULT_TENANT_ID) is not None
+        assert repository.get_by_hash_across_tenants(key.key_hash) is not None
+        assert repository.list_issued_by(key.id, DEFAULT_TENANT_ID) == []
+
+        assert _row_factory_after(single_connection_pool) is tuple_row
+    finally:
+        with single_connection_pool.connection() as conn:
+            conn.execute("DELETE FROM api_keys WHERE id = %s", (str(key.id),))
