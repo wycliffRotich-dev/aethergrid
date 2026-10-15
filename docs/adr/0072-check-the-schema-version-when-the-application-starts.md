@@ -156,3 +156,55 @@ need the right to do so while it serves requests.
   loop begins.
 - Run the rollback through compose, which has been run only through the
   command line so far.
+
+## Progress
+
+2026-10-15. The check is implemented on its own branch. `check_schema`
+in `app/infrastructure/migrations/startup_check.py` calls
+`plan_migrations`. `lifespan` calls `check_database_schema(pool)` from
+`dependencies.py` on a worker thread, after `pool.wait` and before the
+cluster loop starts, with the pool it waited on. The function takes the
+pool as an argument, which Decision 8 did not say. A first version
+looked the pool up on its own, and the two lifespan tests that replace
+`get_connection_pool` then ran the real check against the live test
+database without saying so.
+
+A flaw found by running the suite. The first version of the check read
+rows by position. The full suite then failed in 26 tests that enter the
+lifespan, all with `KeyError: 0`. Each of them passed alone, and the
+same 26 failed with the new lifespan tests excluded, so the order of
+tests was not the cause. The Postgres repositories set `row_factory` to
+`dict_row` on the pooled connections they borrow (25 assignments in 7
+repository files), and nothing resets it, so the next borrower of that
+connection gets dict rows. A test that sets `dict_row` on a borrowed
+connection and then runs the check reproduced the failure. This ADR did
+not foresee it, and an earlier statement that these tests would pass
+because the test database is migrated was wrong.
+
+The check now asks for tuple rows on its own cursor and does not depend
+on the row factory it finds. The cause is still in the repositories. New
+code that reads from the pool by position meets the same trap, and it is
+not fixed here.
+
+A fix in the pool was tried and removed. `ConnectionPool` takes a
+`reset` callback that restores the default row factory when a connection
+is returned. With it set, 16 presentation tests failed with
+`psycopg.OperationalError: connection socket closed`, and they failed the
+same way when the callback did nothing, so the cause is the callback
+being set at all. In the installed `psycopg_pool` (3.3.1), a pool with a
+`reset` callback returns each connection through a task on a worker
+thread, where a pool without one returns it in the calling thread. Some
+code in the application depends on the inline return. Which code was not
+found, and the callback was removed instead of worked around.
+
+The leak is still in the repositories. The fix that does not change how
+the pool returns connections is for each repository to ask for dict rows
+on its own cursor and stop setting the factory on the connection. That
+touches 25 sites in 7 files and is a separate change.
+
+Run locally: the check tests (8), the presentation tests (107) and the
+full suite (814) pass.
+
+Not shown yet: that uvicorn exits non-zero when the lifespan raises, a
+cold start through compose with the check in place, a database that is
+behind stopping the container, and the rollback through compose.

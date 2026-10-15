@@ -28,6 +28,13 @@ def test_lifespan_waits_for_pool_before_completing_startup(
         "get_connection_pool",
         lambda: fake_pool,
     )
+    # The schema check has its own tests (test_lifespan_checks_schema.py).
+    # Here the pool is a mock, so the real check has no history to read.
+    monkeypatch.setattr(
+        api_module,
+        "check_database_schema",
+        lambda pool: (),
+    )
 
     with TestClient(app):
         pass

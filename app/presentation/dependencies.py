@@ -167,6 +167,11 @@ from app.domain.services.scheduler import Scheduler
 from app.infrastructure.database_credentials import (
     resolve_database_password,
 )
+from app.infrastructure.migrations.runner import (
+    MIGRATIONS_DIR,
+    load_migrations,
+)
+from app.infrastructure.migrations.startup_check import check_schema
 from app.infrastructure.repositories.in_memory_api_key_repository import (
     InMemoryApiKeyRepository,
 )
@@ -507,6 +512,26 @@ def get_connection_pool() -> ConnectionPool | None:
     which every other caller correctly relies on.
     """
     return _connection_pool
+
+
+def check_database_schema(
+    pool: ConnectionPool | None,
+) -> tuple[int, ...]:
+    """
+    Check that the database behind pool matches the migrations this
+    build ships, and return the recorded versions that are ahead of it
+    (ADR 0072).
+
+    Takes the pool from the caller, so the lifespan checks the same pool
+    it waited on. Does nothing when pool is None, which is sqlite and
+    memory: the repositories there upgrade their own files. The
+    migration set is loaded here and not at import, so a broken
+    migrations directory fails the startup with one clear message and
+    does not break every module that imports this one.
+    """
+    if pool is None:
+        return ()
+    return check_schema(pool, load_migrations(MIGRATIONS_DIR))
 
 def get_rate_limiter_service() -> RateLimiterService:
     """
