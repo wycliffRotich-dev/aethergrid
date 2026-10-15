@@ -2,9 +2,10 @@
 
 ## Status
 
-Proposed. Nothing in this ADR is implemented. It records the design
-before any code, so the pull request that follows can be reviewed
-against it. It becomes Accepted when the check has merged.
+Accepted on 2026-10-15. It was Proposed when it was written, with
+nothing implemented. The check has merged, and the Progress section
+below records what was found on the way. The original text of the ADR
+is unchanged.
 
 ## Context
 
@@ -208,3 +209,32 @@ full suite (814) pass.
 Not shown yet: that uvicorn exits non-zero when the lifespan raises, a
 cold start through compose with the check in place, a database that is
 behind stopping the container, and the rollback through compose.
+
+2026-10-15, through compose. Every item in the paragraph above was run
+against the real image on a throwaway project:
+
+- A database whose history was emptied, with the tables kept, stopped
+  the application. The container exited with code 3 and the log ended
+  with "the database is behind this build: not applied:
+  0001_baseline.sql". uvicorn exits non-zero when the lifespan raises.
+- A cold start on a new volume came up healthy, with `migrate` exited 0
+  and `neuromesh` running.
+- A database with an extra recorded version 0002 started, and the log
+  held one warning that the database is ahead of this build and names
+  0002.
+- The `migrate` service run against that same database printed "nothing
+  to apply" and exited 0, so a rollback of the code is not blocked.
+
+Two things came out of the runs:
+
+- A first attempt ran old code. The image tag `neuromesh-app:local` is
+  shared by the whole Docker daemon, and a partial `up` that names only
+  `migrate` builds nothing for `neuromesh`, so the application started
+  from an image that predated the check and started against an empty
+  history. A run that names `neuromesh` with `--build` used the new
+  code. The documented command in the README builds every service and is
+  not affected.
+- `docker compose up --wait` naming only `migrate` returned while the
+  container still showed `running`. It showed `exited 0` five seconds
+  later. For a service with no healthcheck, `--wait` is not a reliable
+  signal that a one-shot has finished.

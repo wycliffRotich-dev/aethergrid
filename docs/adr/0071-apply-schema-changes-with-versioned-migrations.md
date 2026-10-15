@@ -2,10 +2,11 @@
 
 ## Status
 
-Proposed. Nothing in this ADR is implemented. It records the design
-before any code, so the pull requests that follow can be reviewed
-against it. It becomes Accepted when the runner, the baseline and the
-startup check have merged.
+Accepted on 2026-10-15. It was Proposed when it was written, with
+nothing implemented. The runner, the baseline, the command, the compose
+and CI step, and the startup check have since merged, and the Progress
+section below records what was found on the way. The original text of
+the ADR is unchanged.
 
 ## Context
 
@@ -223,3 +224,11 @@ Run against the scratch database again, the runner printed "nothing to
 apply", exited 0 and left the recorded history as it was. Ruff is clean
 and 802 tests pass. The rollback has not been run through compose, and
 the startup check is still not in.
+
+2026-10-15. The startup check merged (ADR 0072), so two statements above
+no longer hold: the startup check is in, and the application now looks
+at the schema. The rollback was run through compose: the `migrate`
+service against a database with a recorded version the image has no file
+for printed "nothing to apply" and exited 0, and the application started
+and logged one warning. A database that is behind stops the container
+with exit code 3. The evidence is in the Progress section of ADR 0072.
