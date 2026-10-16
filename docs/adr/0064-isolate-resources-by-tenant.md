@@ -155,7 +155,7 @@ repository contract in point 4 exists.
 
 **A database or schema per tenant.** Rejected. The scheduler,
 reconciliation and fleet views would have to fan out across
-databases, and the single-store simplicity of ADR 0004 would be
+databases, and the single-store simplicity of ADR 0001 would be
 lost.
 
 **A shared node pool.** Deferred. It adds a fairness and isolation

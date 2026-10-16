@@ -1,4 +1,10 @@
-# ADR 0004: Use psycopg over SQLAlchemy
+# ADR 0001: Use psycopg over SQLAlchemy
+
+> This file was titled ADR 0004 until 2026-10-16, when its title was
+> aligned with its filename. The SQL files still say "ADR 0004" for
+> this decision in their comments. They are left as written: the
+> baseline migration is checksummed and tests tie the other schema
+> files to it.
 
 ## Status
 

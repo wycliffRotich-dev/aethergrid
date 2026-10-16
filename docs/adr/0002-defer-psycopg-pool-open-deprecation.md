@@ -1,4 +1,4 @@
-# ADR 0005: Defer psycopg_pool ConnectionPool `open` Deprecation Fix
+# ADR 0002: Defer psycopg_pool ConnectionPool `open` Deprecation Fix
 
 ## Status
 Accepted

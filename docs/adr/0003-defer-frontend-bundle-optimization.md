@@ -1,4 +1,4 @@
-# ADR-0006: Defer Frontend Bundle Optimization
+# ADR-0003: Defer Frontend Bundle Optimization
 
 ## Status
 
