@@ -215,11 +215,12 @@ def list_workers(
         ListWorkersService,
         Depends(get_list_workers_service),
     ],
+    caller: Annotated[ApiKey, Depends(require_api_key)],
 ) -> ListWorkersResponse:
     """
-    Return every registered worker.
+    Return every registered worker in the caller's tenant.
     """
-    workers = service.execute()
+    workers = service.execute(caller.tenant_id)
 
     return ListWorkersResponse(
         workers=[
@@ -253,9 +254,10 @@ def get_worker(
         GetLeaseForWorkerService,
         Depends(get_get_lease_for_worker_service),
     ],
+    caller: Annotated[ApiKey, Depends(require_api_key)],
 ) -> GetWorkerResponse:
     """
-    Retrieve a single worker, including the job currently
+    Retrieve a single worker in the caller's tenant, including the job currently
     assigned to it, if any.
 
     running_job.command is only ever exposed here, never
@@ -275,6 +277,7 @@ def get_worker(
 
     worker = service.execute(
         worker_id_value,
+        caller.tenant_id,
     )
 
     if worker is None:
@@ -590,6 +593,7 @@ def renew_lease(
         GetLeaseForWorkerService,
         Depends(get_get_lease_for_worker_service),
     ],
+    caller: Annotated[ApiKey, Depends(require_api_key)],
 ) -> GetWorkerResponse:
     """
     Renew the lease this worker holds on the job it's
@@ -620,6 +624,7 @@ def renew_lease(
 
     worker = get_worker_service.execute(
         worker_id_value,
+        caller.tenant_id,
     )
 
     if worker is None:
