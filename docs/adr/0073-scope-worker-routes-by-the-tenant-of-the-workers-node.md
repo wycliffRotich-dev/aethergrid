@@ -133,7 +133,7 @@ Status today:
 | `GET /workers` | yes | list test |
 | `GET /workers/{id}` | yes | read and command tests |
 | `POST /workers/{id}/lease/renew` | yes | renew test |
-| `POST /workers/{id}/jobs/{job_id}/start` | no | none |
+| `POST /workers/{id}/jobs/{job_id}/start` | yes | start test |
 | `POST /workers/{id}/jobs/{job_id}/complete` | yes | outcome tests |
 | `POST /workers/{id}/jobs/{job_id}/fail` | yes | outcome tests |
 | `POST /workers/{id}/jobs/{job_id}/cancel` | yes | outcome tests |
@@ -207,11 +207,8 @@ implementations in the same change as the routes, and the join to
 
 ## Follow-ups
 
-- Scope `start`, with a failing two-tenant test first. The test asserts
-  P2 by checking that the worker still holds its job, the lease is
-  intact and the job has not changed state. `complete`, `fail` and
-  `cancel` went in one commit and not one per commit, because they
-  share one service helper. See Progress.
+- Scope `heartbeat`, or record it as exempt under Decision 8, once the
+  open question about how agent keys are issued is answered.
 - An ADR for giving workers and leases a tenant (ADR 0064 points 2 and
   7): a versioned migration under ADR 0071, a backfill through the
   owning node and worker and not through the default tenant, and
@@ -225,12 +222,15 @@ implementations in the same change as the routes, and the join to
 ```bash
 pytest tests/presentation/test_worker_read_routes_tenant_isolation_api.py -q
 pytest tests/presentation/test_worker_routes_tenant_isolation_api.py -q
+pytest tests/presentation/test_worker_outcome_routes_tenant_isolation_api.py -q
+pytest tests/presentation/test_worker_start_route_tenant_isolation_api.py -q
 grep -c "caller: Annotated\[ApiKey" app/presentation/routers/workers.py
 ```
 
-The first two pass. The third prints the number of handlers that take
-the caller. It is 4 at the time of writing and must reach 9 before this
-ADR is Accepted, with `heartbeat` possibly exempt under Decision 8.
+The pytest commands pass. The last command prints the number of
+handlers that take the caller. It is 8 at the time of writing and must
+reach 9 before this ADR is Accepted, with `heartbeat` possibly exempt
+under Decision 8.
 
 ## Progress
 
@@ -260,4 +260,20 @@ and the lease are unchanged. Each failed before the change and passed
 after. Twelve existing service tests called the service without a
 tenant and now pass `DEFAULT_TENANT_ID`. The full suite passed (840).
 
-Not done: `start` and `heartbeat`.
+2026-10-16. `start` is scoped. Before the change, a test showed that a
+key from another tenant, given a worker id and a job id, got 200 from
+it. The worker and job ids are returned in responses and written to
+logs, so they are not a secret. `StartJobService.execute` now takes a
+required `TenantId`, and a worker whose node is in another tenant
+raises `WorkerNotFoundError` before the job check and before the job
+is started or anything is saved. The route takes the caller. One
+two-tenant test covers it: the foreign key gets 404, the body matches
+the one for a missing worker once the worker id is masked, and the
+worker still holds its job, the job is still SCHEDULED and the lease
+is unchanged. It failed with 200 before the change and passed after.
+The five existing start route tests pass unchanged. No service test
+called `StartJobService` directly. `start` went in its own commit, and
+`complete`, `fail` and `cancel` went in one, because they share one
+service helper. The full suite passed (841).
+
+Not done: `heartbeat`.
