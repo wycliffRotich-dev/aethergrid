@@ -238,3 +238,53 @@ Two things came out of the runs:
   container still showed `running`. It showed `exited 0` five seconds
   later. For a service with no healthcheck, `--wait` is not a reliable
   signal that a one-shot has finished.
+
+2026-10-16. The leak in the repositories is fixed. Each of the seven
+Postgres repositories now asks for dict rows on its own cursor and does
+not set `row_factory` on the connection it borrows. The 25 assignments
+in 7 files counted on 2026-10-15 are gone: api key 3, event 2, job 5,
+lease 3, node 5, tenant 3 and worker 4. The number of cursor sites is
+not the same as the number of assignments. The tenant `save` used one
+assignment for two statements, and each statement now has its own
+cursor. The pool is unchanged, so connections are still returned in the
+calling thread.
+
+Each repository has a leak test in
+`tests/infrastructure/repositories/test_postgres_repositories_leave_row_factory.py`.
+It borrows from a pool of one, so the next borrower gets the connection
+the repository just used, calls every public read, and checks that the
+connection still has `tuple_row`. Each test failed before its repository
+was changed and passed after. The tests for the worker, node and job
+repositories save a row first so that every read runs to the end.
+
+A second test keeps the leak from coming back.
+`tests/infrastructure/test_infrastructure_never_mutates_pooled_connection_state.py`
+parses every file under `app/infrastructure` and fails on an assignment
+to `row_factory`, `autocommit`, `isolation_level`, `read_only` or
+`deferrable`, including `setattr` with a literal name. The one file it
+allows is `sqlite_connection.py`, by exact path: it configures a
+connection it creates itself and no pool shares, so no other borrower
+can inherit the setting. A test fails if that file moves. The test reads
+source, so it does not see a setting made with a computed attribute name
+or through SQL.
+
+Reading the worker repository for this change showed a second problem.
+`get_by_id` and `get_by_node_id` called `_to_entity(conn, row)` after
+the `with` block had returned the connection to the pool, so its two
+follow-up queries ran on a connection another caller could already hold.
+Both calls are now inside the block. No test covers this. It would need
+two threads and a pool of one, and it is not written.
+
+Session state set through SQL was checked by search, not by test. `app/`
+has no `SET`, `set_config`, temporary table, `LISTEN` or prepared
+statement. The only advisory locks are in the migration runner, which
+opens its own connection and does not borrow from the application's
+pool.
+
+The comment in `startup_check.py` said the repositories set the row
+factory. It now says why the check asks for its own: the pool does not
+reset connection state, so a borrowed connection can arrive with another
+caller's setting. The `tuple_row` cursor stays.
+
+Run locally: `ruff check app tests` is clean and the full suite passes
+(826).
