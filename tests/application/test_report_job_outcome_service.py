@@ -156,6 +156,7 @@ def test_complete_marks_job_completed_releases_lease_and_node() -> None:
     service.complete(
         worker.id,
         job.id,
+        tenant_id=DEFAULT_TENANT_ID,
         lease_id=lease.id,
         exit_code=0,
     )
@@ -193,6 +194,7 @@ def test_fail_marks_job_failed_releases_lease_and_node() -> None:
     service.fail(
         worker.id,
         job.id,
+        tenant_id=DEFAULT_TENANT_ID,
         lease_id=lease.id,
         exit_code=1,
     )
@@ -229,6 +231,7 @@ def test_complete_records_job_completed_event() -> None:
     service.complete(
         worker.id,
         job.id,
+        tenant_id=DEFAULT_TENANT_ID,
         lease_id=lease.id,
     )
 
@@ -255,6 +258,7 @@ def test_fail_records_job_failed_event() -> None:
     service.fail(
         worker.id,
         job.id,
+        tenant_id=DEFAULT_TENANT_ID,
         lease_id=lease.id,
     )
 
@@ -275,6 +279,7 @@ def test_complete_raises_worker_not_found_error() -> None:
         service.complete(
             WorkerId.new(),
             job.id,
+            tenant_id=DEFAULT_TENANT_ID,
             lease_id=uuid4(),
         )
 
@@ -288,6 +293,7 @@ def test_complete_raises_worker_job_mismatch_when_worker_holds_different_job() -
         service.complete(
             worker.id,
             JobId.new(),
+            tenant_id=DEFAULT_TENANT_ID,
             lease_id=uuid4(),
         )
 
@@ -327,6 +333,7 @@ def test_complete_raises_worker_job_mismatch_when_worker_holds_no_job() -> None:
         service.complete(
             worker.id,
             JobId.new(),
+            tenant_id=DEFAULT_TENANT_ID,
             lease_id=uuid4(),
         )
 
@@ -340,6 +347,7 @@ def test_fail_raises_worker_not_found_error() -> None:
         service.fail(
             WorkerId.new(),
             job.id,
+            tenant_id=DEFAULT_TENANT_ID,
             lease_id=uuid4(),
         )
 
@@ -360,6 +368,7 @@ def test_cancel_marks_job_cancelled_releases_lease_and_node() -> None:
     service.cancel(
         worker.id,
         job.id,
+        tenant_id=DEFAULT_TENANT_ID,
         lease_id=lease.id,
         exit_code=-15,
     )
@@ -398,6 +407,7 @@ def test_cancel_records_job_cancelled_event() -> None:
     service.cancel(
         worker.id,
         job.id,
+        tenant_id=DEFAULT_TENANT_ID,
         lease_id=lease.id,
     )
 
@@ -419,6 +429,7 @@ def test_cancel_raises_worker_not_found_error() -> None:
         service.cancel(
             WorkerId.new(),
             job.id,
+            tenant_id=DEFAULT_TENANT_ID,
             lease_id=uuid4(),
         )
 
@@ -433,5 +444,6 @@ def test_cancel_raises_worker_job_mismatch_when_worker_holds_different_job() -> 
         service.cancel(
             worker.id,
             JobId.new(),
+            tenant_id=DEFAULT_TENANT_ID,
             lease_id=uuid4(),
         )

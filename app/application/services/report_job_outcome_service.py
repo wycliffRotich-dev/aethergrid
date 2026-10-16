@@ -25,6 +25,7 @@ from app.domain.repositories.worker_repository import (
     WorkerRepository,
 )
 from app.domain.value_objects.job_id import JobId
+from app.domain.value_objects.tenant_id import TenantId
 from app.domain.value_objects.worker_id import WorkerId
 
 
@@ -66,12 +67,17 @@ class ReportJobOutcomeService:
         self,
         worker_id: WorkerId,
         job_id: JobId,
+        tenant_id: TenantId,
     ) -> Worker:
         worker = self._worker_repository.get_by_id(
             worker_id,
         )
 
-        if worker is None:
+        # A worker belongs to the tenant of its node. One in
+        # another tenant is a missing worker, and this runs before
+        # the job check, the lease check and every write (ADR 0073
+        # Decision 4).
+        if worker is None or worker.node.tenant_id != tenant_id:
             raise WorkerNotFoundError(worker_id)
 
         if (
@@ -143,6 +149,7 @@ class ReportJobOutcomeService:
         self,
         worker_id: WorkerId,
         job_id: JobId,
+        tenant_id: TenantId,
         lease_id: UUID,
         exit_code: int | None = None,
     ) -> Worker:
@@ -169,6 +176,7 @@ class ReportJobOutcomeService:
         worker = self._get_owning_worker(
             worker_id,
             job_id,
+            tenant_id,
         )
 
         job = worker.running_job
@@ -189,6 +197,7 @@ class ReportJobOutcomeService:
         self,
         worker_id: WorkerId,
         job_id: JobId,
+        tenant_id: TenantId,
         lease_id: UUID,
         exit_code: int | None = None,
     ) -> Worker:
@@ -201,6 +210,7 @@ class ReportJobOutcomeService:
         worker = self._get_owning_worker(
             worker_id,
             job_id,
+            tenant_id,
         )
 
         job = worker.running_job
@@ -221,6 +231,7 @@ class ReportJobOutcomeService:
         self,
         worker_id: WorkerId,
         job_id: JobId,
+        tenant_id: TenantId,
         lease_id: UUID,
         exit_code: int | None = None,
     ) -> Worker:
@@ -234,6 +245,7 @@ class ReportJobOutcomeService:
         worker = self._get_owning_worker(
             worker_id,
             job_id,
+            tenant_id,
         )
 
         job = worker.running_job

@@ -376,6 +376,7 @@ def complete_job(
             get_report_job_outcome_service,
         ),
     ],
+    caller: Annotated[ApiKey, Depends(require_api_key)],
 ) -> GetWorkerResponse:
     """
     Report that a job completed successfully.
@@ -411,6 +412,7 @@ def complete_job(
         worker = service.complete(
             worker_id_value,
             job_id_value,
+            caller.tenant_id,
             lease_id=request.lease_id,
             exit_code=request.exit_code,
         )
@@ -447,6 +449,7 @@ def fail_job(
             get_report_job_outcome_service,
         ),
     ],
+    caller: Annotated[ApiKey, Depends(require_api_key)],
 ) -> GetWorkerResponse:
     """
     Report that a job failed.
@@ -478,6 +481,7 @@ def fail_job(
         worker = service.fail(
             worker_id_value,
             job_id_value,
+            caller.tenant_id,
             lease_id=request.lease_id,
             exit_code=request.exit_code,
         )
@@ -514,6 +518,7 @@ def confirm_job_cancellation(
             get_report_job_outcome_service,
         ),
     ],
+    caller: Annotated[ApiKey, Depends(require_api_key)],
 ) -> GetWorkerResponse:
     """
     Confirm that a job's cancellation was actually applied to
@@ -552,6 +557,7 @@ def confirm_job_cancellation(
         worker = service.cancel(
             worker_id_value,
             job_id_value,
+            caller.tenant_id,
             lease_id=request.lease_id,
             exit_code=request.exit_code,
         )
