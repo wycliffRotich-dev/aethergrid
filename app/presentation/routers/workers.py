@@ -301,6 +301,7 @@ def get_worker(
 def start_job(
     worker_id: str,
     job_id: str,
+    caller: Annotated[ApiKey, Depends(require_api_key)],
     service: Annotated[
         StartJobService,
         Depends(get_start_job_service),
@@ -342,6 +343,7 @@ def start_job(
         worker = service.execute(
             worker_id_value,
             job_id_value,
+            caller.tenant_id,
         )
     except WorkerNotFoundError as exc:
         raise HTTPException(
