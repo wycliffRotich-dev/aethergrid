@@ -4,6 +4,7 @@ from app.domain.entities.worker import Worker
 from app.domain.repositories.worker_repository import (
     WorkerRepository,
 )
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class ListWorkersService:
@@ -19,8 +20,16 @@ class ListWorkersService:
 
     def execute(
         self,
+        tenant_id: TenantId,
     ) -> list[Worker]:
         """
-        Return every registered worker.
+        Return the registered workers that belong to tenant_id.
+
+        A worker belongs to the tenant of its node (ADR 0064
+        point 5).
         """
-        return self._worker_repository.list()
+        return [
+            worker
+            for worker in self._worker_repository.list()
+            if worker.node.tenant_id == tenant_id
+        ]
