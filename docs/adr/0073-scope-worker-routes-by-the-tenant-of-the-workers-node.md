@@ -134,9 +134,9 @@ Status today:
 | `GET /workers/{id}` | yes | read and command tests |
 | `POST /workers/{id}/lease/renew` | yes | renew test |
 | `POST /workers/{id}/jobs/{job_id}/start` | no | none |
-| `POST /workers/{id}/jobs/{job_id}/complete` | no | none |
-| `POST /workers/{id}/jobs/{job_id}/fail` | no | none |
-| `POST /workers/{id}/jobs/{job_id}/cancel` | no | none |
+| `POST /workers/{id}/jobs/{job_id}/complete` | yes | outcome tests |
+| `POST /workers/{id}/jobs/{job_id}/fail` | yes | outcome tests |
+| `POST /workers/{id}/jobs/{job_id}/cancel` | yes | outcome tests |
 | `POST /workers/{id}/heartbeat` | no | none |
 
 ## Alternatives Considered
@@ -207,10 +207,11 @@ implementations in the same change as the routes, and the join to
 
 ## Follow-ups
 
-- Scope `start`, `complete`, `fail` and `cancel`, one route per commit,
-  each with a failing two-tenant test first. The tests assert P2 by
-  checking that the worker still holds its job, the lease is intact and
-  the job has not changed state.
+- Scope `start`, with a failing two-tenant test first. The test asserts
+  P2 by checking that the worker still holds its job, the lease is
+  intact and the job has not changed state. `complete`, `fail` and
+  `cancel` went in one commit and not one per commit, because they
+  share one service helper. See Progress.
 - An ADR for giving workers and leases a tenant (ADR 0064 points 2 and
   7): a versioned migration under ADR 0071, a backfill through the
   owning node and worker and not through the default tenant, and
@@ -243,4 +244,20 @@ missing one, another tenant's job command never appears in a response,
 worker cannot renew a lease. Each failed before the change and passed
 after. The full suite passed (837).
 
-Not done: `start`, `complete`, `fail`, `cancel` and `heartbeat`.
+2026-10-16. `complete`, `fail` and `cancel` are scoped. Before the
+change, a test showed that a key from another tenant, given a worker
+id, a job id and a lease id, got 200 from any of them. On complete,
+the job ended COMPLETED, the worker went IDLE with no job and the
+lease was deleted.
+The three ids are returned in responses and written to logs, so they
+are not a secret. `ReportJobOutcomeService.complete`, `fail` and
+`cancel` now take a required `TenantId`, and a worker whose node is in
+another tenant raises `WorkerNotFoundError` before the job check, the
+lease check and every write. Three two-tenant tests cover them, one
+per route: the foreign key gets 404, the body matches the one for a
+missing worker once the worker id is masked, and the job, the worker
+and the lease are unchanged. Each failed before the change and passed
+after. Twelve existing service tests called the service without a
+tenant and now pass `DEFAULT_TENANT_ID`. The full suite passed (840).
+
+Not done: `start` and `heartbeat`.
