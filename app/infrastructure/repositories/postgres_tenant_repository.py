@@ -28,9 +28,8 @@ class PostgresTenantRepository(TenantRepository):
         tenant: Tenant,
     ) -> None:
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
             try:
-                cursor = conn.execute(
+                cursor = conn.cursor(row_factory=dict_row).execute(
                     """
                     INSERT INTO tenants (id, name, created_at)
                     VALUES (%(id)s, %(name)s, %(created_at)s)
@@ -53,7 +52,7 @@ class PostgresTenantRepository(TenantRepository):
 
             # The id already exists. That is only acceptable when
             # it is the same tenant being saved again.
-            existing = conn.execute(
+            existing = conn.cursor(row_factory=dict_row).execute(
                 "SELECT name FROM tenants WHERE id = %s",
                 (str(tenant.id),),
             ).fetchone()
@@ -74,8 +73,7 @@ class PostgresTenantRepository(TenantRepository):
         tenant_id: TenantId,
     ) -> Tenant | None:
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            row = conn.execute(
+            row = conn.cursor(row_factory=dict_row).execute(
                 "SELECT * FROM tenants WHERE id = %s",
                 (str(tenant_id),),
             ).fetchone()
@@ -86,8 +84,7 @@ class PostgresTenantRepository(TenantRepository):
         name: str,
     ) -> Tenant | None:
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            row = conn.execute(
+            row = conn.cursor(row_factory=dict_row).execute(
                 "SELECT * FROM tenants WHERE name = %s",
                 (name,),
             ).fetchone()

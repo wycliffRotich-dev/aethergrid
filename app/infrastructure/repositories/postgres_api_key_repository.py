@@ -113,8 +113,7 @@ class PostgresApiKeyRepository(ApiKeyRepository):
         tenant_id: TenantId,
     ) -> ApiKey | None:
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            row = conn.execute(
+            row = conn.cursor(row_factory=dict_row).execute(
                 """
                 SELECT * FROM api_keys
                 WHERE id = %s AND tenant_id = %s
@@ -128,8 +127,7 @@ class PostgresApiKeyRepository(ApiKeyRepository):
         key_hash: str,
     ) -> ApiKey | None:
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            row = conn.execute(
+            row = conn.cursor(row_factory=dict_row).execute(
                 "SELECT * FROM api_keys WHERE key_hash = %s",
                 (key_hash,),
             ).fetchone()
@@ -141,8 +139,7 @@ class PostgresApiKeyRepository(ApiKeyRepository):
         tenant_id: TenantId,
     ) -> list[ApiKey]:
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            rows = conn.execute(
+            rows = conn.cursor(row_factory=dict_row).execute(
                 """
                 SELECT * FROM api_keys
                 WHERE issued_by = %s AND tenant_id = %s

@@ -77,9 +77,7 @@ class PostgresEventRepository(EventRepository):
         """
 
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-
-            rows = conn.execute(
+            rows = conn.cursor(row_factory=dict_row).execute(
                 """
                 SELECT *
                 FROM events
@@ -103,9 +101,7 @@ class PostgresEventRepository(EventRepository):
         """
 
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-
-            rows = conn.execute(
+            rows = conn.cursor(row_factory=dict_row).execute(
                 """
                 SELECT *
                 FROM events

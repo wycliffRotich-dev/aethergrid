@@ -95,8 +95,7 @@ class PostgresLeaseRepository(LeaseRepository):
 
     def get_by_job_id(self, job_id: JobId) -> Lease | None:
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            row = conn.execute(
+            row = conn.cursor(row_factory=dict_row).execute(
                 "SELECT * FROM leases WHERE job_id = %s",
                 (str(job_id),),
             ).fetchone()
@@ -104,8 +103,7 @@ class PostgresLeaseRepository(LeaseRepository):
 
     def get_by_worker_id(self, worker_id: WorkerId) -> Lease | None:
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            row = conn.execute(
+            row = conn.cursor(row_factory=dict_row).execute(
                 "SELECT * FROM leases WHERE worker_id = %s",
                 (str(worker_id),),
             ).fetchone()
@@ -113,8 +111,11 @@ class PostgresLeaseRepository(LeaseRepository):
 
     def list(self) -> list[Lease]:
         with self._pool.connection() as conn:
-            conn.row_factory = dict_row
-            rows = conn.execute("SELECT * FROM leases").fetchall()
+            rows = (
+                conn.cursor(row_factory=dict_row)
+                .execute("SELECT * FROM leases")
+                .fetchall()
+            )
         return [self._to_entity(row) for row in rows]
 
     def delete(self, job_id: JobId) -> None:

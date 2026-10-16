@@ -38,6 +38,12 @@ class TestPostgresTenantRepositoryContract(
     @pytest.fixture
     def repository(self, pool):
         with pool.connection() as conn:
+            # api_keys.tenant_id references tenants, so keys that other
+            # tests left under another tenant must go first.
+            conn.execute(
+                "DELETE FROM api_keys WHERE tenant_id <> %s",
+                (str(DEFAULT_TENANT_ID),),
+            )
             conn.execute(
                 "DELETE FROM tenants WHERE id <> %s",
                 (str(DEFAULT_TENANT_ID),),
