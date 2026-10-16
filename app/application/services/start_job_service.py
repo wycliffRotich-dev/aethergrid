@@ -15,6 +15,7 @@ from app.domain.repositories.worker_repository import (
     WorkerRepository,
 )
 from app.domain.value_objects.job_id import JobId
+from app.domain.value_objects.tenant_id import TenantId
 from app.domain.value_objects.worker_id import WorkerId
 
 
@@ -44,12 +45,14 @@ class StartJobService:
         self,
         worker_id: WorkerId,
         job_id: JobId,
+        tenant_id: TenantId,
     ) -> Worker:
         """
         Transition the worker's currently held job to RUNNING.
 
         Raises:
-            WorkerNotFoundError: the worker does not exist.
+            WorkerNotFoundError: the worker does not exist, or
+                its node is in another tenant.
             WorkerJobMismatchError: the worker exists but does
                 not currently hold job_id as its running_job.
         """
@@ -57,7 +60,10 @@ class StartJobService:
             worker_id,
         )
 
-        if worker is None:
+        # A worker belongs to the tenant of its node. One in
+        # another tenant is a missing worker, and this runs before
+        # the job check and every write (ADR 0073 Decision 4).
+        if worker is None or worker.node.tenant_id != tenant_id:
             raise WorkerNotFoundError(worker_id)
 
         if (
