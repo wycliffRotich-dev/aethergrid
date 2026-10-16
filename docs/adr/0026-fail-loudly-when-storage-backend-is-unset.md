@@ -1,5 +1,18 @@
 # ADR 0026: Fail Loudly When the Storage Backend Is Unset
 
+## Status
+
+Accepted and implemented. The check is in `_build_repositories()` in
+`app/presentation/dependencies.py`, not in `get_create_api_key_service()`
+as the Decision names it. That function returns repositories built once,
+when the module is imported, and `_build_repositories()` is where the
+variable is read. An unset `NEUROMESH_STORAGE_BACKEND` and an
+unrecognized value both raise `RuntimeError`, and the value is compared
+case-insensitively. `tests/presentation/test_storage_backend_must_be_explicit.py`
+pins both refusals and the two backends that run without a database. It
+was checked by putting a silent `"memory"` default back: the unset-variable
+test then fails.
+
 ## Context
 
 `scripts/issue_api_key.py` calls `get_create_api_key_service()`, which reads `NEUROMESH_STORAGE_BACKEND` from the environment and defaults to `"memory"` if it is not set. Running the script without that variable set to `postgres` produces no error and no warning. It prints a normal looking success message and a valid looking key, but the key is written into an in-memory repository that is discarded the moment the process exits. The key never reaches the actual database, and any later attempt to authenticate with it fails with a generic invalid credential error, which gives no indication that the real problem was an unset environment variable at issuance time, not anything wrong with the key itself.
