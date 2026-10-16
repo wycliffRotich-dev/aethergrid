@@ -1,4 +1,4 @@
-# ADR-0006: Worker Registration API
+# ADR-0004: Worker Registration API
 
 **Status:** Accepted
 

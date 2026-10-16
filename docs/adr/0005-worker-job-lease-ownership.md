@@ -1,4 +1,4 @@
-# ADR 0007: Worker Job Lease Ownership Model
+# ADR 0005: Worker Job Lease Ownership Model
 
 ## Status
 
