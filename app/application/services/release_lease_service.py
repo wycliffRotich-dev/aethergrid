@@ -5,6 +5,9 @@ from uuid import UUID
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
+from app.domain.exceptions.job_not_found_error import (
+    JobNotFoundError,
+)
 from app.domain.exceptions.lease_not_found_error import (
     LeaseNotFoundError,
 )
@@ -13,6 +16,9 @@ from app.domain.exceptions.no_active_lease_error import (
 )
 from app.domain.exceptions.worker_not_found_error import (
     WorkerNotFoundError,
+)
+from app.domain.repositories.job_repository import (
+    JobRepository,
 )
 from app.domain.repositories.lease_repository import (
     LeaseRepository,
@@ -55,10 +61,20 @@ class ReleaseLeaseService:
         lease_repository: LeaseRepository,
         worker_repository: WorkerRepository,
         record_job_events_service: RecordJobEventsService | None = None,
+        job_repository: JobRepository | None = None,
     ) -> None:
+        # An event takes its tenant from its job (ADR 0074), and the
+        # lease holds only the job id. Recording therefore needs a
+        # job repository, and this refuses the pair that cannot work.
+        if record_job_events_service is not None and job_repository is None:
+            raise ValueError(
+                "record_job_events_service needs a job_repository"
+            )
+
         self._lease_repository = lease_repository
         self._worker_repository = worker_repository
         self._record_job_events_service = record_job_events_service
+        self._job_repository = job_repository
 
     def execute(
         self,
@@ -91,12 +107,26 @@ class ReleaseLeaseService:
         if worker is None:
             raise WorkerNotFoundError(worker_id)
 
+        job = None
+
+        if self._record_job_events_service is not None:
+            # The lookup comes before the delete, so a missing job
+            # leaves the lease in place. The caller holds a job id and
+            # no tenant, which is the case the repository reserves
+            # get_by_id_across_tenants for (ADR 0064 point 4).
+            job = self._job_repository.get_by_id_across_tenants(
+                lease.job_id,
+            )
+
+            if job is None:
+                raise JobNotFoundError(lease.job_id)
+
         self._lease_repository.delete(
             lease.job_id,
         )
 
-        if self._record_job_events_service is not None:
-            self._record_job_events_service.record(
-                aggregate_id=str(lease.job_id),
+        if job is not None:
+            self._record_job_events_service.record_for_job(
+                job,
                 event_type="LeaseReleased",
             )

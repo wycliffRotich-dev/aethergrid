@@ -4,7 +4,10 @@ from app.application.services.get_job_history_service import (
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
+from app.domain.entities.event import Event
+from app.domain.entities.job import Job
 from app.domain.entities.tenant import DEFAULT_TENANT_ID
+from app.domain.value_objects.event_id import EventId
 from app.domain.value_objects.tenant_id import TenantId
 from app.infrastructure.repositories.in_memory_event_repository import (
     InMemoryEventRepository,
@@ -19,16 +22,15 @@ _EVENT_TYPES = ("JobCreated", "JobQueued", "JobScheduled")
 
 def _record_history(
     event_repository: InMemoryEventRepository,
-    aggregate_id: str,
+    job: Job,
 ) -> None:
     recorder = RecordJobEventsService(
         event_repository=event_repository,
     )
 
     for event_type in _EVENT_TYPES:
-        recorder.record(
-            aggregate_id=aggregate_id,
-            aggregate_type="Job",
+        recorder.record_for_job(
+            job,
             event_type=event_type,
         )
 
@@ -36,7 +38,7 @@ def _record_history(
 def test_returns_job_history() -> None:
     job = make_job()
     event_repository = InMemoryEventRepository()
-    _record_history(event_repository, str(job.id))
+    _record_history(event_repository, job)
 
     service = GetJobHistoryService(
         job_repository=InMemoryJobRepository([job]),
@@ -58,7 +60,7 @@ def test_a_job_in_another_tenant_has_no_history() -> None:
     """
     job = make_job()
     event_repository = InMemoryEventRepository()
-    _record_history(event_repository, str(job.id))
+    _record_history(event_repository, job)
 
     service = GetJobHistoryService(
         job_repository=InMemoryJobRepository([job]),
@@ -81,7 +83,7 @@ def test_a_job_in_another_tenant_has_no_history() -> None:
 def test_a_missing_job_has_no_history() -> None:
     never_saved = make_job()
     event_repository = InMemoryEventRepository()
-    _record_history(event_repository, str(never_saved.id))
+    _record_history(event_repository, never_saved)
 
     service = GetJobHistoryService(
         job_repository=InMemoryJobRepository(),
@@ -98,7 +100,15 @@ def test_a_missing_job_has_no_history() -> None:
 
 def test_an_id_that_is_not_a_uuid_has_no_history() -> None:
     event_repository = InMemoryEventRepository()
-    _record_history(event_repository, "job-123")
+    event_repository.save(
+        Event(
+            id=EventId.new(),
+            aggregate_id="job-123",
+            aggregate_type="Job",
+            event_type="JobCreated",
+            tenant_id=DEFAULT_TENANT_ID,
+        )
+    )
 
     service = GetJobHistoryService(
         job_repository=InMemoryJobRepository(),

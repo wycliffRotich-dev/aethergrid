@@ -248,8 +248,8 @@ class WorkerExecutionLoop:
             )
 
             if self._record_job_events_service is not None:
-                self._record_job_events_service.record(
-                    aggregate_id=str(job.id),
+                self._record_job_events_service.record_for_job(
+                    job,
                     event_type="JobCancelled",
                 )
         elif result.succeeded:
@@ -258,8 +258,8 @@ class WorkerExecutionLoop:
             )
 
             if self._record_job_events_service is not None:
-                self._record_job_events_service.record(
-                    aggregate_id=str(job.id),
+                self._record_job_events_service.record_for_job(
+                    job,
                     event_type="JobCompleted",
                 )
         else:
@@ -268,8 +268,8 @@ class WorkerExecutionLoop:
             )
 
             if self._record_job_events_service is not None:
-                self._record_job_events_service.record(
-                    aggregate_id=str(job.id),
+                self._record_job_events_service.record_for_job(
+                    job,
                     event_type="JobFailed",
                 )
 

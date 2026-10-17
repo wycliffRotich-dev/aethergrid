@@ -105,24 +105,28 @@ def test_the_event_repository_leaves_the_default_row_factory(
     single_connection_pool: ConnectionPool,
 ) -> None:
     repository = PostgresEventRepository(single_connection_pool)
+    job = make_job()
+    PostgresJobRepository(single_connection_pool).save(job)
     event = Event(
         id=EventId.from_string(str(uuid.uuid4())),
-        aggregate_id="row-factory-probe",
-        aggregate_type="probe",
+        aggregate_id=str(job.id),
+        aggregate_type="Job",
         event_type="ProbeEvent",
+        tenant_id=job.tenant_id,
         occurred_at=utc_now(),
         payload={},
     )
     try:
         repository.save(event)
 
-        assert len(repository.list_by_aggregate("row-factory-probe")) == 1
+        assert len(repository.list_by_aggregate(str(job.id))) == 1
         assert any(e.id == event.id for e in repository.list())
 
         assert _row_factory_after(single_connection_pool) is tuple_row
     finally:
         with single_connection_pool.connection() as conn:
             conn.execute("DELETE FROM events WHERE id = %s", (str(event.id),))
+            conn.execute("DELETE FROM jobs WHERE id = %s", (str(job.id),))
 
 
 def test_the_lease_repository_leaves_the_default_row_factory(

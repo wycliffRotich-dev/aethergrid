@@ -138,8 +138,8 @@ class ReportJobOutcomeService:
         )
 
         if self._record_job_events_service is not None:
-            self._record_job_events_service.record(
-                aggregate_id=str(job.id),
+            self._record_job_events_service.record_for_job(
+                job,
                 event_type=event_type,
             )
 

@@ -65,9 +65,8 @@ class CreateJobService:
             job,
         )
 
-        self._record_job_events_service.record(
-            aggregate_id=str(job.id),
-            aggregate_type="Job",
+        self._record_job_events_service.record_for_job(
+            job,
             event_type="JobCreated",
         )
 
