@@ -92,7 +92,12 @@ jobs:
           [ "$drop" = '["ALL"]' ] || { echo "::error::migrate CapDrop is $drop"; exit 1; }
           echo "$opt" | grep -q 'no-new-privileges' || { echo "::error::migrate SecurityOpt is $opt"; exit 1; }
           version=$(docker compose exec -T postgres psql -U neuromesh -d neuromesh -tAc "SELECT max(version) FROM schema_migrations")
-          [ "$version" = "1" ] || { echo "::error::schema_migrations holds version $version, expected 1"; exit 1; }
+          # The expected version is the number of migration files, so a
+          # new migration does not need this step edited. The loader
+          # refuses a gap in the numbering, so the count is the highest
+          # version.
+          expected=$(ls app/infrastructure/migrations/versions/*.sql | wc -l)
+          [ "$version" = "$expected" ] || { echo "::error::schema_migrations holds version $version, expected $expected"; exit 1; }
 
       - name: App runs as uid 10001 with no effective capabilities
         run: |
