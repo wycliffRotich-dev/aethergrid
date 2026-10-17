@@ -52,9 +52,12 @@ class Db:
     conn: psycopg.Connection
 
     def run_baseline(self) -> list[int]:
+        return self.run_up_to(1)
+
+    def run_up_to(self, version: int) -> list[int]:
         return apply_migrations(
             self.url,
-            load_migrations(MIGRATIONS_DIR),
+            [m for m in load_migrations(MIGRATIONS_DIR) if m.version <= version],
             connect_kwargs=self.connect_kwargs,
             lock_key=self.lock_key,
             lock_timeout_seconds=10.0,
@@ -83,10 +86,13 @@ def db(test_database_url: str) -> Iterator[Db]:
             conn.execute(f'DROP SCHEMA "{schema}" CASCADE')
 
 
-def test_the_real_migration_set_loads_and_is_just_the_baseline() -> None:
+def test_the_real_migration_set_is_the_baseline_and_the_events_tenant() -> None:
     migrations = load_migrations(MIGRATIONS_DIR)
 
-    assert [m.name for m in migrations] == ["0001_baseline.sql"]
+    assert [m.name for m in migrations] == [
+        "0001_baseline.sql",
+        "0002_give_events_a_tenant.sql",
+    ]
     assert migrations[0].transactional is False
 
 

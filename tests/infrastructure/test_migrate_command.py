@@ -49,15 +49,20 @@ def _password_file(tmp_path: Path, content: str | None) -> Path:
     return path
 
 
-def test_applies_the_baseline_to_an_empty_database(
+def test_applies_every_migration_to_an_empty_database(
     scratch: psycopg.Connection,
     test_database_url: str,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     assert main({URL_ENV: test_database_url}) == 0
 
-    assert "applied 0001_baseline.sql" in capsys.readouterr().out
-    assert scratch.execute("SELECT version FROM schema_migrations").fetchall() == [(1,)]
+    output = capsys.readouterr().out
+    assert "applied 0001_baseline.sql" in output
+    assert "applied 0002_give_events_a_tenant.sql" in output
+    assert scratch.execute("SELECT version FROM schema_migrations").fetchall() == [
+        (1,),
+        (2,),
+    ]
     tenants = scratch.execute("SELECT id::text FROM tenants").fetchall()
     assert tenants == [(str(DEFAULT_TENANT_ID),)]
 
