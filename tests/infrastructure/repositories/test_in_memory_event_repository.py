@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
 from app.domain.entities.event import Event
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.value_objects.event_id import EventId
 from app.infrastructure.repositories.in_memory_event_repository import (
     InMemoryEventRepository,
@@ -14,6 +15,7 @@ def test_save_and_list_events() -> None:
         id=EventId.new(),
         aggregate_id="job-1",
         aggregate_type="Job",
+        tenant_id=DEFAULT_TENANT_ID,
         event_type="JobQueued",
         occurred_at=datetime.now(UTC),
         payload={
@@ -39,6 +41,7 @@ def test_list_events_by_aggregate() -> None:
         id=EventId.new(),
         aggregate_id="job-1",
         aggregate_type="Job",
+        tenant_id=DEFAULT_TENANT_ID,
         event_type="JobQueued",
         payload={},
     )
@@ -47,6 +50,7 @@ def test_list_events_by_aggregate() -> None:
         id=EventId.new(),
         aggregate_id="job-2",
         aggregate_type="Job",
+        tenant_id=DEFAULT_TENANT_ID,
         event_type="JobQueued",
         payload={},
     )

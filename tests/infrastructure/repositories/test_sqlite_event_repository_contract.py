@@ -1,7 +1,9 @@
 from sqlite3 import Connection
 
 from app.domain.entities.event import Event
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.value_objects.event_id import EventId
+from app.domain.value_objects.tenant_id import TenantId
 from app.infrastructure.repositories.sqlite_connection import (
     create_connection,
 )
@@ -33,6 +35,7 @@ class TestSqliteEventRepositoryContract:
             id=EventId.new(),
             aggregate_id="job-123",
             aggregate_type="Job",
+            tenant_id=DEFAULT_TENANT_ID,
             event_type="JobCreated",
         )
 
@@ -56,6 +59,7 @@ class TestSqliteEventRepositoryContract:
             id=EventId.new(),
             aggregate_id="job-1",
             aggregate_type="Job",
+            tenant_id=DEFAULT_TENANT_ID,
             event_type="JobCreated",
         )
 
@@ -63,6 +67,7 @@ class TestSqliteEventRepositoryContract:
             id=EventId.new(),
             aggregate_id="job-2",
             aggregate_type="Job",
+            tenant_id=DEFAULT_TENANT_ID,
             event_type="JobCreated",
         )
 
@@ -70,6 +75,7 @@ class TestSqliteEventRepositoryContract:
             id=EventId.new(),
             aggregate_id="job-1",
             aggregate_type="Job",
+            tenant_id=DEFAULT_TENANT_ID,
             event_type="JobScheduled",
         )
 
@@ -93,3 +99,79 @@ class TestSqliteEventRepositoryContract:
 
         assert events[0].id == first.id
         assert events[1].id == third.id
+
+    def test_the_tenant_round_trips(
+        self,
+    ) -> None:
+        tenant_id = TenantId.new()
+        event = Event(
+            id=EventId.new(),
+            aggregate_id="job-1",
+            aggregate_type="Job",
+            event_type="JobCreated",
+            tenant_id=tenant_id,
+        )
+
+        self.repository.save(
+            event,
+        )
+
+        assert self.repository.list()[0].tenant_id == tenant_id
+
+    def test_an_events_table_from_before_tenancy_is_upgraded(
+        self,
+    ) -> None:
+        connection = create_connection(
+            ":memory:",
+        )
+        connection.execute(
+            """
+            CREATE TABLE events (
+                id TEXT PRIMARY KEY,
+                aggregate_id TEXT NOT NULL,
+                aggregate_type TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                occurred_at TEXT NOT NULL,
+                payload TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "INSERT INTO events VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                str(EventId.new()),
+                "job-old",
+                "Job",
+                "JobCreated",
+                "2026-01-01T00:00:00+00:00",
+                "{}",
+            ),
+        )
+        connection.commit()
+
+        repository = SqliteEventRepository(
+            connection,
+        )
+
+        columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(events)",
+            )
+        }
+        assert "tenant_id" in columns
+        assert repository.list() == []
+        assert repository.list_by_aggregate("job-old") == []
+
+        event = Event(
+            id=EventId.new(),
+            aggregate_id="job-new",
+            aggregate_type="Job",
+            event_type="JobCreated",
+            tenant_id=DEFAULT_TENANT_ID,
+        )
+        repository.save(
+            event,
+        )
+
+        assert [e.id for e in repository.list()] == [event.id]

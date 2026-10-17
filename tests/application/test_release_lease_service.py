@@ -12,7 +12,11 @@ from app.application.services.release_lease_service import (
 )
 from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.entities.worker import Worker
+from app.domain.exceptions.job_not_found_error import (
+    JobNotFoundError,
+)
 from app.domain.exceptions.lease_not_found_error import (
     LeaseNotFoundError,
 )
@@ -27,9 +31,13 @@ from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from app.domain.value_objects.tenant_id import TenantId
 from app.domain.value_objects.worker_id import WorkerId
 from app.infrastructure.repositories.in_memory_event_repository import (
     InMemoryEventRepository,
+)
+from app.infrastructure.repositories.in_memory_job_repository import (
+    InMemoryJobRepository,
 )
 from app.infrastructure.repositories.in_memory_lease_repository import (
     InMemoryLeaseRepository,
@@ -209,6 +217,7 @@ def test_execute_records_lease_released_event() -> None:
         lease_repository=lease_repository,
         worker_repository=worker_repository,
         record_job_events_service=record_job_events_service,
+        job_repository=InMemoryJobRepository([job]),
     )
 
     service.execute(worker.id, lease.id)
@@ -219,6 +228,88 @@ def test_execute_records_lease_released_event() -> None:
     assert recorded[0].event_type == "LeaseReleased"
     assert recorded[0].aggregate_id == str(job.id)
     assert recorded[0].aggregate_type == "Job"
+    assert recorded[0].tenant_id == job.tenant_id
+
+
+def test_the_event_takes_the_tenant_of_the_job_named_by_the_lease() -> None:
+    """
+    A job in a tenant other than the default is the case that tells a
+    real lookup apart from a default tenant (ADR 0074 decision 2).
+    """
+    worker, _ = _make_worker_with_running_job()
+    other_tenant = TenantId.new()
+    job = make_job(tenant_id=other_tenant)
+
+    lease = Lease.create(
+        worker_id=worker.id,
+        job_id=job.id,
+    )
+
+    lease_repository = InMemoryLeaseRepository()
+    lease_repository.save(lease)
+
+    events = InMemoryEventRepository()
+
+    service = ReleaseLeaseService(
+        lease_repository=lease_repository,
+        worker_repository=InMemoryWorkerRepository([worker]),
+        record_job_events_service=RecordJobEventsService(
+            event_repository=events,
+        ),
+        job_repository=InMemoryJobRepository([job]),
+    )
+
+    service.execute(worker.id, lease.id)
+
+    recorded = events.list()
+
+    assert len(recorded) == 1
+    assert recorded[0].tenant_id == other_tenant
+    assert recorded[0].tenant_id != DEFAULT_TENANT_ID
+
+
+def test_execute_keeps_the_lease_when_the_job_cannot_be_found() -> None:
+    """
+    The job is looked up before the lease is deleted, so a missing
+    job changes nothing and records nothing (ADR 0074).
+    """
+    worker, job = _make_worker_with_running_job()
+
+    lease = Lease.create(
+        worker_id=worker.id,
+        job_id=job.id,
+    )
+
+    lease_repository = InMemoryLeaseRepository()
+    lease_repository.save(lease)
+
+    events = InMemoryEventRepository()
+
+    service = ReleaseLeaseService(
+        lease_repository=lease_repository,
+        worker_repository=InMemoryWorkerRepository([worker]),
+        record_job_events_service=RecordJobEventsService(
+            event_repository=events,
+        ),
+        job_repository=InMemoryJobRepository(),
+    )
+
+    with pytest.raises(JobNotFoundError):
+        service.execute(worker.id, lease.id)
+
+    assert lease_repository.get_by_worker_id(worker.id) is not None
+    assert events.list() == []
+
+
+def test_a_recorder_without_a_job_repository_is_refused() -> None:
+    with pytest.raises(ValueError):
+        ReleaseLeaseService(
+            lease_repository=InMemoryLeaseRepository(),
+            worker_repository=InMemoryWorkerRepository(),
+            record_job_events_service=RecordJobEventsService(
+                event_repository=InMemoryEventRepository(),
+            ),
+        )
 
 
 def test_execute_raises_and_preserves_an_unrelated_lease_after_reclaim_and_reacquire() -> (

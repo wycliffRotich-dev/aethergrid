@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.domain.entities.event import Event
+from app.domain.entities.job import Job
 from app.domain.repositories.event_repository import EventRepository
 from app.domain.value_objects.event_id import EventId
 
@@ -17,20 +18,22 @@ class RecordJobEventsService:
     ) -> None:
         self._event_repository = event_repository
 
-    def record(
+    def record_for_job(
         self,
-        aggregate_id: str,
+        job: Job,
         event_type: str,
-        aggregate_type: str = "Job",
     ) -> Event:
         """
-        Record a domain event.
+        Record an event about a job. The tenant is read from the job,
+        so a writer cannot file an event under the wrong tenant
+        (ADR 0074 decision 2).
         """
         event = Event(
             id=EventId.new(),
-            aggregate_type=aggregate_type,
-            aggregate_id=aggregate_id,
+            aggregate_type="Job",
+            aggregate_id=str(job.id),
             event_type=event_type,
+            tenant_id=job.tenant_id,
         )
 
         self._event_repository.save(

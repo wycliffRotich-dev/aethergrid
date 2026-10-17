@@ -386,6 +386,7 @@ _release_lease_service = ReleaseLeaseService(
     lease_repository=_lease_repository,
     worker_repository=_worker_repository,
     record_job_events_service=_record_job_events_service,
+    job_repository=_job_repository,
 )
 
 

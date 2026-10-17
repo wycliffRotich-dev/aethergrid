@@ -9,6 +9,7 @@ from app.domain.repositories.event_repository import (
     EventRepository,
 )
 from app.domain.value_objects.event_id import EventId
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class SqliteEventRepository(EventRepository):
@@ -30,12 +31,38 @@ class SqliteEventRepository(EventRepository):
                 aggregate_type TEXT NOT NULL,
                 event_type TEXT NOT NULL,
                 occurred_at TEXT NOT NULL,
-                payload TEXT NOT NULL
+                payload TEXT NOT NULL,
+                tenant_id TEXT NOT NULL
             )
             """
         )
 
+        self._upgrade_tenant_column()
+
         self._connection.commit()
+
+    def _upgrade_tenant_column(self) -> None:
+        """
+        Add the tenant column to an events table that predates it
+        (ADR 0074).
+
+        The column stays nullable on an upgraded file, because SQLite
+        cannot add a NOT NULL column without a default, and a default
+        would file old events under the wrong tenant. Old events keep
+        a null tenant and are shown to no tenant. Nothing here guesses
+        a tenant for them.
+        """
+        columns = {
+            row["name"]
+            for row in self._connection.execute(
+                "PRAGMA table_info(events)",
+            )
+        }
+
+        if "tenant_id" not in columns:
+            self._connection.execute(
+                "ALTER TABLE events ADD COLUMN tenant_id TEXT",
+            )
 
     def save(
         self,
@@ -53,9 +80,10 @@ class SqliteEventRepository(EventRepository):
                 aggregate_type,
                 event_type,
                 occurred_at,
-                payload
+                payload,
+                tenant_id
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 str(event.id),
@@ -65,6 +93,9 @@ class SqliteEventRepository(EventRepository):
                 event.occurred_at.isoformat(),
                 json.dumps(
                     event.payload,
+                ),
+                str(
+                    event.tenant_id,
                 ),
             ),
         )
@@ -86,8 +117,10 @@ class SqliteEventRepository(EventRepository):
                 aggregate_type,
                 event_type,
                 occurred_at,
-                payload
+                payload,
+                tenant_id
             FROM events
+            WHERE tenant_id IS NOT NULL
             ORDER BY rowid
             """
         ).fetchall()
@@ -107,6 +140,9 @@ class SqliteEventRepository(EventRepository):
                 ),
                 payload=json.loads(
                     row[5],
+                ),
+                tenant_id=TenantId(
+                    row[6],
                 ),
             )
             for row in rows
@@ -128,9 +164,11 @@ class SqliteEventRepository(EventRepository):
                 aggregate_type,
                 event_type,
                 occurred_at,
-                payload
+                payload,
+                tenant_id
             FROM events
             WHERE aggregate_id = ?
+            AND tenant_id IS NOT NULL
             ORDER BY rowid
             """,
             (
@@ -153,6 +191,9 @@ class SqliteEventRepository(EventRepository):
                 ),
                 payload=json.loads(
                     row[5],
+                ),
+                tenant_id=TenantId(
+                    row[6],
                 ),
             )
             for row in rows

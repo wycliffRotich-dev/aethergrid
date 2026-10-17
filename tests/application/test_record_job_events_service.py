@@ -27,8 +27,8 @@ def test_record_job_created_event() -> None:
         event_repository=repository,
     )
 
-    service.record(
-        aggregate_id=str(job.id),
+    service.record_for_job(
+        job,
         event_type="JobCreated",
     )
 
@@ -58,18 +58,18 @@ def test_record_multiple_events_for_same_job() -> None:
         event_repository=repository,
     )
 
-    service.record(
-        aggregate_id=str(job.id),
+    service.record_for_job(
+        job,
         event_type="JobCreated",
     )
 
-    service.record(
-        aggregate_id=str(job.id),
+    service.record_for_job(
+        job,
         event_type="JobScheduled",
     )
 
-    service.record(
-        aggregate_id=str(job.id),
+    service.record_for_job(
+        job,
         event_type="JobRunning",
     )
 

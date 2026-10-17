@@ -52,9 +52,8 @@ def test_record_job_scheduled_event() -> None:
         event_repository=repository,
     )
 
-    service.record(
-        aggregate_id=str(job.id),
-        aggregate_type="Job",
+    service.record_for_job(
+        job,
         event_type="JobScheduled",
     )
 
@@ -64,3 +63,4 @@ def test_record_job_scheduled_event() -> None:
 
     assert len(events) == 1
     assert events[0].event_type == "JobScheduled"
+    assert events[0].tenant_id == job.tenant_id

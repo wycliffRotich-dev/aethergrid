@@ -63,17 +63,26 @@ The attacker holds a valid key in tenant B and knows nothing else.
 2. **An event carries its tenant, and the writer does not choose it.**
    `Event` gets a required `tenant_id`. The recording service takes
    the job and reads `job.tenant_id` itself, so there is no tenant
-   argument to get wrong. The free form `record(aggregate_id, ...)`
-   goes away once its callers have moved. `aggregate_type` stays on
-   the event, so the response does not change.
+   argument to get wrong. `record_for_job(job, event_type)` replaced
+   the free form `record(aggregate_id, ...)`. `aggregate_type` stays
+   on the event, so the response does not change. One writer holds a
+   job id and no job: `ReleaseLeaseService` has a lease. It looks the
+   job up with `get_by_id_across_tenants`, before it deletes the
+   lease, and a missing job raises `JobNotFoundError` and changes
+   nothing. That use is on the allowlist in
+   `test_across_tenants_callers.py` and leaves it when leases carry a
+   tenant. The service refuses a recorder without a job repository.
 
 3. **The database refuses an event in the wrong tenant.** `events`
    gets a typed `job_id` and a `tenant_id`, a composite foreign key
    from `(job_id, tenant_id)` to `jobs (id, tenant_id)` in the same
    form as `jobs_assigned_node_same_tenant` (ADR 0064 point 7), and a
    check that `aggregate_id` equals `job_id` as text when `job_id` is
-   set. The text `aggregate_id` stays, so the API and the dashboard do
-   not change.
+   set. A second check keeps `job_id` and `tenant_id` null together or
+   set together, because a composite key skips a row with a null
+   column and would let a row with a job and no tenant through. The
+   text `aggregate_id` stays, so the API and the dashboard do not
+   change.
 
 4. **Reads require the tenant.** `list(tenant_id)` and
    `list_by_aggregate(aggregate_id, tenant_id)` take it with no
@@ -197,14 +206,20 @@ It is a different kind of change and belongs in its own ADR.
 
 ## Open questions
 
-- Whether `release_lease_service` has the job in hand when it records,
-  or needs a lookup.
-- Whether anything besides `ListEventsService` calls
-  `EventRepository.list`.
-- How SQLite and the in-memory repository keep property 3, since they
-  have no composite key to enforce it.
 - How soon `0003` can follow, which depends on how long an older image
   stays deployed.
+
+Answered while writing slice 1:
+
+- `ReleaseLeaseService` did not have the job and needed a lookup. See
+  decision 2.
+- In the application code, only `ListEventsService` calls
+  `EventRepository.list`.
+- SQLite and the in-memory repository keep property 3 only through
+  the recorder, which reads the tenant from the job. Neither has a
+  composite key, so nothing there refuses a wrong tenant. An upgraded
+  SQLite file keeps its old events with no tenant, and they are shown
+  to nobody.
 
 ## Follow-ups
 
@@ -234,3 +249,13 @@ Nothing else in this ADR is merged yet.
 still takes no caller and returns the events of every tenant to any
 valid key. A foreign key learns job ids, event types and times. The
 payload is empty today, so it does not learn commands or resources.
+
+2026-10-17. Slice 1 is written. Migration 0002 adds `job_id` and
+`tenant_id` to `events`, with the composite key and two checks. `Event`
+carries a required `TenantId`, and all twelve writers record through
+`record_for_job`, which reads it from the job. The Postgres and SQLite
+repositories write it and skip an event with no tenant. The Postgres
+save no longer overwrites a repeated id. Tests cover each of these,
+including an event in another tenant's job being refused by the
+database. The reads are not scoped yet: `GET /events` still lists the
+events of every tenant that has one. The leak stays open until slice 2.

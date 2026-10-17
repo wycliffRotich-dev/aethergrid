@@ -10,6 +10,7 @@ from app.domain.repositories.event_repository import (
     EventRepository,
 )
 from app.domain.value_objects.event_id import EventId
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class PostgresEventRepository(EventRepository):
@@ -28,7 +29,13 @@ class PostgresEventRepository(EventRepository):
         event: Event,
     ) -> None:
         """
-        Persist a domain event.
+        Persist a domain event (ADR 0074).
+
+        job_id is read from aggregate_id in the statement, so an
+        aggregate_id that is not a UUID is refused here, and the
+        composite key refuses an event whose job is missing or in
+        another tenant. A repeated id changes nothing: an event is
+        immutable, and an overwrite could move it to another tenant.
         """
 
         with self._pool.connection() as conn:
@@ -40,7 +47,9 @@ class PostgresEventRepository(EventRepository):
                     aggregate_type,
                     event_type,
                     occurred_at,
-                    payload
+                    payload,
+                    job_id,
+                    tenant_id
                 )
                 VALUES (
                     %(id)s,
@@ -48,14 +57,11 @@ class PostgresEventRepository(EventRepository):
                     %(aggregate_type)s,
                     %(event_type)s,
                     %(occurred_at)s,
-                    %(payload)s
+                    %(payload)s,
+                    %(job_id)s::uuid,
+                    %(tenant_id)s
                 )
-                ON CONFLICT (id) DO UPDATE SET
-                    aggregate_id = EXCLUDED.aggregate_id,
-                    aggregate_type = EXCLUDED.aggregate_type,
-                    event_type = EXCLUDED.event_type,
-                    occurred_at = EXCLUDED.occurred_at,
-                    payload = EXCLUDED.payload
+                ON CONFLICT (id) DO NOTHING
                 """,
                 {
                     "id": str(event.id),
@@ -66,6 +72,8 @@ class PostgresEventRepository(EventRepository):
                     "payload": json.dumps(
                         event.payload,
                     ),
+                    "job_id": event.aggregate_id,
+                    "tenant_id": str(event.tenant_id),
                 },
             )
 
@@ -73,7 +81,10 @@ class PostgresEventRepository(EventRepository):
         self,
     ) -> list[Event]:
         """
-        Return every persisted event.
+        Return every persisted event that has a tenant.
+
+        An event an older image wrote without a tenant is skipped,
+        so it is shown to nobody (ADR 0074 decision 7).
         """
 
         with self._pool.connection() as conn:
@@ -81,6 +92,7 @@ class PostgresEventRepository(EventRepository):
                 """
                 SELECT *
                 FROM events
+                WHERE tenant_id IS NOT NULL
                 ORDER BY occurred_at
                 """,
             ).fetchall()
@@ -97,7 +109,8 @@ class PostgresEventRepository(EventRepository):
         aggregate_id: str,
     ) -> list[Event]:
         """
-        Return every event belonging to one aggregate.
+        Return every event belonging to one aggregate, skipping an
+        event that has no tenant (ADR 0074 decision 7).
         """
 
         with self._pool.connection() as conn:
@@ -106,6 +119,7 @@ class PostgresEventRepository(EventRepository):
                 SELECT *
                 FROM events
                 WHERE aggregate_id = %s
+                AND tenant_id IS NOT NULL
                 ORDER BY occurred_at
                 """,
                 (
@@ -147,6 +161,11 @@ class PostgresEventRepository(EventRepository):
             aggregate_id=row["aggregate_id"],
             aggregate_type=row["aggregate_type"],
             event_type=row["event_type"],
+            tenant_id=TenantId(
+                str(
+                    row["tenant_id"],
+                ),
+            ),
             occurred_at=row["occurred_at"],
             payload=payload,
         )
