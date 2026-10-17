@@ -110,8 +110,16 @@ def reset_repositories():
     def _reset() -> None:
         if backend == "postgres":
             with _job_repository._pool.connection() as conn:
+                # DELETE in one statement, not TRUNCATE. TRUNCATE ... CASCADE
+                # took about half a second per call and ran twice per
+                # test. Every table it cleared is cleared here too, plus
+                # events, which references jobs.
                 conn.execute(
-                    "TRUNCATE jobs, nodes, workers, leases CASCADE"
+                    "WITH e AS (DELETE FROM events), "
+                    "l AS (DELETE FROM leases), "
+                    "w AS (DELETE FROM workers), "
+                    "j AS (DELETE FROM jobs) "
+                    "DELETE FROM nodes"
                 )
         else:
             _job_repository.clear()
