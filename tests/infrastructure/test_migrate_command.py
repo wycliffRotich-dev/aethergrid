@@ -15,6 +15,10 @@ from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.infrastructure.database_credentials import PASSWORD_FILE_ENV, URL_ENV
 from app.infrastructure.migrations import cli
 from app.infrastructure.migrations.cli import main
+from app.infrastructure.migrations.runner import (
+    MIGRATIONS_DIR,
+    load_migrations,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 UNUSED_URL = "postgresql://u@db.invalid:5432/app"
@@ -57,11 +61,11 @@ def test_applies_every_migration_to_an_empty_database(
     assert main({URL_ENV: test_database_url}) == 0
 
     output = capsys.readouterr().out
-    assert "applied 0001_baseline.sql" in output
-    assert "applied 0002_give_events_a_tenant.sql" in output
+    migrations = load_migrations(MIGRATIONS_DIR)
+    for migration in migrations:
+        assert f"applied {migration.name}" in output
     assert scratch.execute("SELECT version FROM schema_migrations").fetchall() == [
-        (1,),
-        (2,),
+        (migration.version,) for migration in migrations
     ]
     tenants = scratch.execute("SELECT id::text FROM tenants").fetchall()
     assert tenants == [(str(DEFAULT_TENANT_ID),)]

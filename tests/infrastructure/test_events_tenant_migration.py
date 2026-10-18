@@ -8,6 +8,7 @@ import psycopg
 import pytest
 
 from app.domain.entities.tenant import DEFAULT_TENANT_ID
+from app.infrastructure.migrations.runner import MigrationError
 from tests.infrastructure.test_baseline_migration import Db
 
 
@@ -147,3 +148,68 @@ def test_an_older_image_can_still_write_an_event_with_no_tenant(db: Db) -> None:
     event = _event(db, "anything")
 
     assert _rows(db)[event] == (None, None)
+
+
+def _is_nullable(db: Db, column: str) -> bool:
+    row = db.conn.execute(
+        "SELECT is_nullable FROM information_schema.columns "
+        "WHERE table_schema = current_schema() "
+        "AND table_name = 'events' AND column_name = %s",
+        (column,),
+    ).fetchone()
+    assert row is not None
+    return row[0] == "YES"
+
+
+def _applied(db: Db, version: int) -> bool:
+    row = db.conn.execute(
+        "SELECT count(*) FROM schema_migrations WHERE version = %s",
+        (version,),
+    ).fetchone()
+    assert row is not None
+    return row[0] == 1
+
+
+def test_an_event_an_older_image_wrote_gets_its_tenant_from_its_job(
+    db: Db,
+) -> None:
+    db.run_up_to(2)
+    tenant_a = _tenant(db, "a")
+    job_a = _job(db, tenant_a)
+    legacy = _event(db, job_a)
+
+    assert _rows(db)[legacy] == (None, None)
+
+    assert db.run_up_to(3) == [3]
+
+    assert _rows(db)[legacy] == (job_a, tenant_a)
+    assert not _is_nullable(db, "job_id")
+    assert not _is_nullable(db, "tenant_id")
+
+
+def test_the_database_refuses_an_event_with_no_job_and_no_tenant(
+    db: Db,
+) -> None:
+    db.run_up_to(3)
+
+    with pytest.raises(psycopg.errors.NotNullViolation):
+        _event(db, str(uuid.uuid4()))
+
+
+def test_an_event_with_no_job_stops_the_migration_and_changes_nothing(
+    db: Db,
+) -> None:
+    db.run_up_to(2)
+    tenant_a = _tenant(db, "a")
+    job_a = _job(db, tenant_a)
+    resolvable = _event(db, job_a)
+    orphan = _event(db, str(uuid.uuid4()))
+
+    with pytest.raises((MigrationError, psycopg.Error)) as refused:
+        db.run_up_to(3)
+
+    assert "no job" in f"{refused.value} {refused.value.__cause__}"
+    assert _rows(db)[resolvable] == (None, None)
+    assert _rows(db)[orphan] == (None, None)
+    assert _is_nullable(db, "tenant_id")
+    assert not _applied(db, 3)

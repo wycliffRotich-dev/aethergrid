@@ -86,12 +86,18 @@ def db(test_database_url: str) -> Iterator[Db]:
             conn.execute(f'DROP SCHEMA "{schema}" CASCADE')
 
 
-def test_the_real_migration_set_is_the_baseline_and_the_events_tenant() -> None:
+def test_the_real_migration_set_starts_with_the_known_files() -> None:
+    """
+    An applied migration is frozen (ADR 0071): renaming or removing one
+    breaks the checksum on every migrated database. This pins the files
+    that exist, in order. A later migration may follow them.
+    """
     migrations = load_migrations(MIGRATIONS_DIR)
 
-    assert [m.name for m in migrations] == [
+    assert [m.name for m in migrations[:3]] == [
         "0001_baseline.sql",
         "0002_give_events_a_tenant.sql",
+        "0003_require_a_tenant_on_events.sql",
     ]
     assert migrations[0].transactional is False
 
