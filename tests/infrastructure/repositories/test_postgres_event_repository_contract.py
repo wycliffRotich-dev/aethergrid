@@ -218,7 +218,7 @@ class TestPostgresEventRepositoryContract:
                 event,
             )
 
-    def test_an_event_without_a_tenant_is_shown_to_nobody(
+    def test_the_database_refuses_an_event_with_no_job_and_no_tenant(
         self,
     ) -> None:
         job = self._job()
@@ -227,14 +227,16 @@ class TestPostgresEventRepositoryContract:
             event,
         )
 
-        # What an image from before this change writes: no tenant.
-        with self.pool.connection() as conn:
-            conn.execute(
-                "INSERT INTO events (id, aggregate_id, aggregate_type, "
-                "event_type, occurred_at) "
-                "VALUES (%s, %s, 'Job', 'JobCreated', now())",
-                (str(uuid.uuid4()), str(job.id)),
-            )
+        # What an image from before slice 1 writes: no job, no tenant.
+        # Migration 0003 makes the database refuse it (ADR 0074).
+        with pytest.raises(psycopg.errors.NotNullViolation):
+            with self.pool.connection() as conn:
+                conn.execute(
+                    "INSERT INTO events (id, aggregate_id, aggregate_type, "
+                    "event_type, occurred_at) "
+                    "VALUES (%s, %s, 'Job', 'JobCreated', now())",
+                    (str(uuid.uuid4()), str(job.id)),
+                )
 
         assert [e.id for e in self.repository.list(DEFAULT_TENANT_ID)] == [event.id]
         assert [
