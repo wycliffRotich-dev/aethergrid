@@ -27,7 +27,7 @@ def test_save_and_list_events() -> None:
         event,
     )
 
-    events = repository.list()
+    events = repository.list(DEFAULT_TENANT_ID)
 
     assert events == [
         event,
@@ -65,6 +65,7 @@ def test_list_events_by_aggregate() -> None:
 
     assert repository.list_by_aggregate(
         "job-1",
+        DEFAULT_TENANT_ID,
     ) == [
         event_1,
     ]

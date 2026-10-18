@@ -4,6 +4,7 @@ from app.application.services.acquire_lease_service import (
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
@@ -104,7 +105,7 @@ def test_acquire_lease_service_records_lease_acquired_event() -> None:
         job,
     )
 
-    recorded = events.list()
+    recorded = events.list(DEFAULT_TENANT_ID)
 
     assert len(recorded) == 1
     assert recorded[0].event_type == "LeaseAcquired"

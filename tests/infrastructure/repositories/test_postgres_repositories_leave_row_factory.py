@@ -119,8 +119,8 @@ def test_the_event_repository_leaves_the_default_row_factory(
     try:
         repository.save(event)
 
-        assert len(repository.list_by_aggregate(str(job.id))) == 1
-        assert any(e.id == event.id for e in repository.list())
+        assert len(repository.list_by_aggregate(str(job.id), job.tenant_id)) == 1
+        assert any(e.id == event.id for e in repository.list(job.tenant_id))
 
         assert _row_factory_after(single_connection_pool) is tuple_row
     finally:

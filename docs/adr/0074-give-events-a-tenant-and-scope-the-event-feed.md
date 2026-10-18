@@ -10,10 +10,10 @@ makes that tenant required has merged.
 Related: ADR 0064 (points 2, 4, 5, 7 and 10), ADR 0071 (decision 7),
 ADR 0072 and ADR 0073.
 
-This ADR records how ADR 0064 is applied to events. Nothing in it is
-merged. The Progress section says exactly what is. AetherGrid is not
-multi-tenant, and no document may describe it as multi-tenant until
-ADR 0064 is Accepted.
+This ADR records how ADR 0064 is applied to events. Slices 1 and 2
+are merged and slice 3 is not. The Progress section says exactly
+what is. AetherGrid is not multi-tenant, and no document may
+describe it as multi-tenant until ADR 0064 is Accepted.
 
 ## Context
 
@@ -133,8 +133,8 @@ Status today:
 
 | Route | Scoped | How |
 |---|---|---|
-| `GET /jobs/{job_id}/history` | yes | job lookup |
-| `GET /events` | no | none |
+| `GET /jobs/{job_id}/history` | yes | events read by tenant |
+| `GET /events` | yes | events read by tenant |
 
 ## Alternatives Considered
 
@@ -237,11 +237,16 @@ Answered while writing slice 1:
 ## How to Verify
 
 ```bash
+pytest tests/presentation/test_event_routes_tenant_isolation_api.py -q
+pytest tests/infrastructure/test_events_tenant_migration.py -q
+pytest tests/infrastructure/repositories/test_postgres_event_repository_contract.py -q
 grep -c "caller" app/presentation/routers/events.py
 ```
 
-It prints 0 today. It must print 1 or more once slice 2 has merged.
-Nothing else in this ADR is merged yet.
+The pytest commands pass. The grep prints 1 or more, because the
+route takes the caller. Slice 3 is not merged, so the tenant column
+is still nullable and an older image can still write an event with
+no tenant. Such an event is shown to nobody.
 
 ## Progress
 
@@ -259,3 +264,18 @@ save no longer overwrites a repeated id. Tests cover each of these,
 including an event in another tenant's job being refused by the
 database. The reads are not scoped yet: `GET /events` still lists the
 events of every tenant that has one. The leak stays open until slice 2.
+
+2026-10-18. Slice 2 is written. `EventRepository.list` and
+`list_by_aggregate` require a `TenantId` in all three repositories,
+and an event with no tenant never matches one. `GET /events` takes
+the caller and `ListEventsService` passes its tenant, so a key sees
+only the events of its own tenant. `GetJobHistoryService` reads by
+tenant in one query and no longer looks the job up first. A job id
+with no events in the caller's tenant gets the same empty answer
+whether the job is missing, is in another tenant or has no events.
+The new two-tenant test failed before the change, with one tenant
+receiving another's events, and passes after it. Postgres refuses
+an event with no job. The in-memory and SQLite repositories can hold
+one, and the history of such a job is returned to its own tenant.
+The leak in `GET /events` is closed. Slice 3, the migration that
+makes the columns required, is not written.

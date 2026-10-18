@@ -4,6 +4,7 @@ from app.domain.entities.event import Event
 from app.domain.repositories.event_repository import (
     EventRepository,
 )
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class InMemoryEventRepository(EventRepository):
@@ -22,15 +23,22 @@ class InMemoryEventRepository(EventRepository):
 
     def list(
         self,
+        tenant_id: TenantId,
     ) -> list[Event]:
-        return list(self._events)
+        return [
+            event
+            for event in self._events
+            if event.tenant_id == tenant_id
+        ]
 
     def list_by_aggregate(
         self,
         aggregate_id: str,
+        tenant_id: TenantId,
     ) -> list[Event]:
         return [
             event
             for event in self._events
             if event.aggregate_id == aggregate_id
+            and event.tenant_id == tenant_id
         ]

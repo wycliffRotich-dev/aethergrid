@@ -4,16 +4,11 @@ from app.application.services.get_job_history_service import (
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
-from app.domain.entities.event import Event
 from app.domain.entities.job import Job
 from app.domain.entities.tenant import DEFAULT_TENANT_ID
-from app.domain.value_objects.event_id import EventId
 from app.domain.value_objects.tenant_id import TenantId
 from app.infrastructure.repositories.in_memory_event_repository import (
     InMemoryEventRepository,
-)
-from app.infrastructure.repositories.in_memory_job_repository import (
-    InMemoryJobRepository,
 )
 from tests.support.jobs import make_job
 
@@ -41,7 +36,6 @@ def test_returns_job_history() -> None:
     _record_history(event_repository, job)
 
     service = GetJobHistoryService(
-        job_repository=InMemoryJobRepository([job]),
         event_repository=event_repository,
     )
 
@@ -63,7 +57,6 @@ def test_a_job_in_another_tenant_has_no_history() -> None:
     _record_history(event_repository, job)
 
     service = GetJobHistoryService(
-        job_repository=InMemoryJobRepository([job]),
         event_repository=event_repository,
     )
 
@@ -80,38 +73,41 @@ def test_a_job_in_another_tenant_has_no_history() -> None:
     assert len(owner) == len(_EVENT_TYPES)
 
 
-def test_a_missing_job_has_no_history() -> None:
-    never_saved = make_job()
+def test_a_job_with_no_events_has_no_history() -> None:
+    """
+    The read is made inside the caller's tenant (ADR 0074). A job
+    id with no events there, whether the job is missing or has
+    never recorded anything, gets the same empty answer. The
+    other job's history is the control: it proves events exist.
+    """
+    recorded = make_job()
+    silent = make_job()
     event_repository = InMemoryEventRepository()
-    _record_history(event_repository, never_saved)
+    _record_history(event_repository, recorded)
 
     service = GetJobHistoryService(
-        job_repository=InMemoryJobRepository(),
         event_repository=event_repository,
     )
 
     events = service.execute(
-        aggregate_id=str(never_saved.id),
+        aggregate_id=str(silent.id),
+        tenant_id=DEFAULT_TENANT_ID,
+    )
+    control = service.execute(
+        aggregate_id=str(recorded.id),
         tenant_id=DEFAULT_TENANT_ID,
     )
 
     assert events == []
+    assert len(control) == len(_EVENT_TYPES)
 
 
 def test_an_id_that_is_not_a_uuid_has_no_history() -> None:
+    job = make_job()
     event_repository = InMemoryEventRepository()
-    event_repository.save(
-        Event(
-            id=EventId.new(),
-            aggregate_id="job-123",
-            aggregate_type="Job",
-            event_type="JobCreated",
-            tenant_id=DEFAULT_TENANT_ID,
-        )
-    )
+    _record_history(event_repository, job)
 
     service = GetJobHistoryService(
-        job_repository=InMemoryJobRepository(),
         event_repository=event_repository,
     )
 

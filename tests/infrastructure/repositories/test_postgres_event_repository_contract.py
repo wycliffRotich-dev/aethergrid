@@ -99,7 +99,7 @@ class TestPostgresEventRepositoryContract:
             event,
         )
 
-        events = self.repository.list()
+        events = self.repository.list(DEFAULT_TENANT_ID)
 
         assert len(events) == 1
         assert events[0] == event
@@ -127,6 +127,7 @@ class TestPostgresEventRepositoryContract:
 
         events = self.repository.list_by_aggregate(
             str(job_one.id),
+            DEFAULT_TENANT_ID,
         )
 
         assert len(events) == 2
@@ -143,7 +144,7 @@ class TestPostgresEventRepositoryContract:
             event,
         )
 
-        assert self.repository.list()[0].tenant_id == tenant_id
+        assert self.repository.list(tenant_id)[0].tenant_id == tenant_id
 
     def test_a_repeated_id_keeps_the_first_event(
         self,
@@ -166,7 +167,7 @@ class TestPostgresEventRepositoryContract:
             again,
         )
 
-        events = self.repository.list()
+        events = self.repository.list(DEFAULT_TENANT_ID)
 
         assert len(events) == 1
         assert events[0].event_type == "JobCreated"
@@ -189,7 +190,7 @@ class TestPostgresEventRepositoryContract:
                 event,
             )
 
-        assert self.repository.list() == []
+        assert self.repository.list(DEFAULT_TENANT_ID) == []
 
     def test_an_event_for_a_missing_job_is_refused(
         self,
@@ -235,7 +236,10 @@ class TestPostgresEventRepositoryContract:
                 (str(uuid.uuid4()), str(job.id)),
             )
 
-        assert [e.id for e in self.repository.list()] == [event.id]
+        assert [e.id for e in self.repository.list(DEFAULT_TENANT_ID)] == [event.id]
         assert [
-            e.id for e in self.repository.list_by_aggregate(str(job.id))
+            e.id
+            for e in self.repository.list_by_aggregate(
+                str(job.id), DEFAULT_TENANT_ID
+            )
         ] == [event.id]

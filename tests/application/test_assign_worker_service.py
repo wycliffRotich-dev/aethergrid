@@ -9,6 +9,7 @@ from app.application.services.assign_worker_service import (
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.entities.worker import Worker
 from app.domain.enums.job_status import JobStatus
 from app.domain.enums.worker_status import WorkerStatus
@@ -188,7 +189,7 @@ def test_assign_worker_service_records_worker_assigned_event() -> None:
         job,
     )
 
-    recorded = events.list()
+    recorded = events.list(DEFAULT_TENANT_ID)
 
     assert len(recorded) == 1
     assert recorded[0].event_type == "WorkerAssigned"

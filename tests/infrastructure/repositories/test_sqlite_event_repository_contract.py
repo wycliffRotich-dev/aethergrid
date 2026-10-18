@@ -43,7 +43,7 @@ class TestSqliteEventRepositoryContract:
             event,
         )
 
-        events = self.repository.list()
+        events = self.repository.list(DEFAULT_TENANT_ID)
 
         assert len(events) == 1
 
@@ -93,6 +93,7 @@ class TestSqliteEventRepositoryContract:
 
         events = self.repository.list_by_aggregate(
             "job-1",
+            DEFAULT_TENANT_ID,
         )
 
         assert len(events) == 2
@@ -116,7 +117,7 @@ class TestSqliteEventRepositoryContract:
             event,
         )
 
-        assert self.repository.list()[0].tenant_id == tenant_id
+        assert self.repository.list(tenant_id)[0].tenant_id == tenant_id
 
     def test_an_events_table_from_before_tenancy_is_upgraded(
         self,
@@ -160,8 +161,8 @@ class TestSqliteEventRepositoryContract:
             )
         }
         assert "tenant_id" in columns
-        assert repository.list() == []
-        assert repository.list_by_aggregate("job-old") == []
+        assert repository.list(DEFAULT_TENANT_ID) == []
+        assert repository.list_by_aggregate("job-old", DEFAULT_TENANT_ID) == []
 
         event = Event(
             id=EventId.new(),
@@ -174,4 +175,4 @@ class TestSqliteEventRepositoryContract:
             event,
         )
 
-        assert [e.id for e in repository.list()] == [event.id]
+        assert [e.id for e in repository.list(DEFAULT_TENANT_ID)] == [event.id]

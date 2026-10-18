@@ -214,7 +214,7 @@ def test_recover_offline_node_records_job_reclaimed_event() -> None:
 
     service.execute()
 
-    recorded = events.list()
+    recorded = events.list(DEFAULT_TENANT_ID)
 
     assert len(recorded) == 1
     assert recorded[0].event_type == "JobReclaimed"

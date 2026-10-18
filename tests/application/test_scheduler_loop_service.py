@@ -7,6 +7,7 @@ from app.application.services.record_job_events_service import (
 from app.application.services.scheduler_loop_service import (
     SchedulerLoopService,
 )
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.enums.job_status import JobStatus
 from app.domain.enums.worker_status import WorkerStatus
 from app.domain.services.scheduler import Scheduler
@@ -176,7 +177,7 @@ def test_scheduler_loop_records_job_scheduled_event() -> None:
 
     service.execute()
 
-    recorded = events.list()
+    recorded = events.list(DEFAULT_TENANT_ID)
 
     assert len(recorded) == 1
     assert recorded[0].event_type == "JobScheduled"
