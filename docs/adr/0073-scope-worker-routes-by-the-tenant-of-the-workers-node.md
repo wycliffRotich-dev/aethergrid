@@ -2,9 +2,8 @@
 
 ## Status
 
-Proposed. It becomes Accepted when every route under `/workers` is
-scoped as Decision 7 lists, each with a passing two-tenant test, or is
-recorded here as exempt with a reason.
+Accepted. Every route under `/workers` is scoped as Decision 7 lists,
+and each has a passing two-tenant test.
 
 Related: ADR 0064 (points 5 and 8), ADR 0066, ADR 0020 and ADRs 0034
 to 0038.
@@ -134,7 +133,7 @@ Status today:
 | `POST /workers` | yes, via its node | registration test |
 | `GET /workers` | yes | list test |
 | `GET /workers/{id}` | yes | read and command tests |
-| `POST /workers/{id}/lease/renew` | yes | renew test |
+| `POST /workers/{id}/lease/renew` | yes | renew tests |
 | `POST /workers/{id}/jobs/{job_id}/start` | yes | start test |
 | `POST /workers/{id}/jobs/{job_id}/complete` | yes | outcome tests |
 | `POST /workers/{id}/jobs/{job_id}/fail` | yes | outcome tests |
@@ -185,10 +184,6 @@ implementations in the same change as the routes, and the join to
 - The repository still hands foreign workers to the service. `list`
   reads every worker and filters in Python, which is acceptable at
   current worker counts and wrong at scale. The schema work removes it.
-- The lease renewal test checks P1 only. It does not assert that the
-  foreign call left the lease unchanged, and it has no owner case. P2
-  holds because the check runs before the service call. A state
-  assertion is a follow-up.
 - `ReportJobOutcomeService._finish` loads the job's node with
   `get_by_id_across_tenants`. After the ownership check this is a
   system lookup and not a leak, and it should become a scoped read once
@@ -196,19 +191,12 @@ implementations in the same change as the routes, and the join to
 - `GET /events` was open across tenants when this ADR was written. It
   was never part of this ADR. ADR 0074 scoped it.
 - The services change signature. The two read services had no caller
-  outside the routers. The callers of the outcome service have not been
-  read yet.
+  outside the routers, and the only callers of the outcome service are
+  the three outcome handlers.
 
 ## Open questions
 
-- Whether the cluster tick or the worker execution loop call
-  `ReportJobOutcomeService`. If they do, a required tenant breaks them,
-  and ADR 0064 point 4 allows a method named `_across_tenants` for a
-  system actor.
-- Whether the dashboard's `useWorkerHeartbeatKeeper` heartbeats with a
-  key from the same tenant as the workers it lists. It lists them
-  through `GET /workers`, which is scoped, so it should. The hook has
-  not been read for this ADR.
+None. The two that were open are answered in Progress.
 
 ## Follow-ups
 
@@ -227,6 +215,7 @@ pytest tests/presentation/test_worker_routes_tenant_isolation_api.py -q
 pytest tests/presentation/test_worker_outcome_routes_tenant_isolation_api.py -q
 pytest tests/presentation/test_worker_start_route_tenant_isolation_api.py -q
 pytest tests/presentation/test_worker_heartbeat_route_tenant_isolation_api.py -q
+pytest tests/presentation/test_worker_renew_route_tenant_isolation_api.py -q
 grep -c "caller: Annotated\[ApiKey" app/presentation/routers/workers.py
 ```
 
@@ -297,3 +286,23 @@ status are unchanged. The owner gets 200 and the worker returns to
 IDLE. The foreign test failed with 200 before the change and passed
 after. Service tests cover the foreign and the missing worker, and two
 entity tests cover `belongs_to`. The full suite passed (867).
+
+2026-10-18. The lease renewal test now sends the worker's real lease
+id. Lease fencing (ADR 0038) rejects a wrong id by itself, so the
+earlier test passed whether or not the tenant check ran. A key from
+another tenant gets 404, the body matches the one for a missing worker
+once the worker id is masked, and the lease keeps its id and its
+expiry. The worker's own tenant renews the lease, gets 200 and sees a
+later expiry. With the tenant filter in `GetWorkerService` disabled in
+memory, the foreign case failed with 200 and the owner case passed, so
+the test measures the tenant check. The full suite passed (869).
+
+The two open questions are answered. `ReportJobOutcomeService` is
+built in `dependencies.py` and called only by the three outcome
+handlers in `routers/workers.py`. The worker execution loop calls
+`worker.complete()` and `worker.fail()` on the entity and not the
+service, so no system actor needed a tenant-free path. The dashboard's
+`useWorkerHeartbeatKeeper` lists workers through `GET /workers` and
+heartbeats only the ids it receives, so scoping heartbeat does not
+take its workers offline. Every route under `/workers` is scoped and
+has a two-tenant test, and the status is Accepted.
