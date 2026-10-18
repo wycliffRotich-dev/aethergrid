@@ -230,9 +230,9 @@ Answered while writing slice 1:
 - Slice 3: migration `0003`, in a later release.
 - An ADR for paging the feed.
 - The route registry test of ADR 0064 point 10. It lists every route.
-  `GET /events` and `POST /workers/{id}/heartbeat` are known to be
-  unscoped, and the three `/api-keys` routes still need a two-tenant
-  check.
+  `GET /events` and `POST /workers/{id}/heartbeat` were unscoped when
+  this was written and are scoped now (this ADR and ADR 0073). The
+  three `/api-keys` routes still need a two-tenant check.
 
 ## How to Verify
 
@@ -279,3 +279,12 @@ an event with no job. The in-memory and SQLite repositories can hold
 one, and the history of such a job is returned to its own tenant.
 The leak in `GET /events` is closed. Slice 3, the migration that
 makes the columns required, is not written.
+
+2026-10-18. Slices 1 and 2 are merged, as #368 and #369. The full
+suite passed (861) before slice 2 merged, and the migration and
+Postgres repository contract tests pass against Postgres 16 (14
+tests). `GET /events` has two route tests: the feed holds only the
+caller's own events, and a tenant with no events gets an empty feed.
+Slice 3 is not written. The tenant column is still nullable, an older
+image can still write an event with no tenant, and such an event is
+shown to nobody.
