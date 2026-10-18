@@ -611,7 +611,6 @@ def get_get_job_history_service() -> GetJobHistoryService:
     """
 
     return GetJobHistoryService(
-        job_repository=_job_repository,
         event_repository=_event_repository,
     )
 

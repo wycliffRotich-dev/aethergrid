@@ -4,6 +4,7 @@ from app.domain.entities.event import Event
 from app.domain.repositories.event_repository import (
     EventRepository,
 )
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class ListEventsService:
@@ -28,8 +29,11 @@ class ListEventsService:
 
     def execute(
         self,
+        tenant_id: TenantId,
     ) -> list[Event]:
         """
-        Return every recorded event, ordered by occurrence.
+        Return the events of this tenant, ordered by occurrence.
         """
-        return self._event_repository.list()
+        return self._event_repository.list(
+            tenant_id,
+        )

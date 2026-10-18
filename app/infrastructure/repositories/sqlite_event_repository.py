@@ -104,9 +104,11 @@ class SqliteEventRepository(EventRepository):
 
     def list(
         self,
+        tenant_id: TenantId,
     ) -> list[Event]:
         """
-        Return every stored event.
+        Return the stored events of this tenant. An event with no
+        tenant never equals one, so it is shown to nobody.
         """
 
         rows = self._connection.execute(
@@ -120,9 +122,12 @@ class SqliteEventRepository(EventRepository):
                 payload,
                 tenant_id
             FROM events
-            WHERE tenant_id IS NOT NULL
+            WHERE tenant_id = ?
             ORDER BY rowid
-            """
+            """,
+            (
+                str(tenant_id),
+            ),
         ).fetchall()
 
         return [
@@ -151,6 +156,7 @@ class SqliteEventRepository(EventRepository):
     def list_by_aggregate(
         self,
         aggregate_id: str,
+        tenant_id: TenantId,
     ) -> list[Event]:
         """
         Return every event belonging to one aggregate.
@@ -168,11 +174,12 @@ class SqliteEventRepository(EventRepository):
                 tenant_id
             FROM events
             WHERE aggregate_id = ?
-            AND tenant_id IS NOT NULL
+            AND tenant_id = ?
             ORDER BY rowid
             """,
             (
                 aggregate_id,
+                str(tenant_id),
             ),
         ).fetchall()
 

@@ -408,7 +408,7 @@ def test_run_once_records_job_completed_event_on_success() -> None:
 
     loop.execute(worker.id)
 
-    recorded = events.list()
+    recorded = events.list(DEFAULT_TENANT_ID)
 
     assert len(recorded) == 1
     assert recorded[0].event_type == "JobCompleted"
@@ -436,7 +436,7 @@ def test_run_once_records_job_failed_event_on_nonzero_exit() -> None:
 
     loop.execute(worker.id)
 
-    recorded = events.list()
+    recorded = events.list(DEFAULT_TENANT_ID)
 
     assert len(recorded) == 1
     assert recorded[0].event_type == "JobFailed"
@@ -591,7 +591,7 @@ def test_run_once_records_job_cancelled_event() -> None:
 
     loop.execute(worker.id)
 
-    recorded = events.list()
+    recorded = events.list(DEFAULT_TENANT_ID)
 
     assert len(recorded) == 1
     assert recorded[0].event_type == "JobCancelled"

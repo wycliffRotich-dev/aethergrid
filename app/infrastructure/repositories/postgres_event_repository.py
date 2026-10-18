@@ -79,12 +79,13 @@ class PostgresEventRepository(EventRepository):
 
     def list(
         self,
+        tenant_id: TenantId,
     ) -> list[Event]:
         """
-        Return every persisted event that has a tenant.
+        Return the events of this tenant.
 
-        An event an older image wrote without a tenant is skipped,
-        so it is shown to nobody (ADR 0074 decision 7).
+        An event an older image wrote without a tenant never equals
+        a tenant, so it is shown to nobody (ADR 0074 decision 7).
         """
 
         with self._pool.connection() as conn:
@@ -92,9 +93,12 @@ class PostgresEventRepository(EventRepository):
                 """
                 SELECT *
                 FROM events
-                WHERE tenant_id IS NOT NULL
+                WHERE tenant_id = %s
                 ORDER BY occurred_at
                 """,
+                (
+                    str(tenant_id),
+                ),
             ).fetchall()
 
         return [
@@ -107,10 +111,11 @@ class PostgresEventRepository(EventRepository):
     def list_by_aggregate(
         self,
         aggregate_id: str,
+        tenant_id: TenantId,
     ) -> list[Event]:
         """
-        Return every event belonging to one aggregate, skipping an
-        event that has no tenant (ADR 0074 decision 7).
+        Return the events of one aggregate in this tenant (ADR 0074
+        decisions 4 and 7).
         """
 
         with self._pool.connection() as conn:
@@ -119,11 +124,12 @@ class PostgresEventRepository(EventRepository):
                 SELECT *
                 FROM events
                 WHERE aggregate_id = %s
-                AND tenant_id IS NOT NULL
+                AND tenant_id = %s
                 ORDER BY occurred_at
                 """,
                 (
                     aggregate_id,
+                    str(tenant_id),
                 ),
             ).fetchall()
 

@@ -222,7 +222,7 @@ def test_execute_records_lease_released_event() -> None:
 
     service.execute(worker.id, lease.id)
 
-    recorded = events.list()
+    recorded = events.list(job.tenant_id)
 
     assert len(recorded) == 1
     assert recorded[0].event_type == "LeaseReleased"
@@ -261,7 +261,7 @@ def test_the_event_takes_the_tenant_of_the_job_named_by_the_lease() -> None:
 
     service.execute(worker.id, lease.id)
 
-    recorded = events.list()
+    recorded = events.list(other_tenant)
 
     assert len(recorded) == 1
     assert recorded[0].tenant_id == other_tenant
@@ -298,7 +298,7 @@ def test_execute_keeps_the_lease_when_the_job_cannot_be_found() -> None:
         service.execute(worker.id, lease.id)
 
     assert lease_repository.get_by_worker_id(worker.id) is not None
-    assert events.list() == []
+    assert events.list(job.tenant_id) == []
 
 
 def test_a_recorder_without_a_job_repository_is_refused() -> None:

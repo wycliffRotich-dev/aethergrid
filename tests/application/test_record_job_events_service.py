@@ -1,6 +1,7 @@
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
@@ -32,7 +33,7 @@ def test_record_job_created_event() -> None:
         event_type="JobCreated",
     )
 
-    events = repository.list()
+    events = repository.list(DEFAULT_TENANT_ID)
 
     assert len(events) == 1
 
@@ -75,6 +76,7 @@ def test_record_multiple_events_for_same_job() -> None:
 
     events = repository.list_by_aggregate(
         str(job.id),
+        DEFAULT_TENANT_ID,
     )
 
     assert len(events) == 3

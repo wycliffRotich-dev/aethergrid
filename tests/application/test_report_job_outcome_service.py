@@ -235,7 +235,7 @@ def test_complete_records_job_completed_event() -> None:
         lease_id=lease.id,
     )
 
-    recorded = events.list()
+    recorded = events.list(DEFAULT_TENANT_ID)
 
     assert len(recorded) == 1
     assert recorded[0].event_type == "JobCompleted"
@@ -262,7 +262,7 @@ def test_fail_records_job_failed_event() -> None:
         lease_id=lease.id,
     )
 
-    recorded = events.list()
+    recorded = events.list(DEFAULT_TENANT_ID)
 
     assert len(recorded) == 1
     assert recorded[0].event_type == "JobFailed"
@@ -411,7 +411,7 @@ def test_cancel_records_job_cancelled_event() -> None:
         lease_id=lease.id,
     )
 
-    recorded = events.list()
+    recorded = events.list(DEFAULT_TENANT_ID)
 
     assert len(recorded) == 1
     assert recorded[0].event_type == "JobCancelled"

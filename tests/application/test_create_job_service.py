@@ -101,6 +101,7 @@ def test_create_job_service_records_job_created_event() -> None:
 
     events = event_repository.list_by_aggregate(
         str(job.id),
+        DEFAULT_TENANT_ID,
     )
 
     assert len(events) == 1
@@ -146,6 +147,7 @@ def test_create_job_service_does_not_schedule_job() -> None:
 
     events = event_repository.list_by_aggregate(
         str(job.id),
+        DEFAULT_TENANT_ID,
     )
 
     event_types = [
