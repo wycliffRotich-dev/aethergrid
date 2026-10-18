@@ -670,10 +670,15 @@ def heartbeat_worker(
         WorkerHeartbeatService,
         Depends(get_worker_heartbeat_service),
     ],
+    caller: Annotated[ApiKey, Depends(require_api_key)],
 ) -> CreateWorkerResponse:
     """
     Record a heartbeat for a worker, keeping it alive so it
     is not marked OFFLINE by the cluster's dead-worker sweep.
+
+    A key can only heartbeat workers in its own tenant. A worker
+    in another tenant answers 404, like one that does not exist
+    (ADR 0073).
     """
     try:
         worker_id_value = WorkerId(
@@ -688,8 +693,9 @@ def heartbeat_worker(
     try:
         worker = service.execute(
             worker_id_value,
+            caller.tenant_id,
         )
-    except ValueError as exc:
+    except WorkerNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Worker not found.",

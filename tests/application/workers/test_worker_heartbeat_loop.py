@@ -44,6 +44,7 @@ def test_run_once_sends_heartbeat() -> None:
     loop = WorkerHeartbeatLoop(
         heartbeat_service=heartbeat_service,
         worker_id=worker.id,
+        tenant_id=node.tenant_id,
     )
 
     previous = worker.last_seen_at
