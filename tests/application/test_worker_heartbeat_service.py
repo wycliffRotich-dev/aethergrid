@@ -1,7 +1,13 @@
+import pytest
+
 from app.application.services.worker_heartbeat_service import (
     WorkerHeartbeatService,
 )
+from app.domain.entities.tenant import Tenant
 from app.domain.enums.worker_status import WorkerStatus
+from app.domain.exceptions.worker_not_found_error import (
+    WorkerNotFoundError,
+)
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
@@ -45,6 +51,7 @@ def test_execute_refreshes_worker_heartbeat() -> None:
 
     service.execute(
         worker.id,
+        node.tenant_id,
     )
 
     stored_worker = repository.get_by_id(
@@ -88,6 +95,7 @@ def test_execute_recovers_offline_worker_with_no_running_job() -> None:
 
     service.execute(
         worker.id,
+        node.tenant_id,
     )
 
     stored_worker = repository.get_by_id(
@@ -145,6 +153,7 @@ def test_execute_does_not_recover_offline_worker_with_running_job() -> None:
 
     service.execute(
         worker.id,
+        node.tenant_id,
     )
 
     stored_worker = repository.get_by_id(
@@ -153,3 +162,46 @@ def test_execute_does_not_recover_offline_worker_with_running_job() -> None:
 
     assert stored_worker is not None
     assert stored_worker.status is WorkerStatus.OFFLINE
+
+
+def test_a_worker_in_another_tenant_is_not_heartbeated() -> None:
+    worker = make_worker(
+        id=WorkerId.new(),
+        node=make_node(id=NodeId.new()),
+    )
+    original = worker.last_seen_at
+    repository = InMemoryWorkerRepository(
+        [
+            worker,
+        ],
+    )
+    service = WorkerHeartbeatService(
+        repository,
+    )
+
+    with pytest.raises(WorkerNotFoundError):
+        service.execute(
+            worker.id,
+            Tenant.create("other").id,
+        )
+
+    stored_worker = repository.get_by_id(
+        worker.id,
+    )
+
+    assert stored_worker is not None
+    assert stored_worker.last_seen_at == original
+
+
+def test_a_missing_worker_is_not_found() -> None:
+    service = WorkerHeartbeatService(
+        InMemoryWorkerRepository(
+            [],
+        ),
+    )
+
+    with pytest.raises(WorkerNotFoundError):
+        service.execute(
+            WorkerId.new(),
+            Tenant.create("any").id,
+        )

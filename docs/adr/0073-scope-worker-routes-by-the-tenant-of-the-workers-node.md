@@ -105,11 +105,13 @@ it, and this ADR makes no claim about it.
 7. **Routes in scope.** The nine under `/workers`, listed in the
    Properties section below with their status.
 
-8. **Heartbeat is decided last.** An agent calls it continuously with a
-   key that belongs to one tenant. If an agent is ever issued a key
-   from a different tenant than its node, scoping the route would take
-   it offline. How agent keys are issued (ADR 0015, ADR 0019) has to
-   be read first.
+8. **Heartbeat is scoped like the other routes.** The risk was that an
+   agent holding a key from a different tenant than its node would be
+   taken offline. The agent heartbeats its worker and its node in the
+   same loop with one key, and `POST /nodes/{id}/heartbeat` already
+   answers 404 for a node in another tenant. An agent with the wrong
+   tenant's key was already failing its node heartbeat, so scoping
+   worker heartbeat adds no new way for an agent to fail.
 
 ## Properties
 
@@ -137,7 +139,7 @@ Status today:
 | `POST /workers/{id}/jobs/{job_id}/complete` | yes | outcome tests |
 | `POST /workers/{id}/jobs/{job_id}/fail` | yes | outcome tests |
 | `POST /workers/{id}/jobs/{job_id}/cancel` | yes | outcome tests |
-| `POST /workers/{id}/heartbeat` | no | none |
+| `POST /workers/{id}/heartbeat` | yes | heartbeat test |
 
 ## Alternatives Considered
 
@@ -191,8 +193,8 @@ implementations in the same change as the routes, and the join to
   `get_by_id_across_tenants`. After the ownership check this is a
   system lookup and not a leak, and it should become a scoped read once
   workers carry a tenant.
-- `GET /events` is still open across tenants and is not part of this
-  ADR.
+- `GET /events` was open across tenants when this ADR was written. It
+  was never part of this ADR. ADR 0074 scoped it.
 - The services change signature. The two read services had no caller
   outside the routers. The callers of the outcome service have not been
   read yet.
@@ -203,17 +205,17 @@ implementations in the same change as the routes, and the join to
   `ReportJobOutcomeService`. If they do, a required tenant breaks them,
   and ADR 0064 point 4 allows a method named `_across_tenants` for a
   system actor.
-- How agent keys are issued, which decides how heartbeat is scoped.
+- Whether the dashboard's `useWorkerHeartbeatKeeper` heartbeats with a
+  key from the same tenant as the workers it lists. It lists them
+  through `GET /workers`, which is scoped, so it should. The hook has
+  not been read for this ADR.
 
 ## Follow-ups
 
-- Scope `heartbeat`, or record it as exempt under Decision 8, once the
-  open question about how agent keys are issued is answered.
 - An ADR for giving workers and leases a tenant (ADR 0064 points 2 and
   7): a versioned migration under ADR 0071, a backfill through the
   owning node and worker and not through the default tenant, and
   composite foreign keys.
-- An ADR for scoping `GET /events`.
 - The route registry test of ADR 0064 point 10, written after the
   routes are scoped so that it classifies what is true.
 
@@ -224,13 +226,12 @@ pytest tests/presentation/test_worker_read_routes_tenant_isolation_api.py -q
 pytest tests/presentation/test_worker_routes_tenant_isolation_api.py -q
 pytest tests/presentation/test_worker_outcome_routes_tenant_isolation_api.py -q
 pytest tests/presentation/test_worker_start_route_tenant_isolation_api.py -q
+pytest tests/presentation/test_worker_heartbeat_route_tenant_isolation_api.py -q
 grep -c "caller: Annotated\[ApiKey" app/presentation/routers/workers.py
 ```
 
 The pytest commands pass. The last command prints the number of
-handlers that take the caller. It is 8 at the time of writing and must
-reach 9 before this ADR is Accepted, with `heartbeat` possibly exempt
-under Decision 8.
+handlers that take the caller. It prints 9, one for each handler.
 
 ## Progress
 
@@ -276,4 +277,23 @@ called `StartJobService` directly. `start` went in its own commit, and
 `complete`, `fail` and `cancel` went in one, because they share one
 service helper. The full suite passed (841).
 
-Not done: `heartbeat`.
+2026-10-18. `heartbeat` is scoped. Before the change, a test showed
+that a key from another tenant, given only a worker id, got 200 from
+it. The worker id is returned in responses and written to logs, so it
+is not a secret. A heartbeat refreshes `last_seen_at` and returns an
+OFFLINE worker that holds no job to IDLE, so a foreign key could keep
+another tenant's worker out of the dead-worker sweep.
+`Worker.belongs_to` now states the rule of Decision 1 in the domain.
+`WorkerHeartbeatService.execute` takes a required `TenantId` and
+raises `WorkerNotFoundError` for a worker in another tenant before it
+heartbeats or saves anything. The route takes the caller and catches
+`WorkerNotFoundError` only. It used to catch every `ValueError`, which
+turned any `ValueError` raised inside the service into a 404.
+`WorkerHeartbeatLoop`, which only tests construct, takes the tenant of
+its worker with no default. Two route tests cover it. The foreign key
+gets 404, the body matches the one for a missing worker once the
+worker id is masked, and the worker's `last_seen_at` and OFFLINE
+status are unchanged. The owner gets 200 and the worker returns to
+IDLE. The foreign test failed with 200 before the change and passed
+after. Service tests cover the foreign and the missing worker, and two
+entity tests cover `belongs_to`. The full suite passed (867).
