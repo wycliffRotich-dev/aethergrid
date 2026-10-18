@@ -2,18 +2,17 @@
 
 ## Status
 
-Proposed. It becomes Accepted when `GET /events` and
-`GET /jobs/{job_id}/history` read events by the tenant stored on the
-event, each with a passing two-tenant test, and the migration that
-makes that tenant required has merged.
+Accepted. `GET /events` and `GET /jobs/{job_id}/history` read events
+by the tenant stored on the event, each with a passing two-tenant
+test, and the migration that makes that tenant required has merged.
 
 Related: ADR 0064 (points 2, 4, 5, 7 and 10), ADR 0071 (decision 7),
 ADR 0072 and ADR 0073.
 
-This ADR records how ADR 0064 is applied to events. Slices 1 and 2
-are merged and slice 3 is not. The Progress section says exactly
-what is. AetherGrid is not multi-tenant, and no document may
-describe it as multi-tenant until ADR 0064 is Accepted.
+This ADR records how ADR 0064 is applied to events. All three
+slices are merged. The Progress section says exactly what is.
+AetherGrid is not multi-tenant, and no document may describe it as
+multi-tenant until ADR 0064 is Accepted.
 
 ## Context
 
@@ -109,8 +108,9 @@ The attacker holds a valid key in tenant B and knows nothing else.
 
 7. **A row with no tenant is shown to nobody.** The reads filter on the
    tenant column, and a null never equals a tenant. Between `0002` and
-   `0003` an older image can still write such rows. They are
-   invisible, not leaked.
+   `0003` an older image could write such rows, and they were
+   invisible, not leaked. After `0003` Postgres refuses them. An
+   upgraded SQLite file can still hold one, and shows it to nobody.
 
 8. **Every route has a two-tenant test, written first.** For a list
    route, looking absent means tenant B receives none of tenant A's
@@ -126,8 +126,9 @@ The attacker holds a valid key in tenant B and knows nothing else.
 3. The database refuses an event whose tenant differs from the tenant
    of its job.
 4. An image from before this change can still write events after
-   `0002` has been applied.
-5. An event with no tenant is shown to no tenant.
+   `0002` has been applied and before `0003` is.
+5. An event with no tenant is shown to no tenant, and after `0003`
+   Postgres refuses to store one.
 
 Status today:
 
@@ -190,11 +191,13 @@ It is a different kind of change and belongs in its own ADR.
 
 ### Negative
 
-- The leak stays open until the read slice merges. This ADR does not
-  close it.
+- The leak stayed open until the read slice merged. Slice 2 closed it.
 - The backfill is one update over every event, in one transaction. How
   long it takes depends on the size of the table, which has not been
   measured.
+- `0003` backfills and sets NOT NULL in one transaction, so it holds a
+  lock on `events` for the update and the scan. That time has not been
+  measured either.
 - Every writer needs the job. `release_lease_service` records with the
   lease's `job_id` and may need one more job lookup per release.
 - SQLite and the in-memory repository carry the change too. SQLite
@@ -206,8 +209,9 @@ It is a different kind of change and belongs in its own ADR.
 
 ## Open questions
 
-- How soon `0003` can follow, which depends on how long an older image
-  stays deployed.
+- Which environments still run an image from before slice 1, which
+  decides when `0003` can be applied to each. This ADR does not
+  record it.
 
 Answered while writing slice 1:
 
@@ -224,11 +228,18 @@ Answered while writing slice 1:
 ## Follow-ups
 
 - Slice 1: migration `0002`, the tenant on `Event`, recording from the
-  job, and writes that fill both columns. The leak stays open.
+  job, and writes that fill both columns. The leak stayed open until
+  slice 2.
 - Slice 2: the scoped reads, the route takes the caller, and the
   two-tenant test is written first. This closes the leak.
-- Slice 3: migration `0003`, in a later release.
+- Slice 3: migration `0003`, which makes the job and the tenant
+  required. Merged.
 - An ADR for paging the feed.
+- A later migration that drops `events_job_and_tenant_together`,
+  which both columns being required makes redundant (ADR 0071,
+  decision 7).
+- A test that pins the checksums of the applied migration files, so
+  editing a frozen file fails in CI and not at deploy time.
 - The route registry test of ADR 0064 point 10. It lists every route.
   `GET /events` and `POST /workers/{id}/heartbeat` were unscoped when
   this was written and are scoped now (this ADR and ADR 0073). The
@@ -244,9 +255,8 @@ grep -c "caller" app/presentation/routers/events.py
 ```
 
 The pytest commands pass. The grep prints 1 or more, because the
-route takes the caller. Slice 3 is not merged, so the tenant column
-is still nullable and an older image can still write an event with
-no tenant. Such an event is shown to nobody.
+route takes the caller. The tenant column is required, so Postgres
+refuses an event with no tenant.
 
 ## Progress
 
@@ -288,3 +298,23 @@ caller's own events, and a tenant with no events gets an empty feed.
 Slice 3 is not written. The tenant column is still nullable, an older
 image can still write an event with no tenant, and such an event is
 shown to nobody.
+
+2026-10-18. Slice 3 is merged. Migration `0003` repeats the backfill
+through the owning job, stops with an error that names the count if
+any event still names no job, and sets `job_id` and `tenant_id` NOT
+NULL, in one transaction with its version row. Three migration tests
+were written first and failed before the file existed: a legacy event
+takes the tenant of its job and both columns become required, Postgres
+refuses an event with no job and no tenant, and an event that names no
+job stops the migration and leaves the rows, the nullability and the
+version table unchanged. The Postgres contract test that wrote a
+tenantless row to prove it was shown to nobody could no longer set up
+its state, so it now asserts that the database refuses the insert and
+that the feed is unchanged. While the shared test database was still
+at 0002, 26 presentation tests failed with the startup check's message
+that the database is behind this build, and migrating it cleared them.
+The full suite passed (872). All three slices are merged, both
+routes have two-tenant tests, and the status is Accepted. Whether any
+environment still runs an image from before slice 1 is not recorded
+here, and `0003` must not be applied to one until no such image can
+write events there.

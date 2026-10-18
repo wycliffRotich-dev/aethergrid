@@ -49,8 +49,9 @@ def test_returns_job_history() -> None:
 
 def test_a_job_in_another_tenant_has_no_history() -> None:
     """
-    Events carry no tenant, so the job is checked first. The
-    owner's call is the control: it proves the events exist.
+    Events carry the tenant of their job and history reads by it, so
+    a job in another tenant has no history. The owner's call is the
+    control: it proves the events exist.
     """
     job = make_job()
     event_repository = InMemoryEventRepository()
