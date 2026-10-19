@@ -68,8 +68,6 @@ class AssignWorkerService:
             if not worker.is_idle():
                 continue
 
-            worker.accept(job)
-
             if self._acquire_lease_service is not None:
                 try:
                     self._acquire_lease_service.execute(
@@ -117,6 +115,15 @@ class AssignWorkerService:
                         "No idle worker is available on the "
                         "assigned node."
                     ) from exc
+
+            # The worker accepts the job only after the lease is
+            # held. accept() cannot refuse here, because the loop
+            # above already checked that the worker is idle and on
+            # the job's node. Accepting first would leave a worker
+            # BUSY with a job it holds no lease for whenever the
+            # lease is refused, in any repository that hands back
+            # the stored object (ADR 0075).
+            worker.accept(job)
 
             # Deliberately does not call worker.start() here.
             # Assignment means "this worker now holds the job",
