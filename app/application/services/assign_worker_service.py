@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from app.application.services.acquire_lease_service import (
     AcquireLeaseService,
 )
@@ -8,6 +10,9 @@ from app.application.services.record_job_events_service import (
 )
 from app.domain.entities.job import Job
 from app.domain.entities.worker import Worker
+from app.domain.exceptions.lease_tenant_mismatch_error import (
+    LeaseTenantMismatchError,
+)
 from app.domain.exceptions.no_available_node_error import (
     NoAvailableNodeError,
 )
@@ -17,6 +22,8 @@ from app.domain.exceptions.worker_not_found_error import (
 from app.domain.repositories.worker_repository import (
     WorkerRepository,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class AssignWorkerService:
@@ -84,6 +91,28 @@ class AssignWorkerService:
                     # (SchedulerLoopService) already knows how to
                     # unschedule the job and retry it on the next
                     # tick.
+                    raise NoAvailableNodeError(
+                        "No idle worker is available on the "
+                        "assigned node."
+                    ) from exc
+                except LeaseTenantMismatchError as exc:
+                    # The scheduler never pairs a job with a node
+                    # of another tenant (ADR 0064 point 6), so
+                    # this is a bug upstream, and it is logged as
+                    # one. It is reported like any refused
+                    # assignment so the scheduler unschedules the
+                    # job and releases the node. Left to escape,
+                    # it would leave the job SCHEDULED with no
+                    # lease and no worker holding it, and neither
+                    # the scheduler's QUEUED query nor the lease
+                    # and offline-node recovery reaches such a job
+                    # (ADR 0075).
+                    logger.error(
+                        "Refused a lease across tenants for job "
+                        "%s and worker %s.",
+                        job.id,
+                        worker.id,
+                    )
                     raise NoAvailableNodeError(
                         "No idle worker is available on the "
                         "assigned node."
