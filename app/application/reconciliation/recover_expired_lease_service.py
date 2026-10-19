@@ -157,7 +157,7 @@ class RecoverExpiredLeaseService:
 
             if not reclaimed:
                 logger.warning(
-                    "Skipping reclaim for job %s: lease expired but"
+                    "Skipping reclaim for job %s: lease expired but "
                     "job is no longer in a reclaimable state "
                     "(status=%s). Stale lease row has already been "
                     "deleted.",
