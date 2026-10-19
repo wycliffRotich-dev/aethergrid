@@ -269,6 +269,7 @@ def test_recover_offline_node_skips_a_job_whose_lease_is_still_valid() -> (
     lease = Lease.create(
         worker_id=worker.id,
         job_id=job.id,
+        tenant_id=worker.tenant_id,
     )
 
     lease_repository = InMemoryLeaseRepository()
@@ -355,6 +356,7 @@ def test_recover_offline_node_deletes_lease_so_job_can_be_reacquired() -> (
     lease = Lease.create(
         worker_id=worker.id,
         job_id=job.id,
+        tenant_id=worker.tenant_id,
         duration=timedelta(seconds=-1),
     )
 

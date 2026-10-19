@@ -94,10 +94,11 @@ def test_the_real_migration_set_starts_with_the_known_files() -> None:
     """
     migrations = load_migrations(MIGRATIONS_DIR)
 
-    assert [m.name for m in migrations[:3]] == [
+    assert [m.name for m in migrations[:4]] == [
         "0001_baseline.sql",
         "0002_give_events_a_tenant.sql",
         "0003_require_a_tenant_on_events.sql",
+        "0004_give_workers_and_leases_a_tenant.sql",
     ]
     assert migrations[0].transactional is False
 

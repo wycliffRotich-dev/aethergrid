@@ -7,6 +7,7 @@ from app.domain.entities.lease import (
     Lease,
     utc_now,
 )
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.worker_id import WorkerId
 
@@ -15,6 +16,7 @@ def create_lease() -> Lease:
     return Lease.create(
         worker_id=WorkerId.new(),
         job_id=JobId.new(),
+        tenant_id=DEFAULT_TENANT_ID,
     )
 
 
@@ -51,6 +53,7 @@ def test_custom_lease_duration() -> None:
     lease = Lease.create(
         worker_id=WorkerId.new(),
         job_id=JobId.new(),
+        tenant_id=DEFAULT_TENANT_ID,
         duration=timedelta(minutes=2),
     )
 

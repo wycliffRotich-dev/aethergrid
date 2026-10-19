@@ -76,19 +76,29 @@ class Worker:
             utc_now() - self.last_seen_at
         ) <= HEARTBEAT_TIMEOUT
 
+    @property
+    def tenant_id(
+        self,
+    ) -> TenantId:
+        """
+        The tenant of this worker, which is the tenant of its node
+        (ADR 0073, decision 1).
+
+        It is read from the node and cannot be assigned. A stored
+        copy could differ from the node's, and the repository writes
+        this value to the workers table for the database to check
+        (ADR 0075, decision 1).
+        """
+        return self.node.tenant_id
+
     def belongs_to(
         self,
         tenant_id: TenantId,
     ) -> bool:
         """
         Return True if this worker belongs to tenant_id.
-
-        A worker belongs to the tenant of its node (ADR 0073,
-        decision 1). When workers carry a tenant of their own
-        (ADR 0064 points 2 and 7), this is the only method that
-        changes.
         """
-        return self.node.tenant_id == tenant_id
+        return self.tenant_id == tenant_id
 
     def ready(
         self,

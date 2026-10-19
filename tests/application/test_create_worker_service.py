@@ -201,6 +201,7 @@ def test_create_worker_service_reclaim_releases_lease_and_node_resources() -> (
     lease = Lease.create(
         worker_id=worker.id,
         job_id=job.id,
+        tenant_id=worker.tenant_id,
         duration=timedelta(seconds=30),
     )
     lease_repository.save(lease)

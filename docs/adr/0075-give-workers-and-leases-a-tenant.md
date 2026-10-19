@@ -174,6 +174,25 @@ database check for an application mistake (ADR 0064 point 7).
     an existing worker whose running job is in another tenant to show
     that 0004 fails and changes nothing.
 
+14. **A refused assignment leaves nothing behind.**
+    `AssignWorkerService` takes the lease first. The worker accepts
+    the job after the lease is held, and `WorkerAssigned` is recorded
+    after the worker is saved. A lease refused because the worker row
+    is missing or has no stored tenant, or because the worker's tenant
+    differs from the job's, is reported as `NoAvailableNodeError`, so
+    the scheduler unschedules the job and releases the node. The
+    mismatch is also logged at error level, because the scheduler
+    never pairs a job with a node of another tenant (ADR 0064 point
+    6), so a mismatch means a mistake upstream. Only these refusals
+    are handled. A job that already has a lease is refused with a
+    `ValueError`, which is left to propagate: a lease row exists for
+    it, and `RecoverExpiredLeaseService` reclaims the job if that
+    lease expires, which takes 30 seconds with the default duration.
+    The error ends that tick's scheduling and worker passes, and
+    `api.py` logs it and runs the next tick. Catching every
+    `ValueError` was rejected, because it would hide unrelated
+    mistakes.
+
 ## Properties
 
 1. A worker's tenant equals its node's, and the database refuses a row
@@ -262,6 +281,30 @@ A different kind of change, and it belongs in its own ADR.
   tenant, and the composite keys skip it. The service filter of ADR
   0073 is the protection for that window, and it is not a database
   guarantee.
+- In the same window, a worker with no tenant cannot take a lease.
+  The composite key from the lease to its worker does not match the
+  worker's row, so the insert is refused and `AssignWorkerService`
+  raises `NoAvailableNodeError`. The scheduler puts the job back and
+  tries again on its next tick, and each try is refused again until
+  the worker is saved once, which its next heartbeat does (decision
+  8). For a worker run by a standalone agent that is every 5 seconds,
+  with jitter (`scripts/run_agent.py`), and the cluster loop sleeps 1
+  second between ticks, so a job can be refused about five times in a
+  row. This ADR makes no claim about the window for a worker that no
+  agent runs. `AssignWorkerService` stops at the first refusal and does
+  not try another idle worker on the node. It records no event for a
+  refused try: `LeaseAcquired` is recorded after the lease is saved
+  and `WorkerAssigned` after the worker is saved. The scheduler
+  still records `JobScheduled` and then `JobUnscheduled` for every
+  refused try, as it did before when no idle worker was registered
+  on the node, so a job refused on every tick adds two events to the
+  feed per tick.
+- `LeaseAcquired` is now recorded before `WorkerAssigned` for the same
+  assignment. If saving the `WorkerAssigned` event fails after the
+  lease and the worker are saved, the assignment stands and only the
+  event is missing. Each repository commits on its own, so nothing
+  rolls the assignment back. The error ends that tick's scheduling and
+  worker passes, and `api.py` logs it and runs the next tick.
 - `Lease.create` gains a required argument, and every test that builds
   a lease directly changes.
 - The in-memory repositories carry the change but have no composite
@@ -299,3 +342,41 @@ Nothing else in this ADR is merged yet.
 reaches its tenant through its node, which ADR 0073 enforces in the
 service layer and proves with a two-tenant test for each of the nine
 routes. The database does not check it.
+
+2026-10-19. Slice 1 is written on the branch
+`feat/workers-and-leases-tenant-slice-1` and is not merged. It has
+migration 0004, the tenant property on `Worker`, the tenant on
+`Lease` and writers that fill both. Review of the slice found three
+flaws in `AssignWorkerService`. Each was fixed with a test written
+first, and the full suite passes (903).
+
+First, `WorkerAssigned` was recorded before the lease was tried. A
+refused lease left the event behind, and the scheduler retries the
+job on its next tick, so a worker with no stored tenant, which is
+possible between 0004 and 0005, left one event per tick in
+`GET /events` and `GET /jobs/{job_id}/history`. Against Postgres with
+the event service wired in, three refused attempts left three events.
+The event is now recorded after the worker is saved. The docstring of
+`test_assign_worker_service_against_postgres_tenant.py`, committed
+with the lease tenant, says a refused attempt persists nothing. That
+was true of the worker and lease rows and false for events when it
+was committed. It is true now.
+
+Second, a lease refused for a tenant mismatch raised
+`LeaseTenantMismatchError`, which neither `AssignWorkerService` nor
+the scheduler caught. The job stayed SCHEDULED with its node
+allocated. The scheduler's QUEUED query, `RecoverExpiredLeaseService`,
+`RecoverOfflineNodeService` and `MarkDeadWorkersService` do not reach
+such a job, because it has no lease and no stored worker holds it.
+The refusal is now reported as `NoAvailableNodeError` and logged.
+
+Third, `worker.accept` ran before the lease. The in-memory repository
+returns the stored object, so a refused lease left the worker BUSY
+with a job it held no lease for. The new test failed on that check
+before the fix. `accept` now runs after the lease. The Postgres test
+for a worker with no tenant already checked that the stored worker
+stays idle.
+
+The scheduler still records `JobScheduled` and `JobUnscheduled` for
+each refused try, as it did before this slice for a node with no idle
+worker registered.

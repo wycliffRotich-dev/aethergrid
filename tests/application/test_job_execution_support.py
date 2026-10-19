@@ -84,6 +84,7 @@ def test_reclaim_job_deletes_lease_releases_node_and_reclaims_job(
         Lease.create(
             worker_id=NodeId.new().value,  # placeholder, unused by delete()
             job_id=job.id,
+            tenant_id=DEFAULT_TENANT_ID,
         )
     )
 
@@ -142,6 +143,7 @@ def test_reclaim_job_with_no_node_still_deletes_lease_and_reclaims_job() -> (
         Lease.create(
             worker_id=NodeId.new().value,
             job_id=job.id,
+            tenant_id=DEFAULT_TENANT_ID,
         )
     )
 
@@ -188,6 +190,7 @@ def test_reclaim_job_returns_false_when_job_not_reclaimable() -> None:
         Lease.create(
             worker_id=NodeId.new().value,
             job_id=job.id,
+            tenant_id=DEFAULT_TENANT_ID,
         )
     )
 
@@ -232,6 +235,7 @@ def test_reclaim_job_fails_outright_once_retries_exhausted() -> None:
         Lease.create(
             worker_id=NodeId.new().value,
             job_id=job.id,
+            tenant_id=DEFAULT_TENANT_ID,
         )
     )
 

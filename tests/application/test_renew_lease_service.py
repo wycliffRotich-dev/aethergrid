@@ -7,6 +7,7 @@ from app.application.services.renew_lease_service import (
     RenewLeaseService,
 )
 from app.domain.entities.lease import Lease
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.exceptions.lease_not_found_error import (
     LeaseNotFoundError,
 )
@@ -54,6 +55,7 @@ def test_execute_renews_worker_lease() -> None:
     lease = Lease.create(
         worker_id=worker.id,
         job_id=job.id,
+        tenant_id=worker.tenant_id,
         duration=timedelta(minutes=1),
     )
 
@@ -120,6 +122,7 @@ def test_execute_rejects_renewal_when_lease_reassigned_to_different_job() -> Non
     original_lease = Lease.create(
         worker_id=worker_id,
         job_id=JobId.new(),
+        tenant_id=DEFAULT_TENANT_ID,
         duration=timedelta(minutes=1),
     )
     repository.save(original_lease)
@@ -132,6 +135,7 @@ def test_execute_rejects_renewal_when_lease_reassigned_to_different_job() -> Non
     replacement_lease = Lease.create(
         worker_id=worker_id,
         job_id=JobId.new(),
+        tenant_id=DEFAULT_TENANT_ID,
         duration=timedelta(minutes=1),
     )
     repository.save(replacement_lease)

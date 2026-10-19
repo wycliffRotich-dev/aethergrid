@@ -107,6 +107,7 @@ def _build_loop(
     lease = Lease.create(
         worker_id=worker.id,
         job_id=job.id,
+        tenant_id=worker.tenant_id,
     )
 
     lease_repository = InMemoryLeaseRepository()
@@ -142,6 +143,7 @@ def _build_loop(
     lease = Lease.create(
         worker_id=worker.id,
         job_id=job.id,
+        tenant_id=worker.tenant_id,
     )
 
     lease_repository = InMemoryLeaseRepository()
@@ -462,6 +464,7 @@ def test_run_once_cancels_job_requested_to_cancel_during_execution() -> None:
     lease = Lease.create(
         worker_id=worker.id,
         job_id=job.id,
+        tenant_id=worker.tenant_id,
     )
 
     lease_repository = InMemoryLeaseRepository()
@@ -538,6 +541,7 @@ def test_run_once_records_job_cancelled_event() -> None:
     lease = Lease.create(
         worker_id=worker.id,
         job_id=job.id,
+        tenant_id=worker.tenant_id,
     )
 
     lease_repository = InMemoryLeaseRepository()
@@ -634,6 +638,7 @@ def test_run_once_preserves_cancellation_request_lost_by_renewal_thread() -> (
     lease = Lease.create(
         worker_id=worker.id,
         job_id=job.id,
+        tenant_id=worker.tenant_id,
     )
 
     lease_repository = InMemoryLeaseRepository()
@@ -763,6 +768,7 @@ def test_run_once_preserves_cancellation_request_against_sqlite_repository() -> 
         lease = Lease.create(
             worker_id=worker.id,
             job_id=job.id,
+            tenant_id=worker.tenant_id,
         )
 
         lease_repository = InMemoryLeaseRepository()

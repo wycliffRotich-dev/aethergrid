@@ -39,14 +39,15 @@ class PostgresWorkerRepository(WorkerRepository):
             conn.execute(
                 """
                 INSERT INTO workers (
-                    id, node_id, status, managed_by,
+                    id, node_id, tenant_id, status, managed_by,
                     running_job_id, last_seen_at
                 ) VALUES (
-                    %(id)s, %(node_id)s, %(status)s, %(managed_by)s,
-                    %(running_job_id)s, %(last_seen_at)s
+                    %(id)s, %(node_id)s, %(tenant_id)s, %(status)s,
+                    %(managed_by)s, %(running_job_id)s, %(last_seen_at)s
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     node_id = EXCLUDED.node_id,
+                    tenant_id = EXCLUDED.tenant_id,
                     status = EXCLUDED.status,
                     managed_by = EXCLUDED.managed_by,
                     running_job_id = EXCLUDED.running_job_id,
@@ -55,6 +56,7 @@ class PostgresWorkerRepository(WorkerRepository):
                 {
                     "id": str(worker.id),
                     "node_id": str(worker.node.id),
+                    "tenant_id": str(worker.tenant_id.value),
                     "status": worker.status.value,
                     "managed_by": worker.managed_by.value,
                     "running_job_id": running_job_id,

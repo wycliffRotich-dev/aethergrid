@@ -14,7 +14,29 @@ from app.domain.repositories.lease_repository import (
     LeaseRepository,
 )
 from app.domain.value_objects.job_id import JobId
+from app.domain.value_objects.tenant_id import TenantId
 from app.domain.value_objects.worker_id import WorkerId
+
+# The keys that tie a lease to its worker. A lease for a worker that is
+# gone, or that is in another tenant than the lease, violates one of
+# them. Migration 0005 drops the first, so both are named (ADR 0075).
+_WORKER_KEYS = frozenset(
+    {
+        "leases_worker_id_fkey",
+        "leases_worker_same_tenant",
+    }
+)
+
+# A lease an older image wrote between migrations 0004 and 0005 has no
+# tenant, and neither may its worker. It then belongs to the tenant of
+# its worker's node, which is never null (ADR 0075).
+_SELECT = """
+    SELECT l.id, l.worker_id, l.job_id, l.acquired_at, l.expires_at,
+           COALESCE(l.tenant_id, w.tenant_id, n.tenant_id) AS tenant_id
+    FROM leases l
+    JOIN workers w ON w.id = l.worker_id
+    JOIN nodes n ON n.id = w.node_id
+"""
 
 
 class PostgresLeaseRepository(LeaseRepository):
@@ -49,14 +71,16 @@ class PostgresLeaseRepository(LeaseRepository):
                 conn.execute(
                     """
                     INSERT INTO leases (
-                        id, worker_id, job_id, acquired_at, expires_at
+                        id, worker_id, job_id, tenant_id,
+                        acquired_at, expires_at
                     ) VALUES (
                         %(id)s, %(worker_id)s, %(job_id)s,
-                        %(acquired_at)s, %(expires_at)s
+                        %(tenant_id)s, %(acquired_at)s, %(expires_at)s
                     )
                     ON CONFLICT (id) DO UPDATE SET
                         worker_id = EXCLUDED.worker_id,
                         job_id = EXCLUDED.job_id,
+                        tenant_id = EXCLUDED.tenant_id,
                         acquired_at = EXCLUDED.acquired_at,
                         expires_at = EXCLUDED.expires_at
                     """,
@@ -64,12 +88,13 @@ class PostgresLeaseRepository(LeaseRepository):
                         "id": str(lease.id),
                         "worker_id": str(lease.worker_id),
                         "job_id": str(lease.job_id),
+                        "tenant_id": str(lease.tenant_id.value),
                         "acquired_at": lease.acquired_at,
                         "expires_at": lease.expires_at,
                     },
                 )
         except psycopg.errors.ForeignKeyViolation as exc:
-            if exc.diag.constraint_name == "leases_worker_id_fkey":
+            if exc.diag.constraint_name in _WORKER_KEYS:
                 raise WorkerNotFoundError(lease.worker_id) from exc
             raise
 
@@ -96,7 +121,7 @@ class PostgresLeaseRepository(LeaseRepository):
     def get_by_job_id(self, job_id: JobId) -> Lease | None:
         with self._pool.connection() as conn:
             row = conn.cursor(row_factory=dict_row).execute(
-                "SELECT * FROM leases WHERE job_id = %s",
+                _SELECT + " WHERE l.job_id = %s",
                 (str(job_id),),
             ).fetchone()
         return self._to_entity(row) if row else None
@@ -104,7 +129,7 @@ class PostgresLeaseRepository(LeaseRepository):
     def get_by_worker_id(self, worker_id: WorkerId) -> Lease | None:
         with self._pool.connection() as conn:
             row = conn.cursor(row_factory=dict_row).execute(
-                "SELECT * FROM leases WHERE worker_id = %s",
+                _SELECT + " WHERE l.worker_id = %s",
                 (str(worker_id),),
             ).fetchone()
         return self._to_entity(row) if row else None
@@ -113,7 +138,7 @@ class PostgresLeaseRepository(LeaseRepository):
         with self._pool.connection() as conn:
             rows = (
                 conn.cursor(row_factory=dict_row)
-                .execute("SELECT * FROM leases")
+                .execute(_SELECT)
                 .fetchall()
             )
         return [self._to_entity(row) for row in rows]
@@ -146,6 +171,7 @@ class PostgresLeaseRepository(LeaseRepository):
             id=row["id"],
             worker_id=WorkerId(row["worker_id"]),
             job_id=JobId(row["job_id"]),
+            tenant_id=TenantId(row["tenant_id"]),
             acquired_at=row["acquired_at"],
             expires_at=row["expires_at"],
         )

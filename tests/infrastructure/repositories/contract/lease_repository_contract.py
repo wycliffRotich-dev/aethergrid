@@ -60,6 +60,7 @@ class LeaseRepositoryContract:
         return Lease.create(
             worker_id=worker.id,
             job_id=job.id,
+            tenant_id=worker.tenant_id,
             duration=duration,
         )
 
