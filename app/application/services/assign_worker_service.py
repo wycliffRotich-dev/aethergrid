@@ -63,12 +63,6 @@ class AssignWorkerService:
 
             worker.accept(job)
 
-            if self._record_job_events_service is not None:
-                self._record_job_events_service.record_for_job(
-                    job,
-                    event_type="WorkerAssigned",
-                )
-
             if self._acquire_lease_service is not None:
                 try:
                     self._acquire_lease_service.execute(
@@ -110,6 +104,12 @@ class AssignWorkerService:
             self._worker_repository.save(
                 worker,
             )
+
+            if self._record_job_events_service is not None:
+                self._record_job_events_service.record_for_job(
+                    job,
+                    event_type="WorkerAssigned",
+                )
 
             return worker
 
