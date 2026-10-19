@@ -11,8 +11,8 @@ Related: ADR 0064 (points 2, 4 and 7), ADR 0066, ADR 0071 (decision
 7), ADR 0073 and ADR 0074.
 
 This ADR records how points 2, 4 and 7 of ADR 0064 are applied to
-workers and leases. Nothing in it is merged. The Progress section says
-exactly what is. AetherGrid is not multi-tenant, and no document may
+workers and leases. Slice 1 is merged and slices 2 and 3 are not. The
+Progress section says exactly what is. AetherGrid is not multi-tenant, and no document may
 describe it as multi-tenant until ADR 0064 is Accepted.
 
 ## Context
@@ -214,7 +214,7 @@ Status today:
 
 | Slice | What | When |
 |---|---|---|
-| 1 | Migration 0004, the property on `Worker`, the field on `Lease`, writers that fill the tenant | now |
+| 1 | Migration 0004, the property on `Worker`, the field on `Lease`, writers that fill the tenant | merged, #380 |
 | 2 | Migration 0005: required tenant, single-column keys dropped | a later release, after no older image runs |
 | 3 | Scoped repositories, the shorter allowlist, both repositories in the signature test | after 0005 |
 
@@ -332,8 +332,8 @@ A different kind of change, and it belongs in its own ADR.
 grep -c "tenant_id" app/domain/entities/lease.py
 ```
 
-It prints 0 today. It must print 1 or more once slice 1 has merged.
-Nothing else in this ADR is merged yet.
+It printed 0 before slice 1 merged and prints 1 or more now.
+Slices 2 and 3 are not merged.
 
 ## Progress
 
@@ -380,3 +380,22 @@ stays idle.
 The scheduler still records `JobScheduled` and `JobUnscheduled` for
 each refused try, as it did before this slice for a node with no idle
 worker registered.
+
+2026-10-19. Slice 1 is merged as #380, squashed into one commit on main.
+`workers` and `leases` now carry a nullable `tenant_id`, and the
+database refuses a worker, a running job or a lease that crosses a
+tenant, through the four composite keys that migration 0004 adds. The
+single-column keys stay until 0005. `Worker.tenant_id` is a property
+over its node, and `Lease` carries a required tenant. The three flaws
+recorded above went in with it, each with a test that failed first.
+
+The first test of `ON DELETE SET NULL (running_job_id)`, which ADR
+0064 asks for, exists and runs against Postgres 16. Deleting a running
+job clears the link and keeps the tenant. The test drops the
+single-column key in a scratch schema first, so it proves the
+composite key alone. The single-column key has the same rule in the
+baseline, so deleting a running job clears the link with both keys in
+place.
+
+The full suite passes (903). Nothing reads by tenant yet. Slices 2 and
+3 are not merged, and the status stays Proposed.
