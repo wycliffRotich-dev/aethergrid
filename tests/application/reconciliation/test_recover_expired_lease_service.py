@@ -56,6 +56,7 @@ def _make_expired_lease(worker: Worker, job: Job) -> Lease:
     return Lease.create(
         worker_id=worker.id,
         job_id=job.id,
+        tenant_id=worker.tenant_id,
         duration=timedelta(seconds=-1),
     )
 

@@ -117,6 +117,7 @@ def test_release_by_stale_lease_id_is_rejected_and_reassigned_lease_survives(
     original_lease = Lease.create(
         worker_id=worker.id,
         job_id=job_one.id,
+        tenant_id=worker.tenant_id,
     )
     acquiring_repository.save(original_lease)
 
@@ -130,6 +131,7 @@ def test_release_by_stale_lease_id_is_rejected_and_reassigned_lease_survives(
     replacement_lease = Lease.create(
         worker_id=worker.id,
         job_id=job_two.id,
+        tenant_id=worker.tenant_id,
     )
     reassigning_repository.save(replacement_lease)
 

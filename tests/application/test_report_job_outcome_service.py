@@ -108,6 +108,7 @@ def _build_service(
     lease = Lease.create(
         worker_id=worker.id,
         job_id=job.id,
+        tenant_id=worker.tenant_id,
     )
 
     lease_repository = InMemoryLeaseRepository()

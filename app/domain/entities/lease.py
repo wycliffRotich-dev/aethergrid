@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from app.domain.value_objects.job_id import JobId
+from app.domain.value_objects.tenant_id import TenantId
 from app.domain.value_objects.worker_id import WorkerId
 
 
@@ -20,6 +21,9 @@ class Lease:
     """
     Represents exclusive ownership of a job by
     a worker for a limited period of time.
+
+    A lease belongs to the tenant of its worker and of its job. The
+    database refuses a lease that joins two tenants (ADR 0075).
     """
 
     id: UUID
@@ -27,6 +31,8 @@ class Lease:
     worker_id: WorkerId
 
     job_id: JobId
+
+    tenant_id: TenantId
 
     acquired_at: datetime
 
@@ -38,6 +44,7 @@ class Lease:
         *,
         worker_id: WorkerId,
         job_id: JobId,
+        tenant_id: TenantId,
         duration: timedelta = DEFAULT_LEASE_DURATION,
     ) -> Lease:
         """
@@ -49,6 +56,7 @@ class Lease:
             id=uuid4(),
             worker_id=worker_id,
             job_id=job_id,
+            tenant_id=tenant_id,
             acquired_at=acquired_at,
             expires_at=acquired_at + duration,
         )

@@ -99,6 +99,7 @@ def test_execute_deletes_the_lease() -> None:
     lease = Lease.create(
         worker_id=worker.id,
         job_id=job.id,
+        tenant_id=worker.tenant_id,
     )
 
     lease_repository = InMemoryLeaseRepository()
@@ -129,6 +130,7 @@ def test_execute_does_not_change_worker_state() -> None:
     lease = Lease.create(
         worker_id=worker.id,
         job_id=job.id,
+        tenant_id=worker.tenant_id,
     )
 
     lease_repository = InMemoryLeaseRepository()
@@ -171,6 +173,7 @@ def test_execute_raises_when_worker_does_not_exist() -> None:
     lease = Lease.create(
         worker_id=worker.id,
         job_id=job.id,
+        tenant_id=worker.tenant_id,
     )
 
     lease_repository = InMemoryLeaseRepository()
@@ -201,6 +204,7 @@ def test_execute_records_lease_released_event() -> None:
     lease = Lease.create(
         worker_id=worker.id,
         job_id=job.id,
+        tenant_id=worker.tenant_id,
     )
 
     lease_repository = InMemoryLeaseRepository()
@@ -243,6 +247,7 @@ def test_the_event_takes_the_tenant_of_the_job_named_by_the_lease() -> None:
     lease = Lease.create(
         worker_id=worker.id,
         job_id=job.id,
+        tenant_id=worker.tenant_id,
     )
 
     lease_repository = InMemoryLeaseRepository()
@@ -278,6 +283,7 @@ def test_execute_keeps_the_lease_when_the_job_cannot_be_found() -> None:
     lease = Lease.create(
         worker_id=worker.id,
         job_id=job.id,
+        tenant_id=worker.tenant_id,
     )
 
     lease_repository = InMemoryLeaseRepository()
@@ -337,6 +343,7 @@ def test_execute_raises_and_preserves_an_unrelated_lease_after_reclaim_and_reacq
     original_lease = Lease.create(
         worker_id=worker.id,
         job_id=job.id,
+        tenant_id=worker.tenant_id,
     )
 
     lease_repository = InMemoryLeaseRepository()
@@ -359,6 +366,7 @@ def test_execute_raises_and_preserves_an_unrelated_lease_after_reclaim_and_reacq
     replacement_lease = Lease.create(
         worker_id=worker.id,
         job_id=other_job_id,
+        tenant_id=worker.tenant_id,
     )
     lease_repository.save(replacement_lease)
 
