@@ -316,9 +316,17 @@ A different kind of change, and it belongs in its own ADR.
 
 ## Open questions
 
-- Whether the sqlite backend uses the in-memory repositories for
-  workers and leases. This ADR claims no database constraint outside
-  Postgres either way (ADR 0064 point 7).
+None.
+
+Answered after slice 1:
+
+- The sqlite backend keeps workers and leases in the in-memory
+  repositories, as it does API keys. Only jobs, nodes and events use
+  sqlite repositories (`_build_repositories` in
+  `app/presentation/dependencies.py`). The composite keys of this ADR
+  therefore exist on Postgres only, and this ADR claims no database
+  constraint outside Postgres (ADR 0064 point 7). Workers and leases
+  on that backend live in process memory.
 
 ## Follow-ups
 
@@ -399,3 +407,8 @@ place.
 
 The full suite passes (903). Nothing reads by tenant yet. Slices 2 and
 3 are not merged, and the status stays Proposed.
+
+2026-10-19. The open question about the sqlite backend is answered. It keeps
+workers and leases in the in-memory repositories, so the composite keys of
+this ADR exist on Postgres only. Nothing in this ADR claims otherwise, and
+the Open questions section now holds none.
