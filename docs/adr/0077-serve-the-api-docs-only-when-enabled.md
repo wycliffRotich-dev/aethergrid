@@ -85,3 +85,10 @@ registry (ADR 0064 point 10). The exempt paths are read from the registry, so
 there is one list. A URL on the line of an Authorization header is skipped, and a
 probe built from a variable or split across lines is not seen. It was shown to
 fail by pointing the e2e probe at /nodes, which failed naming the file and line.
+
+2026-10-20. A test now sends a request with no key to every operation outside the
+exempt set and requires 401 (30 of 33 operations). It removes the presentation
+conftest overrides for its own duration, since they would turn each answer into
+a 200. Its failure proof is indirect: with the key dependency overridden, GET
+/nodes answered 500, not 401, which the test would report. It was not shown
+failing by editing a router.
