@@ -206,7 +206,6 @@ python3 -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
 export NEUROMESH_DATABASE_URL="postgresql://neuromesh@127.0.0.1:5433/neuromesh"
 export NEUROMESH_DATABASE_PASSWORD_FILE=./secrets/postgres_password.local
-export NEUROMESH_STORAGE_BACKEND=postgres
 python scripts/issue_api_key.py "local-dev" --scope jobs:execute --scope keys:manage
 ```
 
