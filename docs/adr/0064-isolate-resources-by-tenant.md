@@ -175,3 +175,7 @@ server, and a caller-supplied tenant is spoofable by definition.
 - Shared node pools with explicit sharing rules.
 - Update the product deck's partly shipped slide only after this
   ADR is Accepted.
+
+2026-10-20. The registry did not see routes the framework adds itself. A
+guard test now fails if the app holds any plain `Route`, so the registry and
+the app cannot disagree about which routes exist (ADR 0077).
