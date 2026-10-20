@@ -176,6 +176,7 @@ These commands assume the setup in [Running It](#running-it) is done first: the 
 docker compose up -d postgres
 docker compose exec -T postgres psql -U neuromesh -d neuromesh -c 'CREATE DATABASE neuromesh_test'
 export NEUROMESH_TEST_DATABASE_URL="postgresql://neuromesh@127.0.0.1:5433/neuromesh_test"
+export NEUROMESH_STORAGE_BACKEND=postgres
 export NEUROMESH_DATABASE_PASSWORD_FILE=./secrets/postgres_password.local
 NEUROMESH_DATABASE_URL="$NEUROMESH_TEST_DATABASE_URL" python -m app.infrastructure.migrations
 pytest
