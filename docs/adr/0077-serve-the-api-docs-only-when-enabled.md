@@ -72,3 +72,9 @@ no action. It does contradict the stated authentication boundary.
   exposure costs less than explaining it to every reviewer.
 - **Disable only `/openapi.json`.** Rejected. `/docs` and `/redoc` load
   the schema from it, so they would be broken pages.
+
+2026-10-20. The e2e job in ci.yml used GET /docs as its readiness probe, so it
+failed on main after this change, because /docs now answers 404. It probes
+GET /health instead, which is exempt (ADR 0064 point 10) and checks that the
+database is reachable. A search of .github, compose, the Dockerfile, scripts and
+the frontend found no other use of /docs or /openapi.json.
