@@ -31,3 +31,8 @@ Every route in the system now requires a valid API key. The live dashboard, buil
 Existing presentation-layer tests (`tests/presentation/`) were written before auth existed and call routes directly with no credential. Rather than modify eight existing test files individually, a single `tests/presentation/conftest.py` overrides `require_api_key` via FastAPI's `app.dependency_overrides` for that directory only, so those tests keep verifying what they were written to verify, route behavior, without carrying a token that has nothing to do with what they are testing.
 
 Per-caller scoping (any valid key can revoke any other key, including itself), rate limiting, and key rotation beyond manual issue and revoke are explicitly out of scope for this decision. Fine for a single-operator system; not fine the moment a second untrusted caller exists.
+
+2026-10-20. The statement that every route requires a key was not true for
+`GET /`, `GET /health` and `GET /livez`, which are exempt by design, nor for
+the interactive docs, which FastAPI served with no key. The docs are now off
+by default (ADR 0077).

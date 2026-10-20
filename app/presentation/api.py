@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import Annotated
 
@@ -214,11 +215,26 @@ async def lifespan(app: FastAPI):
         pass
 
 
+def _docs_enabled() -> bool:
+    """
+    FastAPI serves /docs, /redoc and /openapi.json with no
+    authentication unless they are switched off, and they sit
+    outside the route classification of ADR 0064. They are off
+    unless NEUROMESH_ENABLE_API_DOCS is set, for local development.
+    """
+    return os.getenv("NEUROMESH_ENABLE_API_DOCS", "").lower() in {"1", "true", "yes"}
+
+
+_DOCS_ON = _docs_enabled()
+
 app = FastAPI(
     title="NeuroMesh API",
     description="Distributed AI Control Plane",
     version="0.1.0",
     lifespan=lifespan,
+    docs_url="/docs" if _DOCS_ON else None,
+    redoc_url="/redoc" if _DOCS_ON else None,
+    openapi_url="/openapi.json" if _DOCS_ON else None,
 )
 
 app.add_middleware(
