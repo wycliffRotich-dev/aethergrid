@@ -78,3 +78,10 @@ failed on main after this change, because /docs now answers 404. It probes
 GET /health instead, which is exempt (ADR 0064 point 10) and checks that the
 database is reachable. A search of .github, compose, the Dockerfile, scripts and
 the frontend found no other use of /docs or /openapi.json.
+
+2026-10-20. A test now fails if a probe that carries no credential, in a workflow
+or in docker-compose.yml, hits a route outside the exempt set of the route
+registry (ADR 0064 point 10). The exempt paths are read from the registry, so
+there is one list. A URL on the line of an Authorization header is skipped, and a
+probe built from a variable or split across lines is not seen. It was shown to
+fail by pointing the e2e probe at /nodes, which failed naming the file and line.
