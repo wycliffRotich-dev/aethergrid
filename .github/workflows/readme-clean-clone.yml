@@ -1,0 +1,76 @@
+# Executes the setup blocks in README.md on a clean runner, so the README
+# cannot drift from what works. The blocks are read from the README by
+# scripts/readme_blocks.py (marked with ci:readme comments) and not copied
+# here. Each step runs in its own bash process, as a reader's terminal would.
+name: README clean clone
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - README.md
+      - docker-compose.yml
+      - Dockerfile
+      - pyproject.toml
+      - scripts/**
+      - app/infrastructure/migrations/**
+      - .github/workflows/readme-clean-clone.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - README.md
+      - docker-compose.yml
+      - Dockerfile
+      - pyproject.toml
+      - scripts/**
+      - app/infrastructure/migrations/**
+      - .github/workflows/readme-clean-clone.yml
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  readme:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: README satisfies the marker contract
+        run: python3 scripts/readme_blocks.py
+
+      - name: Step 1, first run (clone and cd lines dropped, CI is already in a checkout)
+        run: |
+          python3 scripts/readme_blocks.py --step 1 > /tmp/step1.sh
+          grep -v -E '^(git clone |cd aethergrid$)' /tmp/step1.sh > /tmp/step1.run || true
+          removed=$(( $(wc -l < /tmp/step1.sh) - $(wc -l < /tmp/step1.run) ))
+          [ "$removed" -eq 2 ] || { echo "::error::expected to drop 2 lines from step 1, dropped $removed"; exit 1; }
+          bash -eo pipefail /tmp/step1.run
+
+      - name: Step 2, key block, then an authenticated call
+        run: |
+          python3 scripts/readme_blocks.py --step 2 > /tmp/step2.sh
+          # The output holds the one-time key on the line after the
+          # "Issued API key" header, so it is hidden from any failure dump.
+          hide() { awk 'p{p=0;next} /^Issued API key for /{p=1} {print}' /tmp/step2.out; }
+          bash -eo pipefail /tmp/step2.sh > /tmp/step2.out 2>&1 || { hide; exit 1; }
+          key=$(awk '/^Issued API key for /{getline; print; exit}' /tmp/step2.out)
+          [ "${#key}" -eq 43 ] || { echo "::error::captured key has length ${#key}, expected 43"; hide; exit 1; }
+          echo "::add-mask::$key"
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $key" http://127.0.0.1:8000/nodes)
+          [ "$code" = "200" ] || { echo "::error::GET /nodes with the issued key returned $code"; exit 1; }
+
+      - name: Step 3, tests (venv activated first, as the README's prose assumes)
+        run: |
+          python3 scripts/readme_blocks.py --step 3 > /tmp/step3.sh
+          bash -eo pipefail -c '. .venv/bin/activate && . /tmp/step3.sh'
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
