@@ -412,3 +412,25 @@ The full suite passes (903). Nothing reads by tenant yet. Slices 2 and
 workers and leases in the in-memory repositories, so the composite keys of
 this ADR exist on Postgres only. Nothing in this ADR claims otherwise, and
 the Open questions section now holds none.
+
+2026-10-21. Slice 2 is written on the branch `feat/adr-0075-slice-2`
+and is not merged. Migration 0005 gives a worker the tenant of its
+node and a lease the tenant of its worker, stops and names the count
+if any row is still without a tenant, sets NOT NULL on both columns and
+drops the four single-column keys. All of it runs in one transaction.
+The composite keys keep the delete rules of the keys they replace, and
+the unique keys on `leases.worker_id` and `leases.job_id` stay.
+
+The lease repository no longer derives a tenant from the worker or the
+node, because a lease now always carries its own. Five tests built a
+worker or a lease with no tenant through the application schema. After
+0005 the database refuses such a row, so four were removed, and the
+migration tests build those rows in a scratch schema at version 4. The
+fifth, that a refused assignment records no event, was rewritten. It
+now refuses because the assigned node has no idle worker. The full
+suite passes (948).
+
+Property 5 and decision 8 describe the window between 0004 and 0005.
+They stop applying to an environment once it has 0005. Decision 12
+still gates the release: 0005 does not ship in the release that
+carries 0004. Slice 3 is not started, and the status stays Proposed.

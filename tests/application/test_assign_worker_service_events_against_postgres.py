@@ -87,15 +87,6 @@ def _idle_worker_and_assigned_job(
     return worker, job
 
 
-def _forget_the_tenant(pool: ConnectionPool, worker: Worker) -> None:
-    """What an older image leaves behind: a worker row with no tenant."""
-    with pool.connection() as conn:
-        conn.execute(
-            "UPDATE workers SET tenant_id = NULL WHERE id = %s",
-            (str(worker.id),),
-        )
-
-
 def _service(
     pool: ConnectionPool, events: PostgresEventRepository
 ) -> AssignWorkerService:
@@ -115,8 +106,12 @@ def test_a_refused_assignment_records_no_event(
     pool: ConnectionPool,
 ) -> None:
     tenant = _tenant(pool)
-    worker, job = _idle_worker_and_assigned_job(pool, tenant)
-    _forget_the_tenant(pool, worker)
+    node = make_node(tenant_id=tenant)
+    PostgresNodeRepository(pool).save(node)
+    job = make_job(tenant_id=tenant)
+    job.queue()
+    job.assign_to(node.id)
+    PostgresJobRepository(pool).save(job)
     events = PostgresEventRepository(pool)
     service = _service(pool, events)
 

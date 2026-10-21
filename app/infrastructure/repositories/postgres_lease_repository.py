@@ -27,15 +27,13 @@ _WORKER_KEYS = frozenset(
     }
 )
 
-# A lease an older image wrote between migrations 0004 and 0005 has no
-# tenant, and neither may its worker. It then belongs to the tenant of
-# its worker's node, which is never null (ADR 0075).
+# Migration 0005 made leases.tenant_id required, so a lease always
+# carries its own tenant and nothing is derived from its worker or its
+# node (ADR 0075).
 _SELECT = """
     SELECT l.id, l.worker_id, l.job_id, l.acquired_at, l.expires_at,
-           COALESCE(l.tenant_id, w.tenant_id, n.tenant_id) AS tenant_id
+           l.tenant_id
     FROM leases l
-    JOIN workers w ON w.id = l.worker_id
-    JOIN nodes n ON n.id = w.node_id
 """
 
 
