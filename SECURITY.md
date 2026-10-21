@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-AetherGrid does not publish versioned releases. Security fixes are applied to the `main` branch only, so deployments should track `main`.
+Security fixes are applied to the `main` branch. Releases are tags cut from `main`, and only the latest release is supported. A fix reaches a release when a new tag is cut, so deployments should run the latest release or track `main`.
 
 ## Reporting a Vulnerability
 
