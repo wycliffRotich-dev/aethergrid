@@ -1,10 +1,7 @@
-"""ADR 0075, slice 1: assigning a job to a worker with no stored tenant.
+"""ADR 0075: assigning a job to a worker whose tenant is stored.
 
-Between migrations 0004 and 0005 an older image can register a worker
-without a tenant. The composite key from a lease to its worker cannot
-match such a row, so the lease is refused and the job is retried on the
-next tick, until this image saves the worker once, which a heartbeat
-does. Nothing is persisted by the refused attempt.
+After migration 0005 every worker row has a tenant, so the assignment
+reaches the lease and the lease carries the tenant of its worker.
 """
 
 from __future__ import annotations
@@ -22,9 +19,6 @@ from app.application.services.assign_worker_service import (
 )
 from app.domain.entities.job import Job
 from app.domain.entities.worker import Worker
-from app.domain.exceptions.no_available_node_error import (
-    NoAvailableNodeError,
-)
 from app.domain.value_objects.tenant_id import TenantId
 from app.infrastructure.repositories.postgres_job_repository import (
     PostgresJobRepository,
@@ -83,15 +77,6 @@ def _idle_worker_and_assigned_job(
     return worker, job
 
 
-def _forget_the_tenant(pool: ConnectionPool, worker: Worker) -> None:
-    """What an older image leaves behind: a worker row with no tenant."""
-    with pool.connection() as conn:
-        conn.execute(
-            "UPDATE workers SET tenant_id = NULL WHERE id = %s",
-            (str(worker.id),),
-        )
-
-
 def _service(pool: ConnectionPool) -> AssignWorkerService:
     return AssignWorkerService(
         worker_repository=PostgresWorkerRepository(pool),
@@ -113,27 +98,3 @@ def test_a_worker_with_a_tenant_is_assigned_the_job(
     lease = PostgresLeaseRepository(pool).get_by_job_id(job.id)
     assert lease is not None
     assert lease.tenant_id == tenant
-
-
-def test_a_worker_with_no_tenant_is_refused_until_it_is_saved_once(
-    pool: ConnectionPool,
-) -> None:
-    tenant = _tenant(pool)
-    worker, job = _idle_worker_and_assigned_job(pool, tenant)
-    _forget_the_tenant(pool, worker)
-    workers = PostgresWorkerRepository(pool)
-    leases = PostgresLeaseRepository(pool)
-
-    with pytest.raises(NoAvailableNodeError):
-        _service(pool).execute(job)
-
-    refused = workers.get_by_id(worker.id)
-    assert refused is not None
-    assert refused.is_idle()
-    assert refused.running_job is None
-    assert leases.get_by_job_id(job.id) is None
-
-    workers.save(refused)  # what a heartbeat does
-
-    assert _service(pool).execute(job).id == worker.id
-    assert leases.get_by_job_id(job.id) is not None

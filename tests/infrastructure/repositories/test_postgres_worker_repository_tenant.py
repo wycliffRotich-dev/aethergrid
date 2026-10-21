@@ -70,23 +70,3 @@ def test_saving_a_worker_writes_the_tenant_of_its_node(
     PostgresWorkerRepository(pool).save(worker)
 
     assert _stored_tenant(pool, worker.id) == str(tenant.value)
-
-
-def test_saving_a_worker_an_older_image_wrote_repairs_its_tenant(
-    pool: ConnectionPool,
-) -> None:
-    tenant = _tenant(pool)
-    node = make_node(tenant_id=tenant)
-    PostgresNodeRepository(pool).save(node)
-    worker = make_worker(node=node)
-    with pool.connection() as conn:
-        conn.execute(
-            "INSERT INTO workers (id, node_id, status, last_seen_at) "
-            "VALUES (%s, %s, 'IDLE', now())",
-            (str(worker.id), str(node.id)),
-        )
-    assert _stored_tenant(pool, worker.id) is None
-
-    PostgresWorkerRepository(pool).save(worker)
-
-    assert _stored_tenant(pool, worker.id) == str(tenant.value)
