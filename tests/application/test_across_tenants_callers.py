@@ -29,8 +29,6 @@ ALLOWED_CALLERS = {
     # Interim: these read a node from a job or worker that carries no
     # tenant, or read a job by an id that arrives without one. Each
     # entry leaves when its caller can pass a tenant.
-    "application/services/complete_job_service.py",
-    "application/services/fail_job_service.py",
     "application/services/report_job_outcome_service.py",
     "application/workers/worker_execution_loop.py",
 }

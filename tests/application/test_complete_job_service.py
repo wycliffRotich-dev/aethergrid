@@ -10,6 +10,7 @@ from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from app.domain.value_objects.tenant_id import TenantId
 from app.infrastructure.repositories.in_memory_job_repository import (
     InMemoryJobRepository,
 )
@@ -58,7 +59,7 @@ def test_complete_job_service_completes_job() -> None:
         node_repository=node_repository,
     )
 
-    completed = service.execute(job.id)
+    completed = service.execute(job.id, job.tenant_id)
 
     assert completed is job
     assert completed.status == JobStatus.COMPLETED
@@ -73,7 +74,7 @@ def test_complete_job_service_returns_none_when_job_does_not_exist() -> None:
         node_repository=node_repository,
     )
 
-    result = service.execute(JobId.new())
+    result = service.execute(JobId.new(), DEFAULT_TENANT_ID)
 
     assert result is None
 
@@ -97,7 +98,7 @@ def test_complete_job_service_returns_none_when_job_has_no_assigned_node() -> No
         node_repository=node_repository,
     )
 
-    result = service.execute(job.id)
+    result = service.execute(job.id, job.tenant_id)
 
     assert result is None
 
@@ -127,7 +128,7 @@ def test_complete_job_service_returns_none_when_node_does_not_exist() -> None:
         node_repository=node_repository,
     )
 
-    result = service.execute(job.id)
+    result = service.execute(job.id, job.tenant_id)
 
     assert result is None
 def test_complete_job_service_persists_released_node_resources(
@@ -196,7 +197,7 @@ def test_complete_job_service_persists_released_node_resources(
         node_repository=exec_node_repository,
     )
 
-    service.execute(job.id)
+    service.execute(job.id, job.tenant_id)
     exec_connection.close()
 
     read_connection = create_connection(db_path)
@@ -208,3 +209,87 @@ def test_complete_job_service_persists_released_node_resources(
     assert reloaded.available.cpu_cores == 8
     assert reloaded.available.memory_mib == 16384
 
+
+def _running_job_and_node(job_tenant: TenantId, node_tenant: TenantId):
+    node = make_node(
+        id=NodeId.new(),
+        tenant_id=node_tenant,
+        capacity=ResourceRequirements(
+            cpu_cores=8,
+            memory_mib=16384,
+            vram_mib=4096,
+        ),
+    )
+    job = make_job(
+        id=JobId.new(),
+        tenant_id=job_tenant,
+        resources=ResourceRequirements(
+            cpu_cores=4,
+            memory_mib=8192,
+            vram_mib=2048,
+        ),
+    )
+    job.queue()
+    job.assign_to(node.id)
+    node.allocate(job.resources)
+    job.start()
+    return job, node
+
+
+def test_complete_job_service_completes_a_job_in_a_non_default_tenant() -> None:
+    tenant = TenantId.new()
+    assert tenant != DEFAULT_TENANT_ID
+    job, node = _running_job_and_node(tenant, tenant)
+
+    service = CompleteJobService(
+        job_repository=InMemoryJobRepository([job]),
+        node_repository=InMemoryNodeRepository(nodes=[node]),
+    )
+
+    result = service.execute(job.id, tenant)
+
+    assert result is job
+    assert job.status == JobStatus.COMPLETED
+    assert node.available.cpu_cores == 8
+
+
+def test_complete_job_service_does_not_touch_a_job_in_another_tenant() -> None:
+    """
+    A caller in another tenant reads the job as missing: the result is
+    None, the job keeps running and the node keeps its allocation.
+    """
+    tenant = TenantId.new()
+    job, node = _running_job_and_node(tenant, tenant)
+
+    service = CompleteJobService(
+        job_repository=InMemoryJobRepository([job]),
+        node_repository=InMemoryNodeRepository(nodes=[node]),
+    )
+
+    result = service.execute(job.id, TenantId.new())
+
+    assert result is None
+    assert job.status == JobStatus.RUNNING
+    assert node.available.cpu_cores == 4
+
+
+def test_complete_job_service_does_not_use_a_node_of_another_tenant() -> None:
+    """
+    The database forbids a job assigned to a node of another tenant
+    (ADR 0069). If that state ever existed, the scoped node read must
+    fail closed: None, the job still running, the node untouched.
+    """
+    job_tenant = TenantId.new()
+    node_tenant = TenantId.new()
+    job, node = _running_job_and_node(job_tenant, node_tenant)
+
+    service = CompleteJobService(
+        job_repository=InMemoryJobRepository([job]),
+        node_repository=InMemoryNodeRepository(nodes=[node]),
+    )
+
+    result = service.execute(job.id, job_tenant)
+
+    assert result is None
+    assert job.status == JobStatus.RUNNING
+    assert node.available.cpu_cores == 4
