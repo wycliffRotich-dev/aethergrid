@@ -29,6 +29,7 @@ from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from app.domain.value_objects.tenant_id import TenantId
 from app.domain.value_objects.worker_id import WorkerId
 from app.infrastructure.repositories.in_memory_event_repository import (
     InMemoryEventRepository,
@@ -448,3 +449,145 @@ def test_cancel_raises_worker_job_mismatch_when_worker_holds_different_job() -> 
             tenant_id=DEFAULT_TENANT_ID,
             lease_id=uuid4(),
         )
+
+
+def _make_running_worker_and_job_in(
+    tenant: TenantId,
+) -> tuple[Worker, Job, Node]:
+    node = make_node(
+        id=NodeId.new(),
+        tenant_id=tenant,
+        capacity=ResourceRequirements(
+            cpu_cores=8,
+            memory_mib=16384,
+            vram_mib=0,
+        ),
+    )
+
+    worker = make_worker(
+        id=WorkerId.new(),
+        node=node,
+    )
+    worker.ready()
+
+    job = make_job(
+        id=JobId.new(),
+        tenant_id=tenant,
+        resources=ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=512,
+            vram_mib=0,
+        ),
+    )
+
+    job.queue()
+    job.assign_to(node.id)
+    node.allocate(job.resources)
+
+    worker.accept(job)
+    worker.start()
+
+    return worker, job, node
+
+
+def test_complete_in_a_non_default_tenant_releases_node_and_records_event() -> None:
+    """
+    Worker, job and node share one tenant that is not the default. The
+    node is found by the scoped read, its resources are released, and
+    the event lands in that tenant (ADR 0074 decision 2, ADR 0075).
+    """
+    tenant = TenantId.new()
+    assert tenant != DEFAULT_TENANT_ID
+    worker, job, node = _make_running_worker_and_job_in(tenant)
+
+    events = InMemoryEventRepository()
+    (
+        service,
+        _worker_repository,
+        job_repository,
+        node_repository,
+        lease_repository,
+        lease,
+    ) = _build_service(
+        worker,
+        job,
+        node,
+        record_job_events_service=RecordJobEventsService(
+            event_repository=events,
+        ),
+    )
+
+    service.complete(
+        worker.id,
+        job.id,
+        tenant_id=tenant,
+        lease_id=lease.id,
+        exit_code=0,
+    )
+
+    saved_node = node_repository.get_by_id(node.id, tenant)
+    saved_job = job_repository.get_by_id(job.id, tenant)
+
+    assert saved_node is not None
+    assert saved_node.available == saved_node.capacity
+    assert saved_job is not None
+    assert saved_job.is_completed()
+    assert lease_repository.get_by_worker_id(worker.id, tenant) is None
+
+    recorded = events.list(tenant)
+    assert [e.event_type for e in recorded] == ["JobCompleted"]
+    assert recorded[0].tenant_id == tenant
+    assert events.list(DEFAULT_TENANT_ID) == []
+
+
+def test_complete_never_releases_a_node_of_another_tenant() -> None:
+    """
+    The database forbids a job assigned to a node of another tenant
+    (ADR 0069). If that state ever existed, the scoped node read must
+    not find the node: its allocation stays untouched. The outcome is
+    still recorded, since the lease is released and the worker saved
+    before the node is read.
+    """
+    tenant = TenantId.new()
+    other_tenant = TenantId.new()
+    worker, job, node = _make_running_worker_and_job_in(tenant)
+
+    foreign_node = make_node(
+        id=node.id,
+        tenant_id=other_tenant,
+        capacity=ResourceRequirements(
+            cpu_cores=8,
+            memory_mib=16384,
+            vram_mib=0,
+        ),
+    )
+    foreign_node.allocate(job.resources)
+
+    (
+        service,
+        worker_repository,
+        job_repository,
+        node_repository,
+        lease_repository,
+        lease,
+    ) = _build_service(worker, job, foreign_node)
+
+    service.complete(
+        worker.id,
+        job.id,
+        tenant_id=tenant,
+        lease_id=lease.id,
+        exit_code=0,
+    )
+
+    assert node_repository.get_by_id(node.id, tenant) is None
+    assert foreign_node.available.cpu_cores == 7
+    assert foreign_node.available.memory_mib == 16384 - 512
+
+    saved_job = job_repository.get_by_id(job.id, tenant)
+    saved_worker = worker_repository.get_by_id(worker.id, tenant)
+    assert saved_job is not None
+    assert saved_job.is_completed()
+    assert saved_worker is not None
+    assert saved_worker.is_idle()
+    assert lease_repository.get_by_worker_id(worker.id, tenant) is None
