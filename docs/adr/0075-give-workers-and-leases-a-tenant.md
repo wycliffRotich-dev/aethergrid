@@ -11,7 +11,7 @@ Related: ADR 0064 (points 2, 4 and 7), ADR 0066, ADR 0071 (decision
 7), ADR 0073 and ADR 0074.
 
 This ADR records how points 2, 4 and 7 of ADR 0064 are applied to
-workers and leases. Slice 1 is merged and slices 2 and 3 are not. The
+workers and leases. Slices 1, 2 and 3 are merged. The
 Progress section says exactly what is. AetherGrid is not multi-tenant, and no document may
 describe it as multi-tenant until ADR 0064 is Accepted.
 
@@ -215,8 +215,8 @@ Status today:
 | Slice | What | When |
 |---|---|---|
 | 1 | Migration 0004, the property on `Worker`, the field on `Lease`, writers that fill the tenant | merged, #380 |
-| 2 | Migration 0005: required tenant, single-column keys dropped | a later release, after no older image runs |
-| 3 | Scoped repositories, the shorter allowlist, both repositories in the signature test | after 0005 |
+| 2 | Migration 0005: required tenant, single-column keys dropped | merged, #397 |
+| 3 | Scoped repositories, the shorter allowlist, both repositories in the signature test | merged, #399. The allowlist conversions followed in #400, #401, #402 and #404 |
 
 ## Alternatives Considered
 
@@ -333,6 +333,13 @@ Answered after slice 1:
 - The wording of the Status of ADR 0064, after slice 3, so that it says
   what is proven and what is not.
 - A test that pins the checksums of applied migration files.
+- A decision on `CompleteJobService` and `FailJobService`. Neither has
+  a caller in `app`. They were converted because decision 10 says to
+  convert them, and deleting them is a separate change.
+- A missing node is skipped without an error in
+  `ReportJobOutcomeService` and `WorkerExecutionLoop`, so its
+  resources stay allocated. Whether that should be an error is a
+  question about correctness and not about tenancy.
 
 ## How to Verify
 
@@ -341,7 +348,15 @@ grep -c "tenant_id" app/domain/entities/lease.py
 ```
 
 It printed 0 before slice 1 merged and prints 1 or more now.
-Slices 2 and 3 are not merged.
+Slices 2 and 3 are merged.
+
+```bash
+grep -c "_across_tenants" app/application/workers/worker_execution_loop.py
+```
+
+It printed 4 before the loop was converted and prints 1 now. The one
+that is left is the read of the worker, which the loop cannot scope
+because it knows only a worker id.
 
 ## Progress
 
@@ -434,3 +449,46 @@ Property 5 and decision 8 describe the window between 0004 and 0005.
 They stop applying to an environment once it has 0005. Decision 12
 still gates the release: 0005 does not ship in the release that
 carries 0004. Slice 3 is not started, and the status stays Proposed.
+
+2026-10-23. Slices 2 and 3 are merged. Slice 2 is #397 and slice 3 is
+#399. Workers and leases carry a required tenant, the database refuses a
+worker, a running job or a lease that crosses tenants, and the worker
+and lease repositories read by tenant.
+
+Four services and the worker execution loop still read across tenants
+after slice 3. Decision 10 says each one leaves the allowlist or stays
+with a written reason, so they were converted one at a time. Each
+conversion is its own pull request, and each has a test that fails
+against the old read.
+
+- #400: `ReleaseLeaseService` reads the job in the lease's tenant. A
+  lease in one tenant that names a job in another now fails closed. It
+  raises `JobNotFoundError`, leaves the lease in place and records no
+  event. A Postgres test runs the same release with events against the
+  real repositories.
+- #401: `CompleteJobService` and `FailJobService` take a tenant and read
+  the job and the node in it. Neither has a caller in `app`, and
+  `job_execution_support.py` calls them dead but tested, so only their
+  tests changed.
+- #402: `ReportJobOutcomeService` reads the node in the caller's tenant.
+  A node of another tenant than the job is not found, and its allocation
+  is not released. The test for it fails against the old read.
+- #404: `WorkerExecutionLoop` reads the job and the node in the worker's
+  tenant once the worker is loaded. The worker read stays across
+  tenants, because the loop is handed a worker id and nothing else. Two
+  guard tests record every across-tenants read on the job and node
+  repositories during a full iteration in a non-default tenant, one for
+  a plain completion and one for a cancellation requested mid-run. Both
+  fail against the previous loop.
+
+The allowlist in `test_across_tenants_callers.py` now holds system
+actors only, and each entry has a reason. That test matches by file, so
+it cannot tell the loop's one worker read from a new unscoped read. The
+guard tests cover the loop. The full suite passed at 970 on the branch
+before the loop change merged.
+
+What this entry does not show. The composite keys exist on Postgres
+only, as the 2026-10-19 entry says. Decision 12 gates 0005 behind a
+release that carries 0004, and this entry does not record that the gate
+was observed. The status stays Proposed until that is recorded and the
+criteria in the Status section are checked against the merged code.
