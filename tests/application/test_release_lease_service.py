@@ -235,10 +235,80 @@ def test_execute_records_lease_released_event() -> None:
     assert recorded[0].tenant_id == job.tenant_id
 
 
-def test_the_event_takes_the_tenant_of_the_job_named_by_the_lease() -> None:
+def test_the_event_takes_the_tenant_of_a_same_tenant_job() -> None:
     """
-    A job in a tenant other than the default is the case that tells a
-    real lookup apart from a default tenant (ADR 0074 decision 2).
+    Worker, lease and job share one tenant that is not the default.
+    The release deletes the lease and records the event under that
+    tenant, which tells a real lookup apart from a default tenant
+    (ADR 0074 decision 2).
+    """
+    tenant = TenantId.new()
+    assert tenant != DEFAULT_TENANT_ID
+
+    node = make_node(
+        id=NodeId.new(),
+        tenant_id=tenant,
+        capacity=ResourceRequirements(
+            cpu_cores=8,
+            memory_mib=16384,
+            vram_mib=0,
+        ),
+    )
+    worker = make_worker(id=WorkerId.new(), node=node)
+    worker.ready()
+
+    job = make_job(
+        id=JobId.new(),
+        tenant_id=tenant,
+        resources=ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=512,
+            vram_mib=0,
+        ),
+    )
+    job.queue()
+    job.assign_to(node.id)
+    worker.accept(job)
+    worker.start()
+
+    lease = Lease.create(
+        worker_id=worker.id,
+        job_id=job.id,
+        tenant_id=tenant,
+    )
+
+    lease_repository = InMemoryLeaseRepository()
+    lease_repository.save(lease)
+
+    events = InMemoryEventRepository()
+
+    service = ReleaseLeaseService(
+        lease_repository=lease_repository,
+        worker_repository=InMemoryWorkerRepository([worker]),
+        record_job_events_service=RecordJobEventsService(
+            event_repository=events,
+        ),
+        job_repository=InMemoryJobRepository([job]),
+    )
+
+    service.execute(worker.id, lease.id, tenant)
+
+    recorded = events.list(tenant)
+
+    assert len(recorded) == 1
+    assert recorded[0].event_type == "LeaseReleased"
+    assert recorded[0].tenant_id == tenant
+    assert recorded[0].tenant_id != DEFAULT_TENANT_ID
+    assert events.list(DEFAULT_TENANT_ID) == []
+    assert lease_repository.get_by_worker_id(worker.id, tenant) is None
+
+
+def test_a_job_in_another_tenant_than_the_lease_reads_as_missing() -> None:
+    """
+    A lease names its job, and both live in one tenant. If a lease ever
+    names a job of another tenant, the release refuses: the job reads
+    as missing, the lease stays, and no event is recorded in either
+    tenant (ADR 0064, ADR 0075).
     """
     worker, _ = _make_worker_with_running_job()
     other_tenant = TenantId.new()
@@ -264,13 +334,15 @@ def test_the_event_takes_the_tenant_of_the_job_named_by_the_lease() -> None:
         job_repository=InMemoryJobRepository([job]),
     )
 
-    service.execute(worker.id, lease.id, worker.tenant_id)
+    with pytest.raises(JobNotFoundError):
+        service.execute(worker.id, lease.id, worker.tenant_id)
 
-    recorded = events.list(other_tenant)
-
-    assert len(recorded) == 1
-    assert recorded[0].tenant_id == other_tenant
-    assert recorded[0].tenant_id != DEFAULT_TENANT_ID
+    assert (
+        lease_repository.get_by_worker_id(worker.id, worker.tenant_id)
+        is not None
+    )
+    assert events.list(other_tenant) == []
+    assert events.list(worker.tenant_id) == []
 
 
 def test_execute_keeps_the_lease_when_the_job_cannot_be_found() -> None:

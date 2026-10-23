@@ -115,11 +115,12 @@ class ReleaseLeaseService:
 
         if self._record_job_events_service is not None:
             # The lookup comes before the delete, so a missing job
-            # leaves the lease in place. The caller holds a job id and
-            # no tenant, which is the case the repository reserves
-            # get_by_id_across_tenants for (ADR 0064 point 4).
-            job = self._job_repository.get_by_id_across_tenants(
+            # leaves the lease in place. The lease was read in this
+            # tenant, so its job is read in this tenant too. A job in
+            # another tenant reads as missing.
+            job = self._job_repository.get_by_id(
                 lease.job_id,
+                tenant_id,
             )
 
             if job is None:

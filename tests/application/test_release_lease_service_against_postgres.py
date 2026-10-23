@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from psycopg_pool import ConnectionPool
 
+from app.application.services.record_job_events_service import (
+    RecordJobEventsService,
+)
 from app.application.services.release_lease_service import (
     ReleaseLeaseService,
 )
 from app.domain.entities.lease import Lease
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.exceptions.lease_not_found_error import (
     LeaseNotFoundError,
 )
@@ -15,7 +21,11 @@ from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from app.domain.value_objects.tenant_id import TenantId
 from app.domain.value_objects.worker_id import WorkerId
+from app.infrastructure.repositories.postgres_event_repository import (
+    PostgresEventRepository,
+)
 from app.infrastructure.repositories.postgres_job_repository import (
     PostgresJobRepository,
 )
@@ -156,3 +166,73 @@ def test_release_by_stale_lease_id_is_rejected_and_reassigned_lease_survives(
     assert surviving_lease is not None
     assert surviving_lease.id == replacement_lease.id
     assert surviving_lease.job_id == job_two.id
+
+
+def _tenant(pool: ConnectionPool) -> TenantId:
+    tenant_id = TenantId.new()
+    with pool.connection() as conn:
+        conn.execute(
+            "INSERT INTO tenants (id, name, created_at) VALUES (%s, %s, now())",
+            (str(tenant_id.value), f"t-{uuid.uuid4().hex[:12]}"),
+        )
+    return tenant_id
+
+
+def _remove_tenant(pool: ConnectionPool, tenant_id: TenantId) -> None:
+    with pool.connection() as conn:
+        conn.execute("TRUNCATE leases, workers, jobs, nodes, events CASCADE")
+        conn.execute("DELETE FROM tenants WHERE id = %s", (str(tenant_id.value),))
+
+
+def test_release_records_the_event_under_the_tenant_of_the_job_in_postgres(
+    pool,
+    request,
+) -> None:
+    """
+    ADR 0074 decision 2, ADR 0075: the release reads the job in the
+    tenant of the lease and records the event under that tenant. Runs
+    against the real repositories, because the scoped job read is a
+    separate implementation from the in-memory one.
+    """
+    with pool.connection() as conn:
+        conn.execute("TRUNCATE leases, workers, jobs, nodes, events CASCADE")
+
+    tenant = _tenant(pool)
+    assert tenant != DEFAULT_TENANT_ID
+    # The tenant row is shared state. Leaving it, or the rows that
+    # reference it, breaks the tests that reset tenants after this one.
+    request.addfinalizer(lambda: _remove_tenant(pool, tenant))
+
+    node = make_node(tenant_id=tenant)
+    PostgresNodeRepository(pool).save(node)
+    worker = make_worker(node=node)
+    PostgresWorkerRepository(pool).save(worker)
+    job = make_job(tenant_id=tenant)
+    PostgresJobRepository(pool).save(job)
+
+    lease = Lease.create(
+        worker_id=worker.id,
+        job_id=job.id,
+        tenant_id=tenant,
+    )
+    PostgresLeaseRepository(pool).save(lease)
+
+    service = ReleaseLeaseService(
+        lease_repository=PostgresLeaseRepository(pool),
+        worker_repository=PostgresWorkerRepository(pool),
+        record_job_events_service=RecordJobEventsService(
+            event_repository=PostgresEventRepository(pool),
+        ),
+        job_repository=PostgresJobRepository(pool),
+    )
+
+    service.execute(worker.id, lease.id, tenant)
+
+    recorded = PostgresEventRepository(pool).list(tenant)
+    assert [e.event_type for e in recorded] == ["LeaseReleased"]
+    assert recorded[0].tenant_id == tenant
+    assert recorded[0].aggregate_id == str(job.id)
+    assert PostgresEventRepository(pool).list(DEFAULT_TENANT_ID) == []
+    assert (
+        PostgresLeaseRepository(pool).get_by_worker_id(worker.id, tenant) is None
+    )
