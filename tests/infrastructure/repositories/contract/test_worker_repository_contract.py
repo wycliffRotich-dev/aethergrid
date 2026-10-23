@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.entities.worker import Worker
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
@@ -51,7 +52,7 @@ class WorkerRepositoryContract:
 
         repository.save(worker)
 
-        stored = repository.get_by_id(worker.id)
+        stored = repository.get_by_id(worker.id, worker.tenant_id)
 
         assert stored is not None
         assert stored.id == worker.id
@@ -60,7 +61,7 @@ class WorkerRepositoryContract:
         self,
         repository,
     ) -> None:
-        assert repository.get_by_id(WorkerId.new()) is None
+        assert repository.get_by_id(WorkerId.new(), DEFAULT_TENANT_ID) is None
 
     def test_get_by_node_id_returns_matching_worker(
         self,
@@ -69,7 +70,7 @@ class WorkerRepositoryContract:
         worker = self._make_worker()
         repository.save(worker)
 
-        stored = repository.get_by_node_id(worker.node.id)
+        stored = repository.get_by_node_id(worker.node.id, worker.tenant_id)
 
         assert stored is not None
         assert stored.id == worker.id
@@ -78,7 +79,7 @@ class WorkerRepositoryContract:
         self,
         repository,
     ) -> None:
-        assert repository.get_by_node_id(NodeId.new()) is None
+        assert repository.get_by_node_id(NodeId.new(), DEFAULT_TENANT_ID) is None
 
     def test_list_workers(
         self,
@@ -88,7 +89,7 @@ class WorkerRepositoryContract:
 
         repository.save(worker)
 
-        workers = repository.list()
+        workers = repository.list(worker.tenant_id)
 
         ids = {w.id for w in workers}
         assert worker.id in ids
@@ -102,6 +103,6 @@ class WorkerRepositoryContract:
 
         repository.save(worker)
 
-        repository.delete(worker.id)
+        repository.delete(worker.id, worker.tenant_id)
 
-        assert repository.get_by_id(worker.id) is None
+        assert repository.get_by_id(worker.id, worker.tenant_id) is None

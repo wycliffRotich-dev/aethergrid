@@ -4,6 +4,7 @@ from app.domain.entities.lease import Lease
 from app.domain.repositories.lease_repository import (
     LeaseRepository,
 )
+from app.domain.value_objects.tenant_id import TenantId
 from app.domain.value_objects.worker_id import WorkerId
 
 
@@ -28,9 +29,11 @@ class GetLeaseForWorkerService:
     def execute(
         self,
         worker_id: WorkerId,
+        tenant_id: TenantId,
     ) -> Lease | None:
         """
-        Retrieve the lease currently held by a worker.
+        Retrieve the lease currently held by a worker in this
+        tenant. A lease in another tenant is reported as None.
 
         Returns:
             The lease if the worker holds one, otherwise
@@ -38,4 +41,5 @@ class GetLeaseForWorkerService:
         """
         return self._lease_repository.get_by_worker_id(
             worker_id,
+            tenant_id,
         )

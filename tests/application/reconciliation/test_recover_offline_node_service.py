@@ -97,7 +97,7 @@ def test_recover_offline_node_requeues_job_with_retries_remaining() -> None:
 
     service.execute()
 
-    recovered_worker = worker_repository.get_by_id(worker.id)
+    recovered_worker = worker_repository.get_by_id(worker.id, worker.tenant_id)
     recovered_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert recovered_worker is not None
@@ -154,7 +154,7 @@ def test_recover_offline_node_fails_job_once_retries_exhausted() -> None:
 
     service.execute()
 
-    recovered_worker = worker_repository.get_by_id(worker.id)
+    recovered_worker = worker_repository.get_by_id(worker.id, worker.tenant_id)
     recovered_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert recovered_worker is not None
@@ -288,7 +288,7 @@ def test_recover_offline_node_skips_a_job_whose_lease_is_still_valid() -> (
 
     service.execute()
 
-    recovered_worker = worker_repository.get_by_id(worker.id)
+    recovered_worker = worker_repository.get_by_id(worker.id, worker.tenant_id)
     recovered_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert recovered_worker is not None
@@ -298,7 +298,7 @@ def test_recover_offline_node_skips_a_job_whose_lease_is_still_valid() -> (
     assert recovered_job.status is JobStatus.RUNNING
     assert recovered_job.retry_count == 0
 
-    survived_lease = lease_repository.get_by_job_id(job.id)
+    survived_lease = lease_repository.get_by_job_id(job.id, job.tenant_id)
     assert survived_lease is not None
     assert survived_lease.id == lease.id
     assert not survived_lease.is_expired()
@@ -382,7 +382,7 @@ def test_recover_offline_node_deletes_lease_so_job_can_be_reacquired() -> (
 
     # The old lease must be gone, not just the job's status
     # changed.
-    assert lease_repository.get_by_job_id(job.id) is None
+    assert lease_repository.get_by_job_id(job.id, job.tenant_id) is None
 
     # And a fresh lease can now be legitimately acquired for
     # this recovered job.
@@ -493,7 +493,7 @@ def test_recover_offline_node_keeps_jobless_worker_offline() -> None:
 
     service.execute()
 
-    stored_worker = worker_repository.get_by_id(worker.id)
+    stored_worker = worker_repository.get_by_id(worker.id, worker.tenant_id)
 
     assert stored_worker is not None
     assert stored_worker.status.value == "OFFLINE"

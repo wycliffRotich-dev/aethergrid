@@ -71,7 +71,7 @@ def test_a_tenant_mismatch_is_reported_as_no_available_node(
     ):
         service.execute(job)
 
-    assert leases.get_by_job_id(job.id) is None
+    assert leases.get_by_job_id(job.id, job.tenant_id) is None
     assert worker.is_idle()
     assert worker.running_job is None
     assert events.list(job_tenant) == []

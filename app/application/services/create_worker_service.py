@@ -66,6 +66,7 @@ class CreateWorkerService:
         """
         existing = self._worker_repository.get_by_node_id(
             node.id,
+            node.tenant_id,
         )
 
         if existing is not None:

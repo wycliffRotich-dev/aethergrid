@@ -61,7 +61,7 @@ class AssignWorkerService:
                 "Job has not been assigned to a node."
             )
 
-        for worker in self._worker_repository.list():
+        for worker in self._worker_repository.list_across_tenants():
             if worker.node.id != job.assigned_node_id:
                 continue
 

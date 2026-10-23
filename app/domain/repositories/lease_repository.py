@@ -6,6 +6,7 @@ from uuid import UUID
 
 from app.domain.entities.lease import Lease
 from app.domain.value_objects.job_id import JobId
+from app.domain.value_objects.tenant_id import TenantId
 from app.domain.value_objects.worker_id import WorkerId
 
 
@@ -42,6 +43,7 @@ class LeaseRepository(ABC):
         self,
         lease_id: UUID,
         duration: timedelta,
+        tenant_id: TenantId,
     ) -> None:
         """
         Extend an existing lease's expiry in place.
@@ -51,6 +53,13 @@ class LeaseRepository(ABC):
         creating a new row -- a renewal racing reconciliation's
         delete of the same lease needs to fail, not resurrect
         a lease that's already been handed to someone else.
+
+        The lease must also be in this tenant. A lease in
+        another tenant is reported exactly like a missing one
+        and is left unchanged (ADR 0075, decision 9). This is
+        the one write that reaches a lease by its id alone, so
+        the tenant is part of the query and not a check made
+        after it.
         """
         raise NotImplementedError
 
@@ -58,11 +67,14 @@ class LeaseRepository(ABC):
     def get_by_job_id(
         self,
         job_id: JobId,
+        tenant_id: TenantId,
     ) -> Lease | None:
         """
-        Return the lease for a job.
+        Return the lease for a job in this tenant.
 
-        Returns None when no lease exists.
+        Returns None when no lease exists. A lease in another
+        tenant is reported exactly like a missing one
+        (ADR 0064, point 5).
         """
         raise NotImplementedError
 
@@ -70,16 +82,19 @@ class LeaseRepository(ABC):
     def get_by_worker_id(
         self,
         worker_id: WorkerId,
+        tenant_id: TenantId,
     ) -> Lease | None:
         """
-        Return the lease owned by a worker.
+        Return the lease owned by a worker in this tenant.
 
-        Returns None when the worker owns no lease.
+        Returns None when the worker owns no lease. A lease in
+        another tenant is reported exactly like a missing one
+        (ADR 0064, point 5).
         """
         raise NotImplementedError
 
     @abstractmethod
-    def list(
+    def list_across_tenants(
         self,
     ) -> list[Lease]:
         """
@@ -91,14 +106,17 @@ class LeaseRepository(ABC):
     def delete(
         self,
         job_id: JobId,
+        tenant_id: TenantId,
     ) -> None:
         """
-        Remove a lease by job id, unconditionally.
+        Remove a lease by job id in this tenant, unconditionally.
+        A lease in another tenant is left untouched, and a
+        missing lease is a no-op.
         """
         raise NotImplementedError
 
     @abstractmethod
-    def delete_if_expired(
+    def delete_if_expired_across_tenants(
         self,
         job_id: JobId,
     ) -> bool:

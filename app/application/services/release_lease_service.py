@@ -26,6 +26,7 @@ from app.domain.repositories.lease_repository import (
 from app.domain.repositories.worker_repository import (
     WorkerRepository,
 )
+from app.domain.value_objects.tenant_id import TenantId
 from app.domain.value_objects.worker_id import WorkerId
 
 
@@ -80,9 +81,11 @@ class ReleaseLeaseService:
         self,
         worker_id: WorkerId,
         expected_lease_id: UUID,
+        tenant_id: TenantId,
     ) -> None:
         lease = self._lease_repository.get_by_worker_id(
             worker_id,
+            tenant_id,
         )
 
         if lease is None:
@@ -102,6 +105,7 @@ class ReleaseLeaseService:
 
         worker = self._worker_repository.get_by_id(
             worker_id,
+            tenant_id,
         )
 
         if worker is None:
@@ -123,6 +127,7 @@ class ReleaseLeaseService:
 
         self._lease_repository.delete(
             lease.job_id,
+            tenant_id,
         )
 
         if job is not None:

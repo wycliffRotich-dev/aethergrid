@@ -110,7 +110,7 @@ class WorkerExecutionLoop:
         """
         Execute one worker iteration.
         """
-        worker = self._worker_repository.get_by_id(
+        worker = self._worker_repository.get_by_id_across_tenants(
             worker_id,
         )
 
@@ -124,6 +124,11 @@ class WorkerExecutionLoop:
 
         job = worker.running_job
 
+        # The tenant of this worker, read once. Every lease call below
+        # passes it, so none of them can reach a lease in another
+        # tenant (ADR 0075).
+        tenant_id = worker.tenant_id
+
         # Captured once, up front, before this loop does anything
         # that assumes it still owns this job's lease. This is the
         # identity release_lease_service checks against at the end
@@ -134,6 +139,7 @@ class WorkerExecutionLoop:
         # actually holds it now.
         current_lease = self._lease_repository.get_by_worker_id(
             worker_id,
+            tenant_id,
         )
 
         if current_lease is None:
@@ -178,6 +184,7 @@ class WorkerExecutionLoop:
                     self._renew_lease_service.execute(
                         worker_id,
                         expected_lease_id=lease_id,
+                        tenant_id=tenant_id,
                     )
                 except LeaseNotFoundError as exc:
                     lost_lease.append(exc)
@@ -294,6 +301,7 @@ class WorkerExecutionLoop:
         self._release_lease_service.execute(
             worker_id,
             lease_id,
+            tenant_id=tenant_id,
         )
 
         self._worker_repository.save(

@@ -42,9 +42,7 @@ def test_heartbeat_recovers_offline_worker_with_no_running_job() -> None:
     worker_id = worker_response.json()["id"]
     assert worker_response.json()["status"] == "IDLE"
 
-    worker = _worker_repository.get_by_id(
-        WorkerId(worker_id),
-    )
+    worker = _worker_repository.get_by_id_across_tenants(WorkerId(worker_id))
     assert worker is not None
     assert worker.running_job is None
 

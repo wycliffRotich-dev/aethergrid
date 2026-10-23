@@ -190,7 +190,7 @@ def test_run_once_with_no_command_completes_successfully() -> None:
 
     loop.execute(worker.id)
 
-    saved_worker = worker_repository.get_by_id(worker.id)
+    saved_worker = worker_repository.get_by_id(worker.id, worker.tenant_id)
     saved_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
@@ -202,7 +202,7 @@ def test_run_once_with_no_command_completes_successfully() -> None:
     assert saved_job.is_completed()
     assert saved_job.exit_code == 0
 
-    assert lease_repository.get_by_worker_id(worker.id) is None
+    assert lease_repository.get_by_worker_id(worker.id, worker.tenant_id) is None
 
     # The actual regression this loop exists to prevent: a completed
     # job must give its allocated resources back to the node, not
@@ -227,7 +227,7 @@ def test_run_once_executes_real_successful_command() -> None:
 
     loop.execute(worker.id)
 
-    saved_worker = worker_repository.get_by_id(worker.id)
+    saved_worker = worker_repository.get_by_id(worker.id, worker.tenant_id)
     saved_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
@@ -238,7 +238,7 @@ def test_run_once_executes_real_successful_command() -> None:
     assert saved_job.is_completed()
     assert saved_job.exit_code == 0
 
-    assert lease_repository.get_by_worker_id(worker.id) is None
+    assert lease_repository.get_by_worker_id(worker.id, worker.tenant_id) is None
 
     assert saved_node is not None
     assert saved_node.available == saved_node.capacity
@@ -261,7 +261,7 @@ def test_run_once_marks_job_and_worker_failed_on_nonzero_exit() -> None:
 
     loop.execute(worker.id)
 
-    saved_worker = worker_repository.get_by_id(worker.id)
+    saved_worker = worker_repository.get_by_id(worker.id, worker.tenant_id)
     saved_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
@@ -274,7 +274,7 @@ def test_run_once_marks_job_and_worker_failed_on_nonzero_exit() -> None:
 
     # The lease must still be released even though the job
     # failed -- outcome and lease lifecycle are independent.
-    assert lease_repository.get_by_worker_id(worker.id) is None
+    assert lease_repository.get_by_worker_id(worker.id, worker.tenant_id) is None
 
     # Node resources must be released on failure too -- a failed
     # job is done using the node just as much as a completed one.
@@ -302,7 +302,7 @@ def test_run_once_marks_job_failed_when_command_exceeds_timeout() -> None:
 
     loop.execute(worker.id)
 
-    saved_worker = worker_repository.get_by_id(worker.id)
+    saved_worker = worker_repository.get_by_id(worker.id, worker.tenant_id)
     saved_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
@@ -312,7 +312,7 @@ def test_run_once_marks_job_failed_when_command_exceeds_timeout() -> None:
     assert saved_job is not None
     assert saved_job.is_failed()
 
-    assert lease_repository.get_by_worker_id(worker.id) is None
+    assert lease_repository.get_by_worker_id(worker.id, worker.tenant_id) is None
 
     assert saved_node is not None
     assert saved_node.available == saved_node.capacity
@@ -359,7 +359,7 @@ def test_run_once_returns_early_when_worker_has_no_running_job() -> None:
     # renew or release a lease that was never acquired.
     loop.execute(worker.id)
 
-    saved_worker = worker_repository.get_by_id(worker.id)
+    saved_worker = worker_repository.get_by_id(worker.id, worker.tenant_id)
     assert saved_worker is not None
     assert saved_worker.is_idle()
 def test_run_once_does_not_restart_a_job_already_running() -> None:
@@ -384,7 +384,7 @@ def test_run_once_does_not_restart_a_job_already_running() -> None:
 
     loop.execute(worker.id)
 
-    saved_worker = worker_repository.get_by_id(worker.id)
+    saved_worker = worker_repository.get_by_id(worker.id, worker.tenant_id)
     saved_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert saved_worker is not None
@@ -512,7 +512,7 @@ def test_run_once_cancels_job_requested_to_cancel_during_execution() -> None:
 
     loop.execute(worker.id)
 
-    saved_worker = worker_repository.get_by_id(worker.id)
+    saved_worker = worker_repository.get_by_id(worker.id, worker.tenant_id)
     saved_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
@@ -523,7 +523,7 @@ def test_run_once_cancels_job_requested_to_cancel_during_execution() -> None:
     assert saved_job is not None
     assert saved_job.is_cancelled()
 
-    assert lease_repository.get_by_worker_id(worker.id) is None
+    assert lease_repository.get_by_worker_id(worker.id, worker.tenant_id) is None
 
     assert saved_node is not None
     assert saved_node.available == saved_node.capacity

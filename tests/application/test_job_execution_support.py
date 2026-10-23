@@ -103,7 +103,7 @@ def test_reclaim_job_deletes_lease_releases_node_and_reclaims_job(
     assert result is True
     assert job.is_queued()
     assert job.retry_count == 1
-    assert lease_repository.get_by_job_id(job.id) is None
+    assert lease_repository.get_by_job_id(job.id, job.tenant_id) is None
 
     read_connection = create_connection(db_path)
     reloaded = SqliteNodeRepository(read_connection).get_by_id(node.id, DEFAULT_TENANT_ID)
@@ -157,7 +157,7 @@ def test_reclaim_job_with_no_node_still_deletes_lease_and_reclaims_job() -> (
 
     assert result is True
     assert job.is_queued()
-    assert lease_repository.get_by_job_id(job.id) is None
+    assert lease_repository.get_by_job_id(job.id, job.tenant_id) is None
 
 
 def test_reclaim_job_returns_false_when_job_not_reclaimable() -> None:
@@ -203,7 +203,7 @@ def test_reclaim_job_returns_false_when_job_not_reclaimable() -> None:
     )
 
     assert result is False
-    assert lease_repository.get_by_job_id(job.id) is None
+    assert lease_repository.get_by_job_id(job.id, job.tenant_id) is None
     assert job.status.name == "COMPLETED"
 
 

@@ -112,10 +112,10 @@ def test_execute_deletes_the_lease() -> None:
         worker_repository=worker_repository,
     )
 
-    service.execute(worker.id, lease.id)
+    service.execute(worker.id, lease.id, worker.tenant_id)
 
-    assert lease_repository.get_by_worker_id(worker.id) is None
-    assert lease_repository.get_by_job_id(job.id) is None
+    assert lease_repository.get_by_worker_id(worker.id, worker.tenant_id) is None
+    assert lease_repository.get_by_job_id(job.id, job.tenant_id) is None
 
 
 def test_execute_does_not_change_worker_state() -> None:
@@ -143,9 +143,9 @@ def test_execute_does_not_change_worker_state() -> None:
         worker_repository=worker_repository,
     )
 
-    service.execute(worker.id, lease.id)
+    service.execute(worker.id, lease.id, worker.tenant_id)
 
-    stored_worker = worker_repository.get_by_id(worker.id)
+    stored_worker = worker_repository.get_by_id(worker.id, worker.tenant_id)
 
     assert stored_worker is not None
     assert stored_worker.status == worker.status
@@ -164,7 +164,7 @@ def test_execute_raises_when_worker_has_no_active_lease() -> None:
     )
 
     with pytest.raises(NoActiveLeaseError):
-        service.execute(worker.id, uuid4())
+        service.execute(worker.id, uuid4(), worker.tenant_id)
 
 
 def test_execute_raises_when_worker_does_not_exist() -> None:
@@ -187,7 +187,7 @@ def test_execute_raises_when_worker_does_not_exist() -> None:
     )
 
     with pytest.raises(WorkerNotFoundError):
-        service.execute(worker.id, lease.id)
+        service.execute(worker.id, lease.id, worker.tenant_id)
 
 
 def test_execute_records_lease_released_event() -> None:
@@ -224,7 +224,7 @@ def test_execute_records_lease_released_event() -> None:
         job_repository=InMemoryJobRepository([job]),
     )
 
-    service.execute(worker.id, lease.id)
+    service.execute(worker.id, lease.id, worker.tenant_id)
 
     recorded = events.list(job.tenant_id)
 
@@ -264,7 +264,7 @@ def test_the_event_takes_the_tenant_of_the_job_named_by_the_lease() -> None:
         job_repository=InMemoryJobRepository([job]),
     )
 
-    service.execute(worker.id, lease.id)
+    service.execute(worker.id, lease.id, worker.tenant_id)
 
     recorded = events.list(other_tenant)
 
@@ -301,9 +301,9 @@ def test_execute_keeps_the_lease_when_the_job_cannot_be_found() -> None:
     )
 
     with pytest.raises(JobNotFoundError):
-        service.execute(worker.id, lease.id)
+        service.execute(worker.id, lease.id, worker.tenant_id)
 
-    assert lease_repository.get_by_worker_id(worker.id) is not None
+    assert lease_repository.get_by_worker_id(worker.id, worker.tenant_id) is not None
     assert events.list(job.tenant_id) == []
 
 
@@ -358,7 +358,7 @@ def test_execute_raises_and_preserves_an_unrelated_lease_after_reclaim_and_reacq
 
     # Reconciliation reclaims the original lease (the worker
     # went stale from this lease's perspective)...
-    lease_repository.delete(job.id)
+    lease_repository.delete(job.id, worker.tenant_id)
 
     # ...and the same worker is legitimately re-acquired for a
     # different job, with its own new lease.
@@ -374,10 +374,10 @@ def test_execute_raises_and_preserves_an_unrelated_lease_after_reclaim_and_reacq
     # lease, finally calls release, asserting that identity
     # explicitly.
     with pytest.raises(LeaseNotFoundError):
-        service.execute(worker.id, original_lease.id)
+        service.execute(worker.id, original_lease.id, worker.tenant_id)
 
     # The replacement lease, belonging to a different,
     # currently-legitimate job execution, must survive.
-    surviving = lease_repository.get_by_worker_id(worker.id)
+    surviving = lease_repository.get_by_worker_id(worker.id, worker.tenant_id)
     assert surviving is not None
     assert surviving.id == replacement_lease.id

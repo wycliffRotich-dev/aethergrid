@@ -57,13 +57,13 @@ class RecoverExpiredLeaseService:
         their worker is still the legitimate owner of the job.
 
         The lease is deleted first, before the job or worker
-        are touched, via delete_if_expired() rather than an
+        are touched, via delete_if_expired_across_tenants() rather than an
         unconditional delete(). Ordering alone (delete-first)
         only prevents a renewal from landing after the delete;
         it does nothing about a renewal that already happened
         before it, since is_expired() above was checked against
         a snapshot read at the top of this loop, not at the
-        moment of deletion. delete_if_expired() re-checks
+        moment of deletion. delete_if_expired_across_tenants() re-checks
         expiry atomically at delete time, so a lease renewed
         between the snapshot and the delete is left untouched
         instead of being stolen out from under its current,
@@ -91,11 +91,11 @@ class RecoverExpiredLeaseService:
         move on rather than letting one stale lease crash the
         entire reconciliation pass.
         """
-        for lease in self._lease_repository.list():
+        for lease in self._lease_repository.list_across_tenants():
             if not lease.is_expired():
                 continue
 
-            deleted = self._lease_repository.delete_if_expired(
+            deleted = self._lease_repository.delete_if_expired_across_tenants(
                 lease.job_id,
             )
 
@@ -117,8 +117,9 @@ class RecoverExpiredLeaseService:
                 continue
 
             worker = self._worker_repository.get_by_id(
-                lease.worker_id,
-            )
+            lease.worker_id,
+            lease.tenant_id,
+        )
             job = self._job_repository.get_by_id_across_tenants(
                 lease.job_id,
             )

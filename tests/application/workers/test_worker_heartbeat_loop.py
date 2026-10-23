@@ -53,6 +53,7 @@ def test_run_once_sends_heartbeat() -> None:
 
     saved = repository.get_by_id(
         worker.id,
+        node.tenant_id,
     )
 
     assert saved is not None

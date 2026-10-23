@@ -58,6 +58,7 @@ class StartJobService:
         """
         worker = self._worker_repository.get_by_id(
             worker_id,
+            tenant_id,
         )
 
         # A worker belongs to the tenant of its node. One in

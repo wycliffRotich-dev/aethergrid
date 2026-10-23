@@ -36,6 +36,7 @@ class RegisterWorkerService:
 
         stored_worker = self._worker_repository.get_by_id(
             worker.id,
+            worker.tenant_id,
         )
 
         if stored_worker is None:

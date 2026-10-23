@@ -44,7 +44,7 @@ def test_registering_a_worker_on_another_tenants_node_answers_404() -> None:
     assert foreign.status_code == 404
     assert foreign.status_code == missing.status_code
     assert foreign.json() == missing.json()
-    assert _worker_repository.list() == []
+    assert _worker_repository.list_across_tenants() == []
 
 
 def test_the_owning_tenant_can_still_register_a_worker() -> None:
@@ -56,4 +56,4 @@ def test_the_owning_tenant_can_still_register_a_worker() -> None:
 
     assert response.status_code == 201
     assert response.json()["status"] == "IDLE"
-    assert len(_worker_repository.list()) == 1
+    assert len(_worker_repository.list(tenant_a)) == 1

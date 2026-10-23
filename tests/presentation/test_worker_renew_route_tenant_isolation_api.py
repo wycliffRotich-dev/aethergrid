@@ -55,7 +55,7 @@ def _worker_holding_a_lease(tenant_id: TenantId) -> tuple[Worker, Lease]:
     AcquireLeaseService(
         lease_repository=_lease_repository,
     ).execute(worker, job)
-    lease = _lease_repository.get_by_worker_id(worker.id)
+    lease = _lease_repository.get_by_worker_id(worker.id, worker.tenant_id)
     assert lease is not None
     return worker, lease
 
@@ -92,7 +92,7 @@ def test_another_tenant_cannot_renew_a_lease_even_with_its_real_id(
         missing.text.replace(str(missing_id), "<id>")
     )
 
-    after = _lease_repository.get_by_worker_id(worker.id)
+    after = _lease_repository.get_by_worker_id(worker.id, worker.tenant_id)
     assert after is not None
     assert after.id == lease_id
     assert after.expires_at == expires_before
@@ -111,7 +111,7 @@ def test_a_workers_own_tenant_can_still_renew_its_lease(
     )
 
     assert response.status_code == 200
-    after = _lease_repository.get_by_worker_id(worker.id)
+    after = _lease_repository.get_by_worker_id(worker.id, worker.tenant_id)
     assert after is not None
     assert after.id == lease_id
     assert after.expires_at > expires_before

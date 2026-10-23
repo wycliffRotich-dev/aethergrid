@@ -59,7 +59,7 @@ def test_worker_can_acquire_job_lease() -> None:
 
     assert lease.worker_id == worker.id
     assert lease.job_id == job.id
-    assert repository.get_by_job_id(job.id) is not None
+    assert repository.get_by_job_id(job.id, job.tenant_id) is not None
 def test_acquire_lease_service_records_lease_acquired_event() -> None:
     """
     Acquiring a lease must record a LeaseAcquired event, the

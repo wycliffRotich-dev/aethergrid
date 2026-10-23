@@ -72,7 +72,7 @@ def test_another_tenants_worker_cannot_be_heartbeated(
         missing.text.replace(str(missing_id), "<id>")
     )
 
-    stored = _worker_repository.get_by_id(worker.id)
+    stored = _worker_repository.get_by_id(worker.id, worker.tenant_id)
     assert stored is not None
     assert stored.last_seen_at == stale
     assert stored.status is WorkerStatus.OFFLINE
@@ -90,6 +90,6 @@ def test_a_worker_can_still_be_heartbeated_by_its_own_tenant(
     body = response.json()
     assert body["id"] == str(worker.id)
     assert body["status"] == "IDLE"
-    stored = _worker_repository.get_by_id(worker.id)
+    stored = _worker_repository.get_by_id(worker.id, worker.tenant_id)
     assert stored is not None
     assert stored.last_seen_at > stale

@@ -17,6 +17,7 @@ def test_save_and_get_worker() -> None:
 
     assert repository.get_by_id(
         "worker-1",
+        worker.tenant_id,
     ) is worker
 
 
@@ -36,7 +37,7 @@ def test_list_workers() -> None:
         ],
     )
 
-    workers = repository.list()
+    workers = repository.list(first.tenant_id)
 
     assert first in workers
     assert second in workers
@@ -56,8 +57,10 @@ def test_delete_worker() -> None:
 
     repository.delete(
         "worker-1",
+        worker.tenant_id,
     )
 
     assert repository.get_by_id(
         "worker-1",
+        worker.tenant_id,
     ) is None

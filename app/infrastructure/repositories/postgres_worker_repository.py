@@ -64,7 +64,22 @@ class PostgresWorkerRepository(WorkerRepository):
                 },
             )
 
-    def get_by_id(self, worker_id: WorkerId) -> Worker | None:
+    def get_by_id(
+        self,
+        worker_id: WorkerId,
+        tenant_id: TenantId,
+    ) -> Worker | None:
+        with self._pool.connection() as conn:
+            row = conn.cursor(row_factory=dict_row).execute(
+                "SELECT * FROM workers WHERE id = %s AND tenant_id = %s",
+                (str(worker_id), str(tenant_id.value)),
+            ).fetchone()
+            return self._to_entity(conn, row) if row else None
+
+    def get_by_id_across_tenants(
+        self,
+        worker_id: WorkerId,
+    ) -> Worker | None:
         with self._pool.connection() as conn:
             row = conn.cursor(row_factory=dict_row).execute(
                 "SELECT * FROM workers WHERE id = %s",
@@ -72,19 +87,35 @@ class PostgresWorkerRepository(WorkerRepository):
             ).fetchone()
             return self._to_entity(conn, row) if row else None
 
-    def get_by_node_id(self, node_id: NodeId) -> Worker | None:
+    def get_by_node_id(
+        self,
+        node_id: NodeId,
+        tenant_id: TenantId,
+    ) -> Worker | None:
         """
-        Retrieve the worker registered for a node, if one
-        exists (ADR 0030).
+        Retrieve the worker registered for a node in this
+        tenant, if one exists (ADR 0030).
         """
         with self._pool.connection() as conn:
             row = conn.cursor(row_factory=dict_row).execute(
-                "SELECT * FROM workers WHERE node_id = %s",
-                (str(node_id),),
+                "SELECT * FROM workers WHERE node_id = %s AND tenant_id = %s",
+                (str(node_id), str(tenant_id.value)),
             ).fetchone()
             return self._to_entity(conn, row) if row else None
 
-    def list(self) -> list[Worker]:
+    def list(self, tenant_id: TenantId) -> list[Worker]:
+        with self._pool.connection() as conn:
+            rows = (
+                conn.cursor(row_factory=dict_row)
+                .execute(
+                    "SELECT * FROM workers WHERE tenant_id = %s",
+                    (str(tenant_id.value),),
+                )
+                .fetchall()
+            )
+            return [self._to_entity(conn, row) for row in rows]
+
+    def list_across_tenants(self) -> list[Worker]:
         with self._pool.connection() as conn:
             rows = (
                 conn.cursor(row_factory=dict_row)
@@ -93,11 +124,11 @@ class PostgresWorkerRepository(WorkerRepository):
             )
             return [self._to_entity(conn, row) for row in rows]
 
-    def delete(self, worker_id: WorkerId) -> None:
+    def delete(self, worker_id: WorkerId, tenant_id: TenantId) -> None:
         with self._pool.connection() as conn:
             conn.execute(
-                "DELETE FROM workers WHERE id = %s",
-                (str(worker_id),),
+                "DELETE FROM workers WHERE id = %s AND tenant_id = %s",
+                (str(worker_id), str(tenant_id.value)),
             )
 
     def _to_entity(self, conn, row: dict) -> Worker:

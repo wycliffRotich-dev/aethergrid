@@ -90,7 +90,7 @@ def test_stale_jobless_worker_on_stale_node_stays_offline_across_cycles() -> (
     for _ in range(3):
         loop.execute()
 
-        stored = worker_repository.get_by_id(worker.id)
+        stored = worker_repository.get_by_id(worker.id, worker.tenant_id)
 
         assert stored is not None
         assert stored.status.value == "OFFLINE"

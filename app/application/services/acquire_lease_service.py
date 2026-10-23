@@ -47,6 +47,7 @@ class AcquireLeaseService:
 
         existing = self._lease_repository.get_by_job_id(
             job.id,
+            job.tenant_id,
         )
 
         if existing is not None:

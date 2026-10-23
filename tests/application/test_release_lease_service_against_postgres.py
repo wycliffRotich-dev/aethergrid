@@ -123,7 +123,7 @@ def test_release_by_stale_lease_id_is_rejected_and_reassigned_lease_survives(
 
     # Step 2: reconciliation reclaims it, independently.
     reclaiming_repository = PostgresLeaseRepository(pool)
-    reclaiming_repository.delete(job_one.id)
+    reclaiming_repository.delete(job_one.id, job_one.tenant_id)
 
     # Step 3: the same worker is legitimately reassigned a
     # different job, with its own new lease.
@@ -146,12 +146,12 @@ def test_release_by_stale_lease_id_is_rejected_and_reassigned_lease_survives(
     )
 
     with pytest.raises(LeaseNotFoundError):
-        service.execute(worker.id, original_lease.id)
+        service.execute(worker.id, original_lease.id, worker.tenant_id)
 
     # Step 5: verify, via a fourth, independent repository
     # instance, that the replacement lease survived untouched.
     verifying_repository = PostgresLeaseRepository(pool)
-    surviving_lease = verifying_repository.get_by_worker_id(worker.id)
+    surviving_lease = verifying_repository.get_by_worker_id(worker.id, worker.tenant_id)
 
     assert surviving_lease is not None
     assert surviving_lease.id == replacement_lease.id

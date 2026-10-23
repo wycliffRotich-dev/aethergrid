@@ -71,6 +71,7 @@ class ReportJobOutcomeService:
     ) -> Worker:
         worker = self._worker_repository.get_by_id(
             worker_id,
+            tenant_id,
         )
 
         # A worker belongs to the tenant of its node. One in
@@ -98,6 +99,7 @@ class ReportJobOutcomeService:
         job: Job,
         event_type: str,
         expected_lease_id: UUID,
+        tenant_id: TenantId,
     ) -> Worker:
         # job is passed in explicitly, captured by the caller
         # before worker.complete()/worker.fail() ran -- both
@@ -113,6 +115,7 @@ class ReportJobOutcomeService:
         self._release_lease_service.execute(
             worker_id,
             expected_lease_id,
+            tenant_id=tenant_id,
         )
 
         self._worker_repository.save(
@@ -191,6 +194,7 @@ class ReportJobOutcomeService:
             job,
             event_type="JobCompleted",
             expected_lease_id=lease_id,
+            tenant_id=tenant_id,
         )
 
     def fail(
@@ -225,6 +229,7 @@ class ReportJobOutcomeService:
             job,
             event_type="JobFailed",
             expected_lease_id=lease_id,
+            tenant_id=tenant_id,
         )
 
     def cancel(
@@ -260,4 +265,5 @@ class ReportJobOutcomeService:
             job,
             event_type="JobCancelled",
             expected_lease_id=lease_id,
+            tenant_id=tenant_id,
         )

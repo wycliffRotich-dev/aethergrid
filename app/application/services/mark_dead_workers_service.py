@@ -24,7 +24,7 @@ class MarkDeadWorkersService:
         Scan every registered worker and mark stale
         workers as offline.
         """
-        for worker in self._worker_repository.list():
+        for worker in self._worker_repository.list_across_tenants():
             if worker.is_alive():
                 continue
 

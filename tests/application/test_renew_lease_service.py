@@ -19,6 +19,7 @@ from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from app.domain.value_objects.tenant_id import TenantId
 from app.domain.value_objects.worker_id import WorkerId
 from app.infrastructure.repositories.in_memory_lease_repository import (
     InMemoryLeaseRepository,
@@ -74,11 +75,13 @@ def test_execute_renews_worker_lease() -> None:
     service.execute(
         worker.id,
         expected_lease_id=lease.id,
+        tenant_id=worker.tenant_id,
         duration=timedelta(minutes=5),
     )
 
     renewed = repository.get_by_worker_id(
         worker.id,
+        worker.tenant_id,
     )
 
     assert renewed is not None
@@ -102,6 +105,7 @@ def test_execute_raises_when_worker_has_no_active_lease() -> None:
         service.execute(
             WorkerId.new(),
             expected_lease_id=uuid4(),
+            tenant_id=DEFAULT_TENANT_ID,
         )
 
 
@@ -128,7 +132,7 @@ def test_execute_rejects_renewal_when_lease_reassigned_to_different_job() -> Non
     repository.save(original_lease)
 
     # Reconciliation reclaims the original lease.
-    repository.delete(original_lease.job_id)
+    repository.delete(original_lease.job_id, original_lease.tenant_id)
 
     # The same worker is legitimately reassigned a new job,
     # with its own new lease.
@@ -154,13 +158,48 @@ def test_execute_rejects_renewal_when_lease_reassigned_to_different_job() -> Non
         service.execute(
             worker_id,
             expected_lease_id=original_lease.id,
+            tenant_id=DEFAULT_TENANT_ID,
             duration=timedelta(minutes=5),
         )
 
     # The replacement lease must survive untouched -- not
     # renewed, not deleted.
-    surviving = repository.get_by_worker_id(worker_id)
+    surviving = repository.get_by_worker_id(worker_id, DEFAULT_TENANT_ID)
 
     assert surviving is not None
     assert surviving.id == replacement_lease.id
     assert surviving.expires_at == replacement_original_expiration
+
+
+def test_execute_does_not_renew_a_lease_in_another_tenant() -> None:
+    """
+    ADR 0075: a worker's lease in another tenant is reported exactly
+    like a missing one, and its expiry does not move.
+    """
+    repository = InMemoryLeaseRepository()
+    tenant = TenantId.new()
+    lease = Lease.create(
+        worker_id=WorkerId.new(),
+        job_id=JobId.new(),
+        tenant_id=tenant,
+        duration=timedelta(minutes=1),
+    )
+    repository.save(lease)
+    expiry_before = lease.expires_at
+
+    service = RenewLeaseService(
+        lease_repository=repository,
+    )
+
+    with pytest.raises(NoActiveLeaseError):
+        service.execute(
+            lease.worker_id,
+            expected_lease_id=lease.id,
+            tenant_id=TenantId.new(),
+            duration=timedelta(minutes=5),
+        )
+
+    surviving = repository.get_by_worker_id(lease.worker_id, tenant)
+
+    assert surviving is not None
+    assert surviving.expires_at == expiry_before
