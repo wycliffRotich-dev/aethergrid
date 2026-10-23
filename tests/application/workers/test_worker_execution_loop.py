@@ -855,3 +855,199 @@ def test_run_once_preserves_cancellation_request_against_sqlite_repository() -> 
         assert saved_job.cancellation_requested_at is not None
     finally:
         os.remove(db_path)
+
+
+class _RecordingJobRepository(InMemoryJobRepository):
+    """Records every across-tenants read, then behaves as before."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.across_tenants_reads = []
+
+    def get_by_id_across_tenants(self, job_id):
+        self.across_tenants_reads.append(job_id)
+        return super().get_by_id_across_tenants(job_id)
+
+
+class _RecordingNodeRepository(InMemoryNodeRepository):
+    """Records every across-tenants read, then behaves as before."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.across_tenants_reads = []
+
+    def get_by_id_across_tenants(self, node_id):
+        self.across_tenants_reads.append(node_id)
+        return super().get_by_id_across_tenants(node_id)
+
+
+def _make_worker_and_job_in(tenant, command=None) -> tuple[Worker, Job, Node]:
+    node = make_node(
+        id=NodeId.new(),
+        tenant_id=tenant,
+        capacity=ResourceRequirements(
+            cpu_cores=8,
+            memory_mib=16384,
+            vram_mib=0,
+        ),
+    )
+
+    worker = make_worker(
+        id=WorkerId.new(),
+        node=node,
+    )
+    worker.ready()
+
+    job = make_job(
+        id=JobId.new(),
+        tenant_id=tenant,
+        resources=ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=512,
+            vram_mib=0,
+        ),
+        command=command,
+    )
+
+    job.queue()
+    job.assign_to(node.id)
+    node.allocate(job.resources)
+
+    worker.accept(job)
+
+    return worker, job, node
+
+
+def _build_recording_loop(worker, job, node, **loop_kwargs):
+    lease = Lease.create(
+        worker_id=worker.id,
+        job_id=job.id,
+        tenant_id=worker.tenant_id,
+    )
+
+    lease_repository = InMemoryLeaseRepository()
+    lease_repository.save(lease)
+
+    worker_repository = InMemoryWorkerRepository([worker])
+    job_repository = _RecordingJobRepository([job])
+    node_repository = _RecordingNodeRepository([node])
+
+    loop = WorkerExecutionLoop(
+        worker_repository=worker_repository,
+        job_repository=job_repository,
+        node_repository=node_repository,
+        lease_repository=lease_repository,
+        renew_lease_service=RenewLeaseService(
+            lease_repository=lease_repository,
+        ),
+        release_lease_service=ReleaseLeaseService(
+            lease_repository=lease_repository,
+            worker_repository=worker_repository,
+        ),
+        job_execution_service=JobExecutionService(
+            poll_interval=timedelta(seconds=0.05),
+        ),
+        **loop_kwargs,
+    )
+
+    return (
+        loop,
+        worker_repository,
+        job_repository,
+        node_repository,
+        lease_repository,
+    )
+
+
+def test_run_once_reads_job_and_node_in_the_worker_tenant() -> None:
+    """
+    Once the worker is loaded its tenant is known, so the node read
+    and the final job read must use it. Only the first worker read
+    runs across tenants, because the loop is handed a worker id and
+    nothing else (ADR 0075 decision 10). Runs in a tenant that is not
+    the default, so a read scoped to the wrong tenant would not find
+    the node or the job.
+    """
+    from app.domain.value_objects.tenant_id import TenantId
+
+    tenant = TenantId.new()
+    assert tenant != DEFAULT_TENANT_ID
+    worker, job, node = _make_worker_and_job_in(tenant)
+
+    (
+        loop,
+        worker_repository,
+        job_repository,
+        node_repository,
+        lease_repository,
+    ) = _build_recording_loop(worker, job, node)
+
+    loop.execute(worker.id)
+
+    assert job_repository.across_tenants_reads == []
+    assert node_repository.across_tenants_reads == []
+
+    saved_job = job_repository.get_by_id(job.id, tenant)
+    saved_node = node_repository.get_by_id(node.id, tenant)
+
+    assert saved_job is not None
+    assert saved_job.is_completed()
+    assert saved_node is not None
+    assert saved_node.available == saved_node.capacity
+    assert lease_repository.get_by_worker_id(worker.id, tenant) is None
+
+
+def test_run_once_cancellation_reads_the_job_in_the_worker_tenant() -> None:
+    """
+    The cancellation watcher runs in the renewal thread, and a read
+    that goes wrong there fails silently. The reads are recorded
+    instead of raising, and the cancellation must still be seen and
+    honoured, which it can only be if the watcher reads the job in the
+    worker's own tenant.
+    """
+    from app.domain.value_objects.tenant_id import TenantId
+
+    tenant = TenantId.new()
+    worker, job, node = _make_worker_and_job_in(
+        tenant,
+        command=["python3", "-c", "import time; time.sleep(5)"],
+    )
+
+    (
+        loop,
+        worker_repository,
+        job_repository,
+        node_repository,
+        lease_repository,
+    ) = _build_recording_loop(
+        worker,
+        job,
+        node,
+        renewal_interval_seconds=0.1,
+    )
+
+    def request_cancellation_soon() -> None:
+        time.sleep(0.2)
+        stored = job_repository.get_by_id(job.id, tenant)
+        assert stored is not None
+        stored.request_cancellation()
+        job_repository.save(stored)
+
+    threading.Thread(
+        target=request_cancellation_soon,
+        daemon=True,
+    ).start()
+
+    loop.execute(worker.id)
+
+    assert job_repository.across_tenants_reads == []
+    assert node_repository.across_tenants_reads == []
+
+    saved_job = job_repository.get_by_id(job.id, tenant)
+    saved_node = node_repository.get_by_id(node.id, tenant)
+
+    assert saved_job is not None
+    assert saved_job.is_cancelled()
+    assert saved_node is not None
+    assert saved_node.available == saved_node.capacity
+    assert lease_repository.get_by_worker_id(worker.id, tenant) is None

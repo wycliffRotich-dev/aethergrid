@@ -26,9 +26,10 @@ ALLOWED_CALLERS = {
     # a tenant mismatch is logged as the bug it is (ADR 0075 decision
     # 14). AcquireLeaseService refuses the cross-tenant lease.
     "application/services/assign_worker_service.py",
-    # Interim: these read a node from a job or worker that carries no
-    # tenant, or read a job by an id that arrives without one. Each
-    # entry leaves when its caller can pass a tenant.
+    # The loop is handed a worker id and nothing else, so it cannot
+    # know the tenant before it loads the worker. That one read stays
+    # across tenants. Every later read uses the worker's tenant, and
+    # test_worker_execution_loop.py pins that (ADR 0075 decision 10).
     "application/workers/worker_execution_loop.py",
 }
 

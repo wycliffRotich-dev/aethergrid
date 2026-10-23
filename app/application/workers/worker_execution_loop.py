@@ -110,6 +110,10 @@ class WorkerExecutionLoop:
         """
         Execute one worker iteration.
         """
+        # The one read that stays across tenants. The loop is handed a
+        # worker id and nothing else, so the tenant is unknown until
+        # the worker is loaded. Every read after this one uses the
+        # worker's tenant (ADR 0075 decision 10).
         worker = self._worker_repository.get_by_id_across_tenants(
             worker_id,
         )
@@ -202,8 +206,9 @@ class WorkerExecutionLoop:
                 # request_cancellation() twice and raise on an
                 # already-CANCELLING job.
                 if not cancel_event.is_set():
-                    current = self._job_repository.get_by_id_across_tenants(
+                    current = self._job_repository.get_by_id(
                         job.id,
+                        tenant_id,
                     )
 
                     if (
@@ -309,8 +314,9 @@ class WorkerExecutionLoop:
         )
 
         if job.assigned_node_id is not None:
-            node = self._node_repository.get_by_id_across_tenants(
+            node = self._node_repository.get_by_id(
                 job.assigned_node_id,
+                tenant_id,
             )
 
             if node is not None:
@@ -340,7 +346,7 @@ class WorkerExecutionLoop:
         # unconditional save. A direct field assignment, not a
         # state transition: cancellation_requested_at is a plain
         # timestamp, not a status this job is moving through.
-        current = self._job_repository.get_by_id_across_tenants(job.id)
+        current = self._job_repository.get_by_id(job.id, tenant_id)
 
         if (
             current is not None
