@@ -336,10 +336,17 @@ Answered after slice 1:
 - A decision on `CompleteJobService` and `FailJobService`. Neither has
   a caller in `app`. They were converted because decision 10 says to
   convert them, and deleting them is a separate change.
-- A missing node is skipped without an error in
-  `ReportJobOutcomeService` and `WorkerExecutionLoop`, so its
-  resources stay allocated. Whether that should be an error is a
-  question about correctness and not about tenancy.
+- A job with an assigned node whose node is not found in the job's
+  tenant is skipped without a log line in `ReportJobOutcomeService`
+  and `WorkerExecutionLoop`. On Postgres that state cannot occur:
+  deleting a node clears the job's link (`ON DELETE SET NULL`), and
+  `jobs_assigned_node_same_tenant` refuses a node of another tenant.
+  The in-memory and sqlite backends have no such keys. If the state
+  ever occurred there, a node of another tenant would keep its
+  allocation and nothing would say so. Decision 14 logs a tenant
+  mismatch at error level for the same reason, so these two should
+  too. This is a gap in diagnosis, and not a resource leak on
+  Postgres.
 
 ## How to Verify
 
