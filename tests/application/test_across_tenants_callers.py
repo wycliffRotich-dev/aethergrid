@@ -33,10 +33,6 @@ ALLOWED_CALLERS = {
     "application/services/fail_job_service.py",
     "application/services/report_job_outcome_service.py",
     "application/workers/worker_execution_loop.py",
-    # A lease holds a job id and no tenant, and recording an event
-    # needs the job to read its tenant from (ADR 0074). This leaves
-    # when leases carry a tenant (ADR 0073 follow-up).
-    "application/services/release_lease_service.py",
 }
 
 
