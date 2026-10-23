@@ -96,7 +96,12 @@ class PostgresLeaseRepository(LeaseRepository):
                 raise WorkerNotFoundError(lease.worker_id) from exc
             raise
 
-    def renew(self, lease_id: UUID, duration: timedelta) -> None:
+    def renew(
+        self,
+        lease_id: UUID,
+        duration: timedelta,
+        tenant_id: TenantId,
+    ) -> None:
         # deliberately a plain UPDATE, not an upsert -- if the row's
         # gone (reconciliation reclaimed it while we were mid-renewal),
         # rowcount comes back 0 and we raise instead of recreatingit
@@ -106,9 +111,11 @@ class PostgresLeaseRepository(LeaseRepository):
                 UPDATE leases
                 SET expires_at = %(expires_at)s
                 WHERE id = %(id)s
+                AND tenant_id = %(tenant_id)s
                 """,
                 {
                     "id": str(lease_id),
+                    "tenant_id": str(tenant_id.value),
                     "expires_at": utc_now() + duration,
                 },
             )
@@ -116,23 +123,31 @@ class PostgresLeaseRepository(LeaseRepository):
             if cursor.rowcount == 0:
                 raise LeaseNotFoundError(lease_id)
 
-    def get_by_job_id(self, job_id: JobId) -> Lease | None:
+    def get_by_job_id(
+        self,
+        job_id: JobId,
+        tenant_id: TenantId,
+    ) -> Lease | None:
         with self._pool.connection() as conn:
             row = conn.cursor(row_factory=dict_row).execute(
-                _SELECT + " WHERE l.job_id = %s",
-                (str(job_id),),
+                _SELECT + " WHERE l.job_id = %s AND l.tenant_id = %s",
+                (str(job_id), str(tenant_id.value)),
             ).fetchone()
         return self._to_entity(row) if row else None
 
-    def get_by_worker_id(self, worker_id: WorkerId) -> Lease | None:
+    def get_by_worker_id(
+        self,
+        worker_id: WorkerId,
+        tenant_id: TenantId,
+    ) -> Lease | None:
         with self._pool.connection() as conn:
             row = conn.cursor(row_factory=dict_row).execute(
-                _SELECT + " WHERE l.worker_id = %s",
-                (str(worker_id),),
+                _SELECT + " WHERE l.worker_id = %s AND l.tenant_id = %s",
+                (str(worker_id), str(tenant_id.value)),
             ).fetchone()
         return self._to_entity(row) if row else None
 
-    def list(self) -> list[Lease]:
+    def list_across_tenants(self) -> list[Lease]:
         with self._pool.connection() as conn:
             rows = (
                 conn.cursor(row_factory=dict_row)
@@ -141,14 +156,18 @@ class PostgresLeaseRepository(LeaseRepository):
             )
         return [self._to_entity(row) for row in rows]
 
-    def delete(self, job_id: JobId) -> None:
+    def delete(
+        self,
+        job_id: JobId,
+        tenant_id: TenantId,
+    ) -> None:
         with self._pool.connection() as conn:
             conn.execute(
-                "DELETE FROM leases WHERE job_id = %s",
-                (str(job_id),),
+                "DELETE FROM leases WHERE job_id = %s AND tenant_id = %s",
+                (str(job_id), str(tenant_id.value)),
             )
 
-    def delete_if_expired(self, job_id: JobId) -> bool:
+    def delete_if_expired_across_tenants(self, job_id: JobId) -> bool:
         with self._pool.connection() as conn:
             cursor = conn.execute(
                 """

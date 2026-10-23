@@ -39,6 +39,7 @@ class WorkerHeartbeatService:
         """
         worker = self._worker_repository.get_by_id(
             worker_id,
+            tenant_id,
         )
 
         if worker is None or not worker.belongs_to(tenant_id):

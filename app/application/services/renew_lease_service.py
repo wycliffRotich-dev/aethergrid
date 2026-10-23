@@ -13,6 +13,7 @@ from app.domain.exceptions.no_active_lease_error import (
 from app.domain.repositories.lease_repository import (
     LeaseRepository,
 )
+from app.domain.value_objects.tenant_id import TenantId
 from app.domain.value_objects.worker_id import WorkerId
 
 
@@ -50,10 +51,16 @@ class RenewLeaseService:
         self,
         worker_id: WorkerId,
         expected_lease_id: UUID,
+        tenant_id: TenantId,
         duration: timedelta = DEFAULT_LEASE_DURATION,
     ) -> None:
         """
-        Renew the worker's active lease.
+        Renew the worker's active lease in this tenant.
+
+        A lease in another tenant is reported exactly like a
+        missing one (ADR 0075). The tenant also goes to the
+        repository's renew(), so the update cannot reach
+        another tenant's lease even if this lookup were wrong.
 
         Raises:
             NoActiveLeaseError: this worker has no lease on
@@ -70,6 +77,7 @@ class RenewLeaseService:
         """
         lease = self._lease_repository.get_by_worker_id(
             worker_id,
+            tenant_id,
         )
 
         if lease is None:
@@ -81,4 +89,5 @@ class RenewLeaseService:
         self._lease_repository.renew(
             lease.id,
             duration,
+            tenant_id,
         )

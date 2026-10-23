@@ -54,7 +54,7 @@ class ClusterTickService:
         """
         self._scheduler_loop_service.execute()
 
-        for worker in self._worker_repository.list():
+        for worker in self._worker_repository.list_across_tenants():
             if worker.running_job is None:
                 continue
 

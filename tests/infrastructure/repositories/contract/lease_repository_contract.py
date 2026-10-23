@@ -11,6 +11,7 @@ from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
+from app.domain.value_objects.tenant_id import TenantId
 from app.domain.value_objects.worker_id import WorkerId
 from tests.support.jobs import make_job
 from tests.support.nodes import make_node
@@ -74,6 +75,7 @@ class LeaseRepositoryContract:
 
         fetched = repository.get_by_job_id(
             lease.job_id,
+            lease.tenant_id,
         )
 
         assert fetched is not None
@@ -91,6 +93,7 @@ class LeaseRepositoryContract:
 
         fetched = repository.get_by_worker_id(
             lease.worker_id,
+            lease.tenant_id,
         )
 
         assert fetched is not None
@@ -108,7 +111,7 @@ class LeaseRepositoryContract:
 
         ids = {
             lease.id
-            for lease in repository.list()
+            for lease in repository.list_across_tenants()
         }
 
         assert ids == {
@@ -126,11 +129,13 @@ class LeaseRepositoryContract:
 
         repository.delete(
             lease.job_id,
+            lease.tenant_id,
         )
 
         assert (
             repository.get_by_job_id(
                 lease.job_id,
+                lease.tenant_id,
             )
             is None
         )
@@ -145,7 +150,7 @@ class LeaseRepositoryContract:
 
         repository.save(lease)
 
-        deleted = repository.delete_if_expired(
+        deleted = repository.delete_if_expired_across_tenants(
             lease.job_id,
         )
 
@@ -153,6 +158,7 @@ class LeaseRepositoryContract:
         assert (
             repository.get_by_job_id(
                 lease.job_id,
+                lease.tenant_id,
             )
             is None
         )
@@ -164,7 +170,7 @@ class LeaseRepositoryContract:
         # The actual race this method exists to close: a worker's
         # background renewal thread extends a lease's expiry between
         # reconciliation reading a stale, already-expired snapshot
-        # and reconciliation's own delete call. delete_if_expired()
+        # and reconciliation's own delete call. delete_if_expired_across_tenants()
         # re-checks expiry atomically at delete time, so a lease that
         # is no longer expired by the time this runs must survive,
         # even though the caller believed it was expired when it
@@ -178,9 +184,10 @@ class LeaseRepositoryContract:
         repository.renew(
             lease.id,
             DEFAULT_LEASE_DURATION,
+            lease.tenant_id,
         )
 
-        deleted = repository.delete_if_expired(
+        deleted = repository.delete_if_expired_across_tenants(
             lease.job_id,
         )
 
@@ -188,6 +195,7 @@ class LeaseRepositoryContract:
         assert (
             repository.get_by_job_id(
                 lease.job_id,
+                lease.tenant_id,
             )
             is not None
         )
@@ -199,7 +207,7 @@ class LeaseRepositoryContract:
         # deliberately never saved
         lease = self._make_lease()
 
-        deleted = repository.delete_if_expired(
+        deleted = repository.delete_if_expired_across_tenants(
             lease.job_id,
         )
 
@@ -208,6 +216,7 @@ class LeaseRepositoryContract:
         assert (
             repository.get_by_worker_id(
                 lease.worker_id,
+                lease.tenant_id,
             )
             is None
         )
@@ -225,10 +234,12 @@ class LeaseRepositoryContract:
         repository.renew(
             lease.id,
             DEFAULT_LEASE_DURATION,
+            lease.tenant_id,
         )
 
         renewed = repository.get_by_job_id(
             lease.job_id,
+            lease.tenant_id,
         )
 
         assert renewed is not None
@@ -247,6 +258,7 @@ class LeaseRepositoryContract:
             repository.renew(
                 lease.id,
                 DEFAULT_LEASE_DURATION,
+                lease.tenant_id,
             )
 
     def test_renew_does_not_resurrect_a_deleted_lease(
@@ -258,17 +270,71 @@ class LeaseRepositoryContract:
         lease = self._make_lease()
 
         repository.save(lease)
-        repository.delete(lease.job_id)
+        repository.delete(lease.job_id, lease.tenant_id)
 
         with pytest.raises(LeaseNotFoundError):
             repository.renew(
                 lease.id,
                 DEFAULT_LEASE_DURATION,
+                lease.tenant_id,
             )
 
         assert (
             repository.get_by_job_id(
                 lease.job_id,
+                lease.tenant_id,
             )
             is None
         )
+
+    def test_a_lease_in_another_tenant_is_reported_as_missing(
+        self,
+        repository,
+    ) -> None:
+        lease = self._make_lease()
+        repository.save(lease)
+        other_tenant = TenantId.new()
+
+        assert repository.get_by_job_id(lease.job_id, other_tenant) is None
+        assert (
+            repository.get_by_worker_id(lease.worker_id, other_tenant)
+            is None
+        )
+
+    def test_delete_in_another_tenant_leaves_the_lease_in_place(
+        self,
+        repository,
+    ) -> None:
+        lease = self._make_lease()
+        repository.save(lease)
+
+        repository.delete(lease.job_id, TenantId.new())
+
+        assert (
+            repository.get_by_job_id(lease.job_id, lease.tenant_id)
+            is not None
+        )
+
+    def test_renew_in_another_tenant_raises_and_changes_nothing(
+        self,
+        repository,
+    ) -> None:
+        # ADR 0075, decision 9: renew reaches a lease by its id alone,
+        # so the tenant is part of the query. A lease in another tenant
+        # is reported exactly like a missing one and keeps its expiry.
+        lease = self._make_lease()
+        repository.save(lease)
+        before = repository.get_by_job_id(lease.job_id, lease.tenant_id)
+        assert before is not None
+        expiry_before = before.expires_at
+
+        with pytest.raises(LeaseNotFoundError):
+            repository.renew(
+                lease.id,
+                DEFAULT_LEASE_DURATION,
+                TenantId.new(),
+            )
+
+        after = repository.get_by_job_id(lease.job_id, lease.tenant_id)
+        assert after is not None
+        assert after.expires_at == expiry_before

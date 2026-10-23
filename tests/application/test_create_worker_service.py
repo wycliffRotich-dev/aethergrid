@@ -67,6 +67,7 @@ def test_create_worker_service_creates_and_persists_worker() -> None:
 
     stored = repository.get_by_id(
         worker.id,
+        worker.tenant_id,
     )
 
     assert stored is worker
@@ -98,7 +99,7 @@ def test_create_worker_service_reclaims_existing_worker_for_node() -> None:
     )
 
     assert second.id == first.id
-    assert len(repository.list()) == 1
+    assert len(repository.list(first.tenant_id)) == 1
 
 
 def test_create_worker_service_reclaim_recovers_abandoned_job() -> None:
@@ -213,7 +214,7 @@ def test_create_worker_service_reclaim_releases_lease_and_node_resources() -> (
     assert reclaimed.is_idle()
     assert reclaimed.running_job is None
 
-    assert lease_repository.get_by_job_id(job.id) is None
+    assert lease_repository.get_by_job_id(job.id, job.tenant_id) is None
 
     recovered_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
     assert recovered_node.available.cpu_cores == 8

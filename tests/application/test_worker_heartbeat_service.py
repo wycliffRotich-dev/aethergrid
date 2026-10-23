@@ -56,6 +56,7 @@ def test_execute_refreshes_worker_heartbeat() -> None:
 
     stored_worker = repository.get_by_id(
         worker.id,
+        worker.tenant_id,
     )
 
     assert stored_worker is not None
@@ -100,6 +101,7 @@ def test_execute_recovers_offline_worker_with_no_running_job() -> None:
 
     stored_worker = repository.get_by_id(
         worker.id,
+        worker.tenant_id,
     )
 
     assert stored_worker is not None
@@ -158,6 +160,7 @@ def test_execute_does_not_recover_offline_worker_with_running_job() -> None:
 
     stored_worker = repository.get_by_id(
         worker.id,
+        worker.tenant_id,
     )
 
     assert stored_worker is not None
@@ -187,6 +190,7 @@ def test_a_worker_in_another_tenant_is_not_heartbeated() -> None:
 
     stored_worker = repository.get_by_id(
         worker.id,
+        worker.tenant_id,
     )
 
     assert stored_worker is not None

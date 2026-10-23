@@ -162,7 +162,7 @@ def test_complete_marks_job_completed_releases_lease_and_node() -> None:
         exit_code=0,
     )
 
-    saved_worker = worker_repository.get_by_id(worker.id)
+    saved_worker = worker_repository.get_by_id(worker.id, worker.tenant_id)
     saved_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
@@ -174,7 +174,7 @@ def test_complete_marks_job_completed_releases_lease_and_node() -> None:
     assert saved_job.is_completed()
     assert saved_job.exit_code == 0
 
-    assert lease_repository.get_by_worker_id(worker.id) is None
+    assert lease_repository.get_by_worker_id(worker.id, worker.tenant_id) is None
 
     assert saved_node is not None
     assert saved_node.available == saved_node.capacity
@@ -200,7 +200,7 @@ def test_fail_marks_job_failed_releases_lease_and_node() -> None:
         exit_code=1,
     )
 
-    saved_worker = worker_repository.get_by_id(worker.id)
+    saved_worker = worker_repository.get_by_id(worker.id, worker.tenant_id)
     saved_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
@@ -211,7 +211,7 @@ def test_fail_marks_job_failed_releases_lease_and_node() -> None:
     assert saved_job.is_failed()
     assert saved_job.exit_code == 1
 
-    assert lease_repository.get_by_worker_id(worker.id) is None
+    assert lease_repository.get_by_worker_id(worker.id, worker.tenant_id) is None
 
     assert saved_node is not None
     assert saved_node.available == saved_node.capacity
@@ -374,7 +374,7 @@ def test_cancel_marks_job_cancelled_releases_lease_and_node() -> None:
         exit_code=-15,
     )
 
-    saved_worker = worker_repository.get_by_id(worker.id)
+    saved_worker = worker_repository.get_by_id(worker.id, worker.tenant_id)
     saved_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
 
@@ -386,7 +386,7 @@ def test_cancel_marks_job_cancelled_releases_lease_and_node() -> None:
     assert saved_job.is_cancelled()
     assert saved_job.exit_code == -15
 
-    assert lease_repository.get_by_worker_id(worker.id) is None
+    assert lease_repository.get_by_worker_id(worker.id, worker.tenant_id) is None
 
     assert saved_node is not None
     assert saved_node.available == saved_node.capacity

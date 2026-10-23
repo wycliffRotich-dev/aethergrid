@@ -94,7 +94,7 @@ def test_saving_a_lease_writes_its_tenant(pool: ConnectionPool) -> None:
     PostgresLeaseRepository(pool).save(lease)
 
     assert _stored_lease_tenant(pool, lease.id) == str(tenant.value)
-    fetched = PostgresLeaseRepository(pool).get_by_job_id(job.id)
+    fetched = PostgresLeaseRepository(pool).get_by_job_id(job.id, tenant)
     assert fetched is not None
     assert fetched.tenant_id == tenant
 

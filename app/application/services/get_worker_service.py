@@ -38,6 +38,7 @@ class GetWorkerService:
         """
         worker = self._worker_repository.get_by_id(
             worker_id,
+            tenant_id,
         )
 
         if worker is None or worker.node.tenant_id != tenant_id:

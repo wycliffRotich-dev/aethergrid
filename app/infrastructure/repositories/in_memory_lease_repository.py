@@ -9,6 +9,7 @@ from app.domain.repositories.lease_repository import (
     LeaseRepository,
 )
 from app.domain.value_objects.job_id import JobId
+from app.domain.value_objects.tenant_id import TenantId
 from app.domain.value_objects.worker_id import WorkerId
 
 
@@ -36,12 +37,13 @@ class InMemoryLeaseRepository(
         self,
         lease_id: UUID,
         duration: timedelta,
+        tenant_id: TenantId,
     ) -> None:
         # dict is keyed by job_id, not lease id, so this is a scan --
         # fine at test-suite scale, and it keeps the lookup shape
         # identical to what the Postgres WHERE id = ... does
         for lease in self._leases.values():
-            if lease.id == lease_id:
+            if lease.id == lease_id and lease.tenant_id == tenant_id:
                 lease.renew(duration)
                 return
 
@@ -50,22 +52,29 @@ class InMemoryLeaseRepository(
     def get_by_job_id(
         self,
         job_id: JobId,
+        tenant_id: TenantId,
     ) -> Lease | None:
-        return self._leases.get(
+        lease = self._leases.get(
             str(job_id),
         )
+
+        if lease is None or lease.tenant_id != tenant_id:
+            return None
+
+        return lease
 
     def get_by_worker_id(
         self,
         worker_id: WorkerId,
+        tenant_id: TenantId,
     ) -> Lease | None:
         for lease in self._leases.values():
-            if lease.worker_id == worker_id:
+            if lease.worker_id == worker_id and lease.tenant_id == tenant_id:
                 return lease
 
         return None
 
-    def list(
+    def list_across_tenants(
         self,
     ) -> list[Lease]:
         return list(
@@ -75,13 +84,14 @@ class InMemoryLeaseRepository(
     def delete(
         self,
         job_id: JobId,
+        tenant_id: TenantId,
     ) -> None:
-        self._leases.pop(
-            str(job_id),
-            None,
-        )
+        lease = self._leases.get(str(job_id))
 
-    def delete_if_expired(
+        if lease is not None and lease.tenant_id == tenant_id:
+            del self._leases[str(job_id)]
+
+    def delete_if_expired_across_tenants(
         self,
         job_id: JobId,
     ) -> bool:

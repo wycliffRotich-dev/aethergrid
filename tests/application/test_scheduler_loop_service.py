@@ -130,7 +130,7 @@ def test_scheduler_loop_assigns_idle_worker_and_starts_job() -> None:
     assert job.status == JobStatus.SCHEDULED
     assert job.assigned_node_id == node.id
 
-    stored_worker = workers.get_by_id(worker.id)
+    stored_worker = workers.get_by_id(worker.id, worker.tenant_id)
     assert stored_worker is not None
     assert stored_worker.status == WorkerStatus.BUSY
     assert stored_worker.running_job is job

@@ -110,7 +110,7 @@ def test_recover_expired_lease_requeues_job_with_retries_remaining() -> None:
 
     service.execute()
 
-    recovered_worker = worker_repository.get_by_id(worker.id)
+    recovered_worker = worker_repository.get_by_id(worker.id, worker.tenant_id)
     recovered_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert recovered_worker is not None
@@ -121,7 +121,7 @@ def test_recover_expired_lease_requeues_job_with_retries_remaining() -> None:
     assert recovered_job.retry_count == 1
 
     assert (
-        lease_repository.get_by_worker_id(worker.id) is None
+        lease_repository.get_by_worker_id(worker.id, worker.tenant_id) is None
     )
 
 
@@ -135,7 +135,7 @@ def test_recover_expired_lease_skips_a_job_whose_lease_was_renewed_mid_pass() ->
     If a worker's background renewal thread successfully renews
     a lease after that snapshot was read, but before this pass
     gets to delete it, the lease is no longer actually expired
-    by the time delete_if_expired() runs.
+    by the time delete_if_expired_across_tenants() runs.
 
     Simulates that exact interleaving directly: the lease is
     created already expired, saved, then renewed via the same
@@ -182,12 +182,13 @@ def test_recover_expired_lease_skips_a_job_whose_lease_was_renewed_mid_pass() ->
     node_repository = InMemoryNodeRepository([node])
 
     # The race: renew the lease on the same repository the
-    # service is about to call list() and delete_if_expired()
+    # service is about to call list() and delete_if_expired_across_tenants()
     # against, simulating a worker's renewal thread winning the
     # gap between this pass's snapshot read and its delete.
     lease_repository.renew(
         lease.id,
         timedelta(seconds=30),
+        lease.tenant_id,
     )
 
     service = RecoverExpiredLeaseService(
@@ -199,7 +200,7 @@ def test_recover_expired_lease_skips_a_job_whose_lease_was_renewed_mid_pass() ->
 
     service.execute()
 
-    recovered_worker = worker_repository.get_by_id(worker.id)
+    recovered_worker = worker_repository.get_by_id(worker.id, worker.tenant_id)
     recovered_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert recovered_worker is not None
@@ -209,7 +210,7 @@ def test_recover_expired_lease_skips_a_job_whose_lease_was_renewed_mid_pass() ->
     assert recovered_job.status is JobStatus.RUNNING
     assert recovered_job.retry_count == 0
 
-    survived_lease = lease_repository.get_by_job_id(job.id)
+    survived_lease = lease_repository.get_by_job_id(job.id, job.tenant_id)
     assert survived_lease is not None
     assert survived_lease.id == lease.id
     assert not survived_lease.is_expired()
@@ -264,7 +265,7 @@ def test_recover_expired_lease_fails_job_once_retries_exhausted() -> None:
 
     service.execute()
 
-    recovered_worker = worker_repository.get_by_id(worker.id)
+    recovered_worker = worker_repository.get_by_id(worker.id, worker.tenant_id)
     recovered_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert recovered_worker is not None
@@ -274,7 +275,7 @@ def test_recover_expired_lease_fails_job_once_retries_exhausted() -> None:
     assert recovered_job.is_failed()
 
     assert (
-        lease_repository.get_by_worker_id(worker.id) is None
+        lease_repository.get_by_worker_id(worker.id, worker.tenant_id) is None
     )
 def test_recover_expired_lease_records_job_reclaimed_event() -> None:
     """
@@ -389,7 +390,7 @@ def test_recover_expired_lease_finalizes_cancelling_job_as_cancelled() -> None:
 
     service.execute()
 
-    recovered_worker = worker_repository.get_by_id(worker.id)
+    recovered_worker = worker_repository.get_by_id(worker.id, worker.tenant_id)
     recovered_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
 
     assert recovered_worker is not None
@@ -400,7 +401,7 @@ def test_recover_expired_lease_finalizes_cancelling_job_as_cancelled() -> None:
     assert recovered_job.retry_count == 0
 
     assert (
-        lease_repository.get_by_worker_id(worker.id) is None
+        lease_repository.get_by_worker_id(worker.id, worker.tenant_id) is None
     )
 
 

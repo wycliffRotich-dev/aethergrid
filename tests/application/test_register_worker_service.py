@@ -29,8 +29,14 @@ class InMemoryWorkerRepository:
     def get_by_id(
         self,
         worker_id: str,
+        tenant_id,
     ) -> Worker | None:
-        return self._workers.get(worker_id)
+        worker = self._workers.get(worker_id)
+
+        if worker is None or worker.tenant_id != tenant_id:
+            return None
+
+        return worker
 
     def list(
         self,
@@ -65,4 +71,4 @@ def test_register_worker_service_registers_worker() -> None:
 
     assert registered is worker
     assert registered.status is WorkerStatus.IDLE
-    assert repository.get_by_id("worker-1") is worker
+    assert repository.get_by_id("worker-1", worker.tenant_id) is worker

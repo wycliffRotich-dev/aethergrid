@@ -86,7 +86,7 @@ class RecoverOfflineNodeService:
         if not offline_node_ids:
             return
 
-        for worker in self._worker_repository.list():
+        for worker in self._worker_repository.list_across_tenants():
 
             if worker.node.id not in offline_node_ids:
                 continue
@@ -103,6 +103,7 @@ class RecoverOfflineNodeService:
 
             lease = self._lease_repository.get_by_job_id(
                 job.id,
+                job.tenant_id,
             )
 
             lease_already_deleted = False
@@ -120,7 +121,7 @@ class RecoverOfflineNodeService:
                     # not actually abandoned.
                     continue
 
-                deleted = self._lease_repository.delete_if_expired(
+                deleted = self._lease_repository.delete_if_expired_across_tenants(
                     job.id,
                 )
 

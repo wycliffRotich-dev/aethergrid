@@ -49,29 +49,56 @@ class InMemoryWorkerRepository(
     def get_by_id(
         self,
         worker_id: str,
+        tenant_id,
+    ) -> Worker | None:
+        worker = self._workers.get(worker_id)
+
+        if worker is None or worker.tenant_id != tenant_id:
+            return None
+
+        return worker
+
+    def get_by_id_across_tenants(
+        self,
+        worker_id: str,
     ) -> Worker | None:
         return self._workers.get(worker_id)
 
     def get_by_node_id(
         self,
         node_id,
+        tenant_id,
     ) -> Worker | None:
         for worker in self._workers.values():
-            if worker.node.id == node_id:
+            if (
+                worker.node.id == node_id
+                and worker.tenant_id == tenant_id
+            ):
                 return worker
 
         return None
 
-    def list(
+    def list_across_tenants(
         self,
     ) -> list[Worker]:
         return list(
             self._workers.values()
         )
 
+    def list(
+        self,
+        tenant_id,
+    ) -> list[Worker]:
+        return [
+            worker
+            for worker in self._workers.values()
+            if worker.tenant_id == tenant_id
+        ]
+
     def delete(
         self,
         worker_id: str,
+        tenant_id,
     ) -> None:
         self._workers.pop(
             worker_id,
@@ -211,6 +238,7 @@ class _LeaseRepositoryThatRejectsUnknownWorker:
     def get_by_job_id(
         self,
         job_id,
+        tenant_id,
     ):
         return None
 

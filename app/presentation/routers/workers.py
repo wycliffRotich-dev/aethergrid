@@ -289,7 +289,10 @@ def get_worker(
     lease = None
 
     if worker.running_job is not None:
-        lease = lease_service.execute(worker_id_value)
+        lease = lease_service.execute(
+            worker_id_value,
+            tenant_id=caller.tenant_id,
+        )
 
     return _build_worker_response(worker, lease)
 
@@ -359,7 +362,10 @@ def start_job(
     lease = None
 
     if worker.running_job is not None:
-        lease = lease_service.execute(worker_id_value)
+        lease = lease_service.execute(
+            worker_id_value,
+            tenant_id=caller.tenant_id,
+        )
 
     return _build_worker_response(worker, lease)
 
@@ -645,6 +651,7 @@ def renew_lease(
         renew_lease_service.execute(
             worker_id_value,
             expected_lease_id=request.lease_id,
+            tenant_id=caller.tenant_id,
         )
     except (NoActiveLeaseError, LeaseNotFoundError) as exc:
         raise HTTPException(
@@ -655,7 +662,10 @@ def renew_lease(
     lease = None
 
     if worker.running_job is not None:
-        lease = lease_for_worker_service.execute(worker_id_value)
+        lease = lease_for_worker_service.execute(
+            worker_id_value,
+            caller.tenant_id,
+        )
 
     return _build_worker_response(worker, lease)
 

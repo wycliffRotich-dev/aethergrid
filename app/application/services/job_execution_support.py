@@ -75,6 +75,10 @@ def reclaim_job(
     3. Job.reclaim() runs last, and its own job_repository.save()
        only happens if reclaim() succeeds.
 
+    The lease is deleted in the job's tenant. A lease carries the
+    tenant of its job (ADR 0075), so no other tenant's lease can
+    be touched.
+
     node is passed in already resolved, not looked up here,
     since how to find it genuinely differs per caller: some
     already hold it (Worker.node), others must look it up via
@@ -100,7 +104,7 @@ def reclaim_job(
 
     lease_already_deleted: pass True when the caller has
     already deleted the lease itself, conditionally, via
-    LeaseRepository.delete_if_expired() -- and confirmed it
+    LeaseRepository.delete_if_expired_across_tenants -- and confirmed it
     actually removed a row. This exists so a caller whose
     reclaim decision depends on the lease still being expired
     at delete time (not just at an earlier snapshot read) can
@@ -112,6 +116,7 @@ def reclaim_job(
     if not lease_already_deleted:
         lease_repository.delete(
             job.id,
+            job.tenant_id,
         )
 
     if node is not None:

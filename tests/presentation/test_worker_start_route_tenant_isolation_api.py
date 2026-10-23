@@ -72,7 +72,7 @@ def test_another_tenants_worker_cannot_start_a_job(
 ) -> None:
     worker = _worker_holding_a_scheduled_job(tenant_a)
     job_id = worker.running_job.id
-    lease_before = _lease_repository.get_by_worker_id(worker.id)
+    lease_before = _lease_repository.get_by_worker_id(worker.id, worker.tenant_id)
     assert lease_before is not None
     stored_job = _job_repository.get_by_id(job_id, tenant_a)
     assert stored_job.status == JobStatus.SCHEDULED
@@ -91,12 +91,12 @@ def test_another_tenants_worker_cannot_start_a_job(
         missing.text.replace(str(missing_id), "<id>")
     )
 
-    stored_worker = _worker_repository.get_by_id(worker.id)
+    stored_worker = _worker_repository.get_by_id(worker.id, worker.tenant_id)
     assert stored_worker is not None
     assert stored_worker.running_job is not None
     assert stored_worker.running_job.id == job_id
     after = _job_repository.get_by_id(job_id, tenant_a)
     assert after.status == JobStatus.SCHEDULED
-    lease = _lease_repository.get_by_worker_id(worker.id)
+    lease = _lease_repository.get_by_worker_id(worker.id, worker.tenant_id)
     assert lease is not None
     assert lease.id == lease_before.id

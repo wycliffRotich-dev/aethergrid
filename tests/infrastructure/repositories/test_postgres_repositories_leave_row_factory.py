@@ -138,9 +138,12 @@ def test_the_lease_repository_leaves_the_default_row_factory(
     """
     repository = PostgresLeaseRepository(single_connection_pool)
 
-    assert repository.get_by_job_id(JobId.new()) is None
-    assert repository.get_by_worker_id(WorkerId.new()) is None
-    repository.list()
+    assert repository.get_by_job_id(JobId.new(), DEFAULT_TENANT_ID) is None
+    assert (
+        repository.get_by_worker_id(WorkerId.new(), DEFAULT_TENANT_ID)
+        is None
+    )
+    repository.list_across_tenants()
 
     assert _row_factory_after(single_connection_pool) is tuple_row
 
@@ -159,9 +162,9 @@ def test_the_worker_repository_leaves_the_default_row_factory(
         node_repository.save(worker.node)
         repository.save(worker)
 
-        assert repository.get_by_id(worker.id) is not None
-        assert repository.get_by_node_id(worker.node.id) is not None
-        assert any(w.id == worker.id for w in repository.list())
+        assert repository.get_by_id(worker.id, worker.tenant_id) is not None
+        assert repository.get_by_node_id(worker.node.id, worker.tenant_id) is not None
+        assert any(w.id == worker.id for w in repository.list(worker.tenant_id))
 
         assert _row_factory_after(single_connection_pool) is tuple_row
     finally:

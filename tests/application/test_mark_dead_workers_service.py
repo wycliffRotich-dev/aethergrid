@@ -50,6 +50,7 @@ def test_execute_marks_expired_workers_offline() -> None:
 
     saved_worker = repository.get_by_id(
         worker.id,
+        worker.tenant_id,
     )
 
     assert saved_worker is not None

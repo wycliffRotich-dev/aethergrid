@@ -73,7 +73,7 @@ def test_running_job_keeps_its_execution_timeout(repositories) -> None:
     job = make_job(execution_timeout=timedelta(seconds=45))
     worker, worker_repository = _save_busy_worker(repositories, job)
 
-    reloaded = worker_repository.get_by_id(worker.id)
+    reloaded = worker_repository.get_by_id(worker.id, worker.tenant_id)
 
     assert reloaded is not None
     assert reloaded.running_job is not None
@@ -93,7 +93,7 @@ def test_running_job_with_null_timeout_loads_the_default(
             (str(job.id),),
         )
 
-    reloaded = worker_repository.get_by_id(worker.id)
+    reloaded = worker_repository.get_by_id(worker.id, worker.tenant_id)
 
     assert reloaded is not None
     assert reloaded.running_job is not None

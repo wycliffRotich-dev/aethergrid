@@ -56,6 +56,7 @@ def test_a_job_in_another_tenant_gets_no_lease_and_records_nothing() -> None:
     with pytest.raises(LeaseTenantMismatchError):
         service.execute(worker, job)
 
-    assert leases.get_by_job_id(job.id) is None
+    assert leases.get_by_job_id(job.id, tenant_a) is None
+    assert leases.get_by_job_id(job.id, tenant_b) is None
     assert events.list(tenant_a) == []
     assert events.list(tenant_b) == []

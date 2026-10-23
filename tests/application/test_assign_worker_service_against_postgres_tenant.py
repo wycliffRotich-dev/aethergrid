@@ -95,6 +95,6 @@ def test_a_worker_with_a_tenant_is_assigned_the_job(
     assigned = _service(pool).execute(job)
 
     assert assigned.id == worker.id
-    lease = PostgresLeaseRepository(pool).get_by_job_id(job.id)
+    lease = PostgresLeaseRepository(pool).get_by_job_id(job.id, job.tenant_id)
     assert lease is not None
     assert lease.tenant_id == tenant

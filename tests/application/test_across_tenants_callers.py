@@ -17,6 +17,15 @@ ALLOWED_CALLERS = {
     "application/services/scheduler_loop_service.py",
     "application/reconciliation/recover_offline_node_service.py",
     "application/reconciliation/recover_expired_lease_service.py",
+    # Fleet-wide sweeps with no caller tenant: the cluster tick and
+    # the dead-worker sweep visit every worker (ADR 0075 decision 10).
+    "application/services/cluster_tick_service.py",
+    "application/services/mark_dead_workers_service.py",
+    # Called by the scheduler loop, which has no caller tenant. The scan
+    # must see a worker of another tenant, so that a lease refused for
+    # a tenant mismatch is logged as the bug it is (ADR 0075 decision
+    # 14). AcquireLeaseService refuses the cross-tenant lease.
+    "application/services/assign_worker_service.py",
     # Interim: these read a node from a job or worker that carries no
     # tenant, or read a job by an id that arrives without one. Each
     # entry leaves when its caller can pass a tenant.

@@ -67,9 +67,7 @@ def test_renew_lease_succeeds_while_worker_holds_a_job() -> None:
         job.assign_to(NodeId(node_id))
         _job_repository.save(job)
 
-        worker = _worker_repository.get_by_id(
-            WorkerId(worker_id),
-        )
+        worker = _worker_repository.get_by_id_across_tenants(WorkerId(worker_id))
         assert worker is not None
 
         worker.accept(job)
@@ -90,6 +88,7 @@ def test_renew_lease_succeeds_while_worker_holds_a_job() -> None:
 
         renewed_lease = _lease_repository.get_by_worker_id(
             WorkerId(worker_id),
+            worker.tenant_id,
         )
         assert renewed_lease is not None
         assert renewed_lease.expires_at > original_expiry

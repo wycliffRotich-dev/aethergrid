@@ -100,11 +100,11 @@ def test_another_tenants_worker_cannot_report_an_outcome(
         missing.text.replace(str(missing_id), "<id>")
     )
 
-    stored_worker = _worker_repository.get_by_id(worker.id)
+    stored_worker = _worker_repository.get_by_id(worker.id, worker.tenant_id)
     assert stored_worker is not None
     assert stored_worker.running_job is not None
     assert stored_worker.running_job.id == job_id
-    lease = _lease_repository.get_by_worker_id(worker.id)
+    lease = _lease_repository.get_by_worker_id(worker.id, worker.tenant_id)
     assert lease is not None
     assert lease.id == lease_id
     assert _job_repository.get_by_id(job_id, tenant_a).status == status_before

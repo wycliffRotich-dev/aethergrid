@@ -8,21 +8,31 @@ import pytest
 
 from app.domain.entities.api_key import ApiKey
 from app.domain.entities.job import Job
+from app.domain.entities.lease import Lease
 from app.domain.entities.node import Node
+from app.domain.entities.worker import Worker
 from app.domain.repositories.api_key_repository import (
     ApiKeyRepository,
 )
 from app.domain.repositories.job_repository import JobRepository
+from app.domain.repositories.lease_repository import LeaseRepository
 from app.domain.repositories.node_repository import NodeRepository
+from app.domain.repositories.worker_repository import WorkerRepository
 from app.domain.value_objects.tenant_id import TenantId
 
 # Repositories already held to ADR 0064, point 4. A repository
 # joins this list in the same change that scopes it.
-SCOPED_REPOSITORIES = [ApiKeyRepository, JobRepository, NodeRepository]
+SCOPED_REPOSITORIES = [
+    ApiKeyRepository,
+    JobRepository,
+    LeaseRepository,
+    NodeRepository,
+    WorkerRepository,
+]
 
 # Entity types that carry their own tenant_id, so a method
 # that takes one is scoped by that entity.
-TENANT_CARRYING_ENTITIES = (ApiKey, Job, Node)
+TENANT_CARRYING_ENTITIES = (ApiKey, Job, Lease, Node, Worker)
 
 ACROSS_TENANTS_SUFFIX = "_across_tenants"
 
