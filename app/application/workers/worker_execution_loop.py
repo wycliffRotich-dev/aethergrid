@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 
 from app.application.services.job_execution_service import (
@@ -37,6 +38,8 @@ from app.domain.repositories.worker_repository import (
 from app.domain.value_objects.worker_id import (
     WorkerId,
 )
+
+logger = logging.getLogger(__name__)
 
 # renew at roughly a third of the lease duration -- gives two missed
 # heartbeats worth of margin before the lease actually lapses
@@ -326,6 +329,17 @@ class WorkerExecutionLoop:
 
                 self._node_repository.save(
                     node,
+                )
+            else:
+                # On Postgres a job's node is always in the job's tenant,
+                # and deleting a node clears the link, so this state means
+                # a mistake upstream (ADR 0075 decision 14).
+                logger.error(
+                    "Job %s is assigned to node %s, but that node was not "
+                    "found in tenant %s. The node release was skipped.",
+                    job.id,
+                    job.assigned_node_id,
+                    tenant_id,
                 )
 
         # The renewal thread's periodic check (keep_lease_alive)

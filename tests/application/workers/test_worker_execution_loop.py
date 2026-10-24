@@ -1051,3 +1051,70 @@ def test_run_once_cancellation_reads_the_job_in_the_worker_tenant() -> None:
     assert saved_node is not None
     assert saved_node.available == saved_node.capacity
     assert lease_repository.get_by_worker_id(worker.id, tenant) is None
+
+
+_LOOP_LOGGER = "app.application.workers.worker_execution_loop"
+
+
+def test_run_once_logs_an_error_when_the_assigned_node_is_not_found(
+    caplog,
+) -> None:
+    """
+    Same state and same reasoning as the outcome service: the node
+    release is skipped, so the skip is logged at error level.
+    """
+    import logging
+
+    from app.domain.value_objects.tenant_id import TenantId
+
+    tenant = TenantId.new()
+    other_tenant = TenantId.new()
+    worker, job, node = _make_worker_and_job_in(tenant)
+
+    foreign_node = make_node(
+        id=node.id,
+        tenant_id=other_tenant,
+        capacity=ResourceRequirements(
+            cpu_cores=8,
+            memory_mib=16384,
+            vram_mib=0,
+        ),
+    )
+
+    loop, *_rest = _build_recording_loop(worker, job, foreign_node)
+
+    with caplog.at_level(logging.ERROR, logger=_LOOP_LOGGER):
+        loop.execute(worker.id)
+
+    errors = [
+        r
+        for r in caplog.records
+        if r.name == _LOOP_LOGGER and r.levelno >= logging.ERROR
+    ]
+    assert len(errors) == 1
+    message = errors[0].getMessage()
+    assert str(job.id) in message
+    assert str(node.id) in message
+    assert str(tenant) in message
+
+
+def test_run_once_logs_no_error_when_the_assigned_node_is_found(
+    caplog,
+) -> None:
+    import logging
+
+    from app.domain.value_objects.tenant_id import TenantId
+
+    tenant = TenantId.new()
+    worker, job, node = _make_worker_and_job_in(tenant)
+
+    loop, *_rest = _build_recording_loop(worker, job, node)
+
+    with caplog.at_level(logging.ERROR, logger=_LOOP_LOGGER):
+        loop.execute(worker.id)
+
+    assert [
+        r
+        for r in caplog.records
+        if r.name == _LOOP_LOGGER and r.levelno >= logging.ERROR
+    ] == []

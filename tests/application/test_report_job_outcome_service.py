@@ -591,3 +591,95 @@ def test_complete_never_releases_a_node_of_another_tenant() -> None:
     assert saved_worker is not None
     assert saved_worker.is_idle()
     assert lease_repository.get_by_worker_id(worker.id, tenant) is None
+
+
+_REPORT_LOGGER = "app.application.services.report_job_outcome_service"
+
+
+def test_complete_logs_an_error_when_the_assigned_node_is_not_found(
+    caplog,
+) -> None:
+    """
+    A job with an assigned node whose node is not found in its tenant
+    cannot occur on Postgres, but nothing stops it on the in-memory and
+    sqlite backends. The release is skipped, so it must be logged at
+    error level, as ADR 0075 decision 14 does for a tenant mismatch.
+    """
+    import logging
+
+    tenant = TenantId.new()
+    other_tenant = TenantId.new()
+    worker, job, node = _make_running_worker_and_job_in(tenant)
+
+    foreign_node = make_node(
+        id=node.id,
+        tenant_id=other_tenant,
+        capacity=ResourceRequirements(
+            cpu_cores=8,
+            memory_mib=16384,
+            vram_mib=0,
+        ),
+    )
+    foreign_node.allocate(job.resources)
+
+    (
+        service,
+        _worker_repository,
+        _job_repository,
+        _node_repository,
+        _lease_repository,
+        lease,
+    ) = _build_service(worker, job, foreign_node)
+
+    with caplog.at_level(logging.ERROR, logger=_REPORT_LOGGER):
+        service.complete(
+            worker.id,
+            job.id,
+            tenant_id=tenant,
+            lease_id=lease.id,
+            exit_code=0,
+        )
+
+    errors = [
+        r
+        for r in caplog.records
+        if r.name == _REPORT_LOGGER and r.levelno >= logging.ERROR
+    ]
+    assert len(errors) == 1
+    message = errors[0].getMessage()
+    assert str(job.id) in message
+    assert str(node.id) in message
+    assert str(tenant) in message
+
+
+def test_complete_logs_no_error_when_the_assigned_node_is_found(
+    caplog,
+) -> None:
+    import logging
+
+    tenant = TenantId.new()
+    worker, job, node = _make_running_worker_and_job_in(tenant)
+
+    (
+        service,
+        _worker_repository,
+        _job_repository,
+        _node_repository,
+        _lease_repository,
+        lease,
+    ) = _build_service(worker, job, node)
+
+    with caplog.at_level(logging.ERROR, logger=_REPORT_LOGGER):
+        service.complete(
+            worker.id,
+            job.id,
+            tenant_id=tenant,
+            lease_id=lease.id,
+            exit_code=0,
+        )
+
+    assert [
+        r
+        for r in caplog.records
+        if r.name == _REPORT_LOGGER and r.levelno >= logging.ERROR
+    ] == []
