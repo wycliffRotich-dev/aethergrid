@@ -333,20 +333,6 @@ Answered after slice 1:
 - The wording of the Status of ADR 0064, after slice 3, so that it says
   what is proven and what is not.
 - A test that pins the checksums of applied migration files.
-- A decision on `CompleteJobService` and `FailJobService`. Neither has
-  a caller in `app`. They were converted because decision 10 says to
-  convert them, and deleting them is a separate change.
-- A job with an assigned node whose node is not found in the job's
-  tenant is skipped without a log line in `ReportJobOutcomeService`
-  and `WorkerExecutionLoop`. On Postgres that state cannot occur:
-  deleting a node clears the job's link (`ON DELETE SET NULL`), and
-  `jobs_assigned_node_same_tenant` refuses a node of another tenant.
-  The in-memory and sqlite backends have no such keys. If the state
-  ever occurred there, a node of another tenant would keep its
-  allocation and nothing would say so. Decision 14 logs a tenant
-  mismatch at error level for the same reason, so these two should
-  too. This is a gap in diagnosis, and not a resource leak on
-  Postgres.
 
 ## How to Verify
 
@@ -499,3 +485,25 @@ only, as the 2026-10-19 entry says. Decision 12 gates 0005 behind a
 release that carries 0004, and this entry does not record that the gate
 was observed. The status stays Proposed until that is recorded and the
 criteria in the Status section are checked against the merged code.
+
+2026-10-24. `CompleteJobService` and `FailJobService` are deleted. Decision
+10 said both leave the allowlist, and they were converted to read in the
+caller's tenant first. Neither has a caller in `app`, and the comments in
+`worker_execution_loop.py` and `job_execution_support.py` called them dead
+but tested. They skipped lease release, lease fencing and event recording,
+so wiring them in later would have bypassed the ordering that guards
+against double execution.
+
+Their tests were the only proof that a finished job's released node
+resources reach a repository that rebuilds the node on every read (ADR
+0033, ADR 0037). That proof now exists on the paths that run:
+`test_complete_persists_the_released_node_resources_in_sqlite` for
+`ReportJobOutcomeService` and
+`test_run_once_persists_the_released_node_resources_in_sqlite` for
+`WorkerExecutionLoop`. Each was shown to fail when the node save is
+removed from the path it covers. The tests of the two deleted services
+went with them, and no allowlist entry remains for either file.
+
+The follow-up about deleting them is closed. The follow-up about a
+missing node is closed by #407, which makes both paths log it at error
+level, so it is removed from the Follow-ups list.
