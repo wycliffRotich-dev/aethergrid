@@ -54,12 +54,10 @@ def reclaim_job(
     now been independently reimplemented by hand three times
     (RecoverExpiredLeaseService, RecoverOfflineNodeService,
     CreateWorkerService) and shipped with a real bug in each
-    of those three, plus two further dead-but-tested services
-    (CompleteJobService, FailJobService) that share the same
-    shape. The goal of naming it here, the same reasoning as
-    persist_job_started above, is that the next recovery path
-    this codebase grows does not get a chance to rediscover
-    it a fourth time.
+    of those three. The goal of naming it here, the same
+    reasoning as persist_job_started above, is that the next
+    recovery path this codebase grows does not get a chance to
+    rediscover it a fourth time.
 
     Ordering matters and is deliberately not configurable:
 

@@ -72,17 +72,14 @@ class WorkerExecutionLoop:
     Saving that captured reference afterward is what persists
     the job's final state and exit code.
 
-    Releasing node resources happens here rather than through
-    a dedicated CompleteJobService/FailJobService, since this
-    loop is the actual production path a job's outcome flows
-    through; those two services exist and are tested, but
-    nothing on the live path ever called them, which meant
-    every completed or failed job silently leaked its
-    allocated resources on the node forever. A missing node is
-    tolerated (job and worker state still persist) rather than
-    treated as fatal, since a node disappearing between
-    allocation and completion is an edge case reconciliation
-    doesn't otherwise handle either today.
+    Releasing node resources happens here, since this loop is
+    the production path a job's outcome flows through. Without
+    it, every completed or failed job would leave its allocated
+    resources on the node forever. A missing node is tolerated
+    (job and worker state still persist) rather than treated as
+    fatal, and it is logged at error level, because on Postgres a
+    job's node is always in the job's tenant and a missing one
+    means a mistake upstream (ADR 0075).
     """
 
     def __init__(
