@@ -683,3 +683,77 @@ def test_complete_logs_no_error_when_the_assigned_node_is_found(
         for r in caplog.records
         if r.name == _REPORT_LOGGER and r.levelno >= logging.ERROR
     ] == []
+
+
+def test_complete_persists_the_released_node_resources_in_sqlite(
+    tmp_path,
+) -> None:
+    """
+    The node a finished job gives its resources back to must be saved,
+    not only changed in memory. InMemoryNodeRepository shares object
+    references on read, so it cannot tell a missing save from a real
+    one (ADR 0033, ADR 0037). This runs against a repository that
+    rebuilds the node on every read.
+    """
+    worker, job, node = _make_running_worker_and_job()
+
+    import os
+
+    from app.infrastructure.repositories.sqlite_connection import (
+        create_connection,
+    )
+    from app.infrastructure.repositories.sqlite_node_repository import (
+        SqliteNodeRepository,
+    )
+
+    db_path = os.path.join(tmp_path, "test.db")
+
+    # The node starts with the job's resources allocated.
+    assert node.available != node.capacity
+
+    write_connection = create_connection(db_path)
+    SqliteNodeRepository(write_connection).save(node)
+    write_connection.close()
+
+    lease = Lease.create(
+        worker_id=worker.id,
+        job_id=job.id,
+        tenant_id=worker.tenant_id,
+    )
+    lease_repository = InMemoryLeaseRepository()
+    lease_repository.save(lease)
+
+    worker_repository = InMemoryWorkerRepository([worker])
+    job_repository = InMemoryJobRepository([job])
+
+    exec_connection = create_connection(db_path)
+    service = ReportJobOutcomeService(
+        worker_repository=worker_repository,
+        job_repository=job_repository,
+        node_repository=SqliteNodeRepository(exec_connection),
+        lease_repository=lease_repository,
+        release_lease_service=ReleaseLeaseService(
+            lease_repository=lease_repository,
+            worker_repository=worker_repository,
+        ),
+    )
+
+    service.complete(
+        worker.id,
+        job.id,
+        tenant_id=DEFAULT_TENANT_ID,
+        lease_id=lease.id,
+        exit_code=0,
+    )
+
+    exec_connection.close()
+
+    read_connection = create_connection(db_path)
+    reloaded = SqliteNodeRepository(read_connection).get_by_id(
+        node.id,
+        DEFAULT_TENANT_ID,
+    )
+    read_connection.close()
+
+    assert reloaded is not None
+    assert reloaded.available == reloaded.capacity
