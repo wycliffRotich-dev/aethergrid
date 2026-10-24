@@ -4,8 +4,10 @@
 
 Proposed. It becomes Accepted when `workers` and `leases` carry a
 required tenant, the database refuses a worker, a running job or a
-lease that crosses tenants, both repositories read by that tenant, and
-every existing two-tenant test passes unchanged.
+lease that crosses tenants, both repositories read by that tenant,
+every existing two-tenant test passes with every assertion removed from
+one accounted for in the Progress section, and a release that carries
+0005 has been run against a database upgraded from v0.6.0.
 
 Related: ADR 0064 (points 2, 4 and 7), ADR 0066, ADR 0071 (decision
 7), ADR 0073 and ADR 0074.
@@ -202,7 +204,8 @@ database check for an application mistake (ADR 0064 point 7).
 3. A lease's tenant equals its worker's and its job's, and the database
    refuses a row where either differs.
 4. The nine worker routes answer as before. Every existing two-tenant
-   test passes without a change.
+   test passes, and every assertion removed from one is accounted for
+   in the Progress section.
 5. An image from before this change can still write workers and leases
    after 0004 has been applied and before 0005 is.
 6. After slice 3, no repository method returns a worker or a lease of
@@ -507,3 +510,52 @@ went with them, and no allowlist entry remains for either file.
 The follow-up about deleting them is closed. The follow-up about a
 missing node is closed by #407, which makes both paths log it at error
 level, so it is removed from the Follow-ups list.
+
+2026-10-24. Three things are recorded here so the Status can be checked
+against evidence.
+
+The wording of the Status and of property 4 is amended. It said every
+existing two-tenant test passes unchanged, and that was not true. Twelve
+test files with tenant in their name were modified after slice 1 and one
+was added. Every assertion removed from eleven of them is accounted for
+here. The twelfth is the allowlist test, which every conversion pull
+request edited. It has no removed assertion line since slice 1, counted
+the same way. Four tests were deleted from these files after slice 1,
+and none was added to them. They match in number and subject the four
+that the slice 2 entry above records as removed, because they built a
+worker or a lease with no tenant, which migration 0005 makes impossible:
+`test_a_worker_with_no_tenant_is_refused_until_it_is_saved_once`,
+`test_a_lease_with_no_tenant_reads_the_tenant_of_its_worker`,
+`test_a_lease_and_a_worker_with_no_tenant_read_the_tenant_of_the_node`
+and `test_saving_a_worker_an_older_image_wrote_repairs_its_tenant`. They
+held 16 assertions, counted in the old test bodies with the Python
+parser, as assert statements. Twenty removed assertion lines were
+counted in the modified files, as lines that begin with assert, and 16
+plus 4 is 20. The other four removed lines were rewritten to call the
+tenant-aware method, and one of them, in
+`test_a_job_in_another_tenant_gets_no_lease_and_records_nothing`, now
+checks both tenants. Which removed lines belonged to which deleted test
+was matched by file and wording, and the counts agree per file: 6
+removed lines against 6 assert statements in the deleted test of the
+assign file, 8 against 8 in the lease repository file, and 2 against 2
+in the worker repository file. The counts of 16 and 20 were measured.
+Thirteen further tests, in files without tenant in their name, were
+deleted with `CompleteJobService` and `FailJobService`. The entry above
+records that deletion.
+
+The database enforces the tenant rules on every run, not only when a
+migration is written. `test_workers_leases_schema_catalog.py` reads
+`pg_constraint` and `information_schema` on the migrated test database
+and checks the four same-tenant foreign keys by name, columns and target
+table, and that `tenant_id` is `NOT NULL` on `workers` and `leases`. Two
+more tests break the schema inside a transaction and show the check
+reports it. This is the evidence for properties 1 to 3.
+
+Decision 12 has not been exercised. Migration 0004 first shipped in
+v0.6.0, whose commit is dated 2026-10-19. Migration 0005 is merged on
+main as #397 and is in no tag. The tags were listed locally and on the
+remote and both end at v0.6.0. The rule was not broken, because 0005 has
+not shipped. It has not been shown to work either, because no image has
+been upgraded from a release that carries only 0004 to one that carries
+0005. The Status stays Proposed until that has happened, and the Status
+now says so.
