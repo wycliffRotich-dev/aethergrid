@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import re
+import ast
 from collections import Counter
 from pathlib import Path
 
@@ -8,10 +8,12 @@ from pathlib import Path
 # fleet, so who may call one is decided here, in one visible place.
 # A new caller fails this test until it is added with a reason, and each
 # caller is pinned to the exact calls it makes, by method, so a new
-# unscoped read inside an allowed file fails too. The match is textual,
-# so a call named in a comment or a docstring counts the same.
+# unscoped read inside an allowed file fails too. Calls are counted from
+# the parsed source, so a comment or a docstring that names a method does
+# not count. A call made through getattr or a stored reference would not
+# be seen.
 APP = Path(__file__).resolve().parents[2] / "app"
-ACROSS_TENANTS_CALL = re.compile(r"(?<!def )\b\w+_across_tenants\(")
+SUFFIX = "_across_tenants"
 
 EXPECTED_CALLS = {
     # The credential lookup cannot know the tenant in advance.
@@ -28,7 +30,7 @@ EXPECTED_CALLS = {
         "list_across_tenants": 2,
     },
     "application/reconciliation/recover_expired_lease_service.py": {
-        "delete_if_expired_across_tenants": 3,
+        "delete_if_expired_across_tenants": 1,
         "get_by_id_across_tenants": 2,
         "list_across_tenants": 1,
     },
@@ -57,10 +59,22 @@ EXPECTED_CALLS = {
 }
 
 
+def _called_name(call: ast.Call) -> str | None:
+    func = call.func
+    name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+    return name if name and name.endswith(SUFFIX) else None
+
+
 def _calls_by_file(root: str) -> dict[str, dict[str, int]]:
     found: dict[str, dict[str, int]] = {}
     for path in (APP / root).rglob("*.py"):
-        names = [m[:-1] for m in ACROSS_TENANTS_CALL.findall(path.read_text())]
+        tree = ast.parse(path.read_text(), filename=str(path))
+        names = [
+            name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            if (name := _called_name(node))
+        ]
         if names:
             found[path.relative_to(APP).as_posix()] = dict(Counter(names))
     return found
