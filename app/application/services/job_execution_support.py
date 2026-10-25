@@ -102,7 +102,7 @@ def reclaim_job(
 
     lease_already_deleted: pass True when the caller has
     already deleted the lease itself, conditionally, via
-    LeaseRepository.delete_if_expired_across_tenants -- and confirmed it
+    LeaseRepository.delete_if_expired -- and confirmed it
     actually removed a row. This exists so a caller whose
     reclaim decision depends on the lease still being expired
     at delete time (not just at an earlier snapshot read) can

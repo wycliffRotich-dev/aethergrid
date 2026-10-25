@@ -135,7 +135,7 @@ def test_recover_expired_lease_skips_a_job_whose_lease_was_renewed_mid_pass() ->
     If a worker's background renewal thread successfully renews
     a lease after that snapshot was read, but before this pass
     gets to delete it, the lease is no longer actually expired
-    by the time delete_if_expired_across_tenants() runs.
+    by the time delete_if_expired() runs.
 
     Simulates that exact interleaving directly: the lease is
     created already expired, saved, then renewed via the same
@@ -182,7 +182,7 @@ def test_recover_expired_lease_skips_a_job_whose_lease_was_renewed_mid_pass() ->
     node_repository = InMemoryNodeRepository([node])
 
     # The race: renew the lease on the same repository the
-    # service is about to call list() and delete_if_expired_across_tenants()
+    # service is about to call list() and delete_if_expired()
     # against, simulating a worker's renewal thread winning the
     # gap between this pass's snapshot read and its delete.
     lease_repository.renew(

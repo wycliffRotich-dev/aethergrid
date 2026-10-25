@@ -129,32 +129,9 @@ class LeaseRepository(ABC):
         was renewed since the caller last checked. A lease in
         another tenant is left untouched.
 
-        This is delete_if_expired_across_tenants() with the tenant
-        in the same atomic check, so the renewal race that method
-        closes (ADR 0034) stays closed.
+        Expiry and tenant are checked in the same atomic step as the
+        delete, so a lease renewed after the caller last looked is
+        left alone. That keeps the renewal race closed (ADR 0034).
         """
         raise NotImplementedError
 
-    @abstractmethod
-    def delete_if_expired_across_tenants(
-        self,
-        job_id: JobId,
-    ) -> bool:
-        """
-        Delete the lease for job_id only if it is still
-        expired at the moment of deletion, not merely at some
-        earlier read. Returns True if a row was deleted,
-        False if no lease exists for job_id or the lease was
-        renewed since the caller last checked.
-
-        Exists because a caller (reconciliation) may check
-        is_expired() against a snapshot read, then act on
-        that snapshot later. Between the read and the delete,
-        a worker's renewal thread may have legitimately
-        extended the lease. Without this check, delete()
-        would remove a lease the worker now legitimately
-        owns -- the same class of bug ADR 0034 fenced for
-        release, applied here to reconciliation's own reclaim
-        path, which ADR 0034-0038 never covered.
-        """
-        raise NotImplementedError
