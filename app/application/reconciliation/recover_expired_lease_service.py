@@ -155,9 +155,25 @@ class RecoverExpiredLeaseService:
 
             node = None
             if job.assigned_node_id is not None:
-                node = self._node_repository.get_by_id_across_tenants(
+                node = self._node_repository.get_by_id(
                     job.assigned_node_id,
+                    lease.tenant_id,
                 )
+
+                if node is None:
+                    # A job and its node live in one tenant, and the
+                    # database refuses a job assigned to a node of
+                    # another tenant, so this state means a mistake
+                    # upstream (ADR 0075 decision 14). reclaim_job skips
+                    # a missing node, so the job is still reclaimed.
+                    logger.error(
+                        "Job %s is assigned to node %s, but that node "
+                        "was not found in tenant %s, the tenant of its "
+                        "expired lease. The node release was skipped.",
+                        job.id,
+                        job.assigned_node_id,
+                        lease.tenant_id,
+                    )
 
             reclaimed = reclaim_job(
                 job,
