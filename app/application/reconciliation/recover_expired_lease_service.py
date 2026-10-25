@@ -117,14 +117,26 @@ class RecoverExpiredLeaseService:
                 continue
 
             worker = self._worker_repository.get_by_id(
-            lease.worker_id,
-            lease.tenant_id,
-        )
-            job = self._job_repository.get_by_id_across_tenants(
+                lease.worker_id,
+                lease.tenant_id,
+            )
+            job = self._job_repository.get_by_id(
                 lease.job_id,
+                lease.tenant_id,
             )
 
             if job is None:
+                # A lease and its job live in one tenant, and the
+                # database refuses a lease that crosses tenants, so
+                # this state means a mistake upstream (ADR 0075
+                # decision 14). The job is left as it is.
+                logger.error(
+                    "Job %s was not found in tenant %s, the tenant of "
+                    "its expired lease. The job was not reclaimed.",
+                    lease.job_id,
+                    lease.tenant_id,
+                )
+
                 if worker is not None:
                     worker.recover()
                     self._worker_repository.save(
