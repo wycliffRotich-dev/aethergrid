@@ -532,3 +532,171 @@ def test_recover_expired_lease_releases_node_resources() -> None:
 
     assert recovered_node.available.cpu_cores == 8
     assert recovered_node.available.memory_mib == 16384
+
+
+_RECOVER_LOGGER = "app.application.reconciliation.recover_expired_lease_service"
+
+
+def _running_worker_in(tenant, node):
+    worker = make_worker(id=WorkerId.new(), node=node)
+    worker.ready()
+    return worker
+
+
+def test_recover_expired_lease_does_not_reclaim_a_job_of_another_tenant(
+    caplog,
+) -> None:
+    """
+    A lease names its job, and both live in one tenant. If a lease ever
+    names a job of another tenant, that job reads as missing: it is not
+    reclaimed, the node keeps its allocation, and the skip is logged at
+    error level, as ADR 0075 decision 14 does for a tenant mismatch.
+    """
+    import logging
+
+    from app.domain.value_objects.tenant_id import TenantId
+
+    tenant = TenantId.new()
+    other_tenant = TenantId.new()
+
+    node = make_node(
+        id=NodeId.new(),
+        tenant_id=tenant,
+        capacity=ResourceRequirements(
+            cpu_cores=8,
+            memory_mib=16384,
+            vram_mib=0,
+        ),
+    )
+    worker = _running_worker_in(tenant, node)
+
+    own_job = make_job(
+        id=JobId.new(),
+        tenant_id=tenant,
+        resources=ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=512,
+            vram_mib=0,
+        ),
+    )
+    own_job.queue()
+    own_job.assign_to(node.id)
+    worker.accept(own_job)
+    worker.start()
+
+    foreign_job = make_job(
+        id=JobId.new(),
+        tenant_id=other_tenant,
+        resources=ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=512,
+            vram_mib=0,
+        ),
+        max_retries=1,
+    )
+    foreign_job.queue()
+    foreign_job.assign_to(node.id)
+    node.allocate(foreign_job.resources)
+    status_before = foreign_job.status
+
+    lease = _make_expired_lease(worker, foreign_job)
+
+    worker_repository = InMemoryWorkerRepository([worker])
+    job_repository = InMemoryJobRepository([foreign_job])
+    lease_repository = InMemoryLeaseRepository()
+    lease_repository.save(lease)
+    node_repository = InMemoryNodeRepository([node])
+
+    service = RecoverExpiredLeaseService(
+        worker_repository=worker_repository,
+        job_repository=job_repository,
+        lease_repository=lease_repository,
+        node_repository=node_repository,
+    )
+
+    with caplog.at_level(logging.ERROR, logger=_RECOVER_LOGGER):
+        service.execute()
+
+    saved = job_repository.get_by_id(foreign_job.id, other_tenant)
+    assert saved is not None
+    assert saved.status == status_before
+    assert saved.retry_count == 0
+    assert node.available.cpu_cores == 7
+
+    errors = [
+        r
+        for r in caplog.records
+        if r.name == _RECOVER_LOGGER and r.levelno >= logging.ERROR
+    ]
+    assert len(errors) == 1
+    message = errors[0].getMessage()
+    assert str(foreign_job.id) in message
+    assert str(tenant) in message
+
+
+def test_recover_expired_lease_reclaims_a_job_in_a_non_default_tenant(
+    caplog,
+) -> None:
+    import logging
+
+    from app.domain.value_objects.tenant_id import TenantId
+
+    tenant = TenantId.new()
+    assert tenant != DEFAULT_TENANT_ID
+
+    node = make_node(
+        id=NodeId.new(),
+        tenant_id=tenant,
+        capacity=ResourceRequirements(
+            cpu_cores=8,
+            memory_mib=16384,
+            vram_mib=0,
+        ),
+    )
+    worker = _running_worker_in(tenant, node)
+
+    job = make_job(
+        id=JobId.new(),
+        tenant_id=tenant,
+        resources=ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=512,
+            vram_mib=0,
+        ),
+        max_retries=1,
+    )
+    job.queue()
+    job.assign_to(node.id)
+    node.allocate(job.resources)
+    worker.accept(job)
+    worker.start()
+
+    lease = _make_expired_lease(worker, job)
+
+    worker_repository = InMemoryWorkerRepository([worker])
+    job_repository = InMemoryJobRepository([job])
+    lease_repository = InMemoryLeaseRepository()
+    lease_repository.save(lease)
+    node_repository = InMemoryNodeRepository([node])
+
+    service = RecoverExpiredLeaseService(
+        worker_repository=worker_repository,
+        job_repository=job_repository,
+        lease_repository=lease_repository,
+        node_repository=node_repository,
+    )
+
+    with caplog.at_level(logging.ERROR, logger=_RECOVER_LOGGER):
+        service.execute()
+
+    recovered = job_repository.get_by_id(job.id, tenant)
+    assert recovered is not None
+    assert recovered.is_queued()
+    assert recovered.retry_count == 1
+    assert node.available == node.capacity
+    assert lease_repository.get_by_worker_id(worker.id, tenant) is None
+    assert [
+        r
+        for r in caplog.records
+        if r.name == _RECOVER_LOGGER and r.levelno >= logging.ERROR
+    ] == []
