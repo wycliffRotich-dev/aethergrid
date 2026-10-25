@@ -559,3 +559,51 @@ not shipped. It has not been shown to work either, because no image has
 been upgraded from a release that carries only 0004 to one that carries
 0005. The Status stays Proposed until that has happened, and the Status
 now says so.
+
+2026-10-24. The reconciliation services are converted, in six pull
+requests. #414 and #415 each came with a test that failed against the
+code it replaced. #416 and #417 are the new delete and the move onto it.
+#412 and #413 are the guard on the allowlist, shown to fail by adding a
+call to an allowed file.
+
+#414 and #415 move RecoverExpiredLeaseService to read the job and the
+node in the lease's tenant. A lease whose job is held under another
+tenant used to have that job reclaimed. The test showed it, with QUEUED
+where SCHEDULED was expected. A node with the job's id held under
+another tenant used to be found and its resources released, and the test
+failed with 8 where 7 was expected. If either read now finds nothing,
+the service logs an error naming the job and the tenant, and reclaim_job
+skips a missing node, as its docstring says. The node case was read in
+the function body before the change, and not only in the docstring.
+
+#416 adds delete_if_expired(job_id, tenant_id) to the lease port. On
+Postgres it is one DELETE whose WHERE holds the job, the tenant and the
+expiry, so the renewal race that ADR 0034 closed stays closed. A version
+that ignored the tenant failed the isolation test on both
+implementations before the real ones were written. #417 moves both
+sweeps onto it and removes delete_if_expired_across_tenants from the
+port and from both repositories. The three contract tests of the removed
+method went with it, and the scoped tests cover the same three cases.
+
+#412 and #413 pin the allowlist. Each allowed file is held to the exact
+across-tenants calls it makes, by method, and the calls are counted from
+the parsed source. An earlier version counted text, and it pinned
+recover_expired_lease_service.py at six calls when the file made four,
+because its docstring named two methods.
+
+The allowlist now holds ten calls in eight files, counted from the
+parser on main after #417: list_across_tenants once in
+recover_expired_lease_service.py, twice in
+recover_offline_node_service.py, once in assign_worker_service.py, once
+in cluster_tick_service.py and once in mark_dead_workers_service.py.
+scheduler_loop_service.py makes one list_across_tenants call and one
+list_available_across_tenants call. authenticate_api_key_service.py
+makes one get_by_hash_across_tenants call, and worker_execution_loop.py
+makes one get_by_id_across_tenants call. Each file has a reason written
+in the allowlist test. None of the ten is a delete or a save, which is
+all the parser can show, since it matches by method name.
+
+What the guard does not see: a call made through getattr or a stored
+reference, and the one call in the sqlite node repository, which is
+outside the scanned directories. The status stays Proposed, and the
+conditions in the Status section are unchanged.
