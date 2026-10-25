@@ -26,11 +26,9 @@ EXPECTED_CALLS = {
         "list_available_across_tenants": 1,
     },
     "application/reconciliation/recover_offline_node_service.py": {
-        "delete_if_expired_across_tenants": 1,
         "list_across_tenants": 2,
     },
     "application/reconciliation/recover_expired_lease_service.py": {
-        "delete_if_expired_across_tenants": 1,
         "list_across_tenants": 1,
     },
     # Fleet-wide sweeps with no caller tenant: the cluster tick and

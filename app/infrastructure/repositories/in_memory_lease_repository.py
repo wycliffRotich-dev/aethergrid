@@ -109,15 +109,3 @@ class InMemoryLeaseRepository(
 
         return True
 
-    def delete_if_expired_across_tenants(
-        self,
-        job_id: JobId,
-    ) -> bool:
-        lease = self._leases.get(str(job_id))
-
-        if lease is None or not lease.is_expired():
-            return False
-
-        self._leases.pop(str(job_id))
-
-        return True

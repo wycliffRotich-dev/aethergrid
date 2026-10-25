@@ -121,8 +121,9 @@ class RecoverOfflineNodeService:
                     # not actually abandoned.
                     continue
 
-                deleted = self._lease_repository.delete_if_expired_across_tenants(
+                deleted = self._lease_repository.delete_if_expired(
                     job.id,
+                    job.tenant_id,
                 )
 
                 if not deleted:
