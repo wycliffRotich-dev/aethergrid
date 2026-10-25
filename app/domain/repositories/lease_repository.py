@@ -116,6 +116,26 @@ class LeaseRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def delete_if_expired(
+        self,
+        job_id: JobId,
+        tenant_id: TenantId,
+    ) -> bool:
+        """
+        Delete the lease for job_id in this tenant only if it is
+        still expired at the moment of deletion, not merely at some
+        earlier read. Returns True if a row was deleted, and False
+        if no lease exists for job_id in this tenant or the lease
+        was renewed since the caller last checked. A lease in
+        another tenant is left untouched.
+
+        This is delete_if_expired_across_tenants() with the tenant
+        in the same atomic check, so the renewal race that method
+        closes (ADR 0034) stays closed.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     def delete_if_expired_across_tenants(
         self,
         job_id: JobId,

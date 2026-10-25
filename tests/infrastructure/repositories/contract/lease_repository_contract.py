@@ -213,6 +213,106 @@ class LeaseRepositoryContract:
 
         assert deleted is False
 
+    def test_delete_if_expired_in_its_tenant_removes_an_expired_lease(
+        self,
+        repository,
+    ) -> None:
+        lease = self._make_lease(
+            duration=timedelta(seconds=-1),
+        )
+
+        repository.save(lease)
+
+        deleted = repository.delete_if_expired(
+            lease.job_id,
+            lease.tenant_id,
+        )
+
+        assert deleted is True
+        assert (
+            repository.get_by_job_id(
+                lease.job_id,
+                lease.tenant_id,
+            )
+            is None
+        )
+
+    def test_delete_if_expired_leaves_an_expired_lease_of_another_tenant(
+        self,
+        repository,
+    ) -> None:
+        # A lease in another tenant is not this caller's to delete,
+        # even when it is expired. It is left untouched and reported
+        # as not deleted, the same way delete() treats it.
+        lease = self._make_lease(
+            duration=timedelta(seconds=-1),
+        )
+
+        repository.save(lease)
+
+        other_tenant = TenantId.new()
+        assert other_tenant != lease.tenant_id
+
+        deleted = repository.delete_if_expired(
+            lease.job_id,
+            other_tenant,
+        )
+
+        assert deleted is False
+        assert (
+            repository.get_by_job_id(
+                lease.job_id,
+                lease.tenant_id,
+            )
+            is not None
+        )
+
+    def test_delete_if_expired_in_its_tenant_leaves_a_renewed_lease(
+        self,
+        repository,
+    ) -> None:
+        # The renewal race the unscoped method exists to close must
+        # still hold when the delete is scoped.
+        lease = self._make_lease(
+            duration=timedelta(seconds=-1),
+        )
+
+        repository.save(lease)
+
+        repository.renew(
+            lease.id,
+            DEFAULT_LEASE_DURATION,
+            lease.tenant_id,
+        )
+
+        deleted = repository.delete_if_expired(
+            lease.job_id,
+            lease.tenant_id,
+        )
+
+        assert deleted is False
+        assert (
+            repository.get_by_job_id(
+                lease.job_id,
+                lease.tenant_id,
+            )
+            is not None
+        )
+
+    def test_delete_if_expired_in_a_tenant_returns_false_when_no_lease_exists(
+        self,
+        repository,
+    ) -> None:
+        # deliberately never saved
+        lease = self._make_lease()
+
+        deleted = repository.delete_if_expired(
+            lease.job_id,
+            lease.tenant_id,
+        )
+
+        assert deleted is False
+
         assert (
             repository.get_by_worker_id(
                 lease.worker_id,
