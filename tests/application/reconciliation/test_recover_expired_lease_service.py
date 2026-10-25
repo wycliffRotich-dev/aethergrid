@@ -700,3 +700,95 @@ def test_recover_expired_lease_reclaims_a_job_in_a_non_default_tenant(
         for r in caplog.records
         if r.name == _RECOVER_LOGGER and r.levelno >= logging.ERROR
     ] == []
+
+
+def test_recover_expired_lease_never_releases_a_node_of_another_tenant(
+    caplog,
+) -> None:
+    """
+    The database forbids a job assigned to a node of another tenant
+    (ADR 0069). If that state ever existed, the scoped node read must
+    not find the node: its allocation stays untouched, the job is still
+    reclaimed because reclaim_job skips a missing node, and the miss is
+    logged at error level, as ADR 0075 decision 14 does for a mismatch.
+    """
+    import logging
+
+    from app.domain.value_objects.tenant_id import TenantId
+
+    tenant = TenantId.new()
+    other_tenant = TenantId.new()
+
+    node = make_node(
+        id=NodeId.new(),
+        tenant_id=tenant,
+        capacity=ResourceRequirements(
+            cpu_cores=8,
+            memory_mib=16384,
+            vram_mib=0,
+        ),
+    )
+    worker = _running_worker_in(tenant, node)
+
+    job = make_job(
+        id=JobId.new(),
+        tenant_id=tenant,
+        resources=ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=512,
+            vram_mib=0,
+        ),
+        max_retries=1,
+    )
+    job.queue()
+    job.assign_to(node.id)
+    worker.accept(job)
+    worker.start()
+
+    foreign_node = make_node(
+        id=node.id,
+        tenant_id=other_tenant,
+        capacity=ResourceRequirements(
+            cpu_cores=8,
+            memory_mib=16384,
+            vram_mib=0,
+        ),
+    )
+    foreign_node.allocate(job.resources)
+
+    lease = _make_expired_lease(worker, job)
+
+    worker_repository = InMemoryWorkerRepository([worker])
+    job_repository = InMemoryJobRepository([job])
+    lease_repository = InMemoryLeaseRepository()
+    lease_repository.save(lease)
+    node_repository = InMemoryNodeRepository([foreign_node])
+
+    service = RecoverExpiredLeaseService(
+        worker_repository=worker_repository,
+        job_repository=job_repository,
+        lease_repository=lease_repository,
+        node_repository=node_repository,
+    )
+
+    with caplog.at_level(logging.ERROR, logger=_RECOVER_LOGGER):
+        service.execute()
+
+    assert foreign_node.available.cpu_cores == 7
+    assert foreign_node.available.memory_mib == 16384 - 512
+
+    recovered = job_repository.get_by_id(job.id, tenant)
+    assert recovered is not None
+    assert recovered.is_queued()
+    assert recovered.retry_count == 1
+
+    errors = [
+        r
+        for r in caplog.records
+        if r.name == _RECOVER_LOGGER and r.levelno >= logging.ERROR
+    ]
+    assert len(errors) == 1
+    message = errors[0].getMessage()
+    assert str(job.id) in message
+    assert str(node.id) in message
+    assert str(tenant) in message
