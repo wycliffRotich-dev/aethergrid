@@ -32,3 +32,9 @@ This does not protect against a distributed abuse scenario using many different 
 The limiter's state is lost on process restart, meaning a caller's bucket resets to full whenever the API restarts. This is an accepted tradeoff of the in-memory approach, not a defect, consistent with choosing to solve today's actual deployment shape rather than build for a multi-instance future that does not exist yet.
 
 If this system moves to multiple concurrent instances, this decision must be revisited. The in-memory counter will silently stop being correct, each instance will enforce its own independent limit rather than one shared limit, without raising any error, so this needs to be caught by an operator recognizing the deployment shape has changed, not by anything in the code itself.
+
+2026-10-26. The single-process scope above no longer applies to the
+scheduler: ADR 0078 elects one process to run the cluster tick. The rate
+limiter is unchanged. Its counters are still in memory and per process, so
+with more than one instance each process keeps its own buckets, and the
+revisit condition above still stands.
