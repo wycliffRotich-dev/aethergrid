@@ -299,3 +299,52 @@ def test_a_lease_cannot_have_its_tenant_removed_after_0005(db: Db) -> None:
         db.conn.execute("UPDATE leases SET tenant_id = NULL WHERE id = %s", (lease,))
 
     assert _tenant_of(db, "leases", lease) == tenant_a
+
+
+def test_the_migration_names_a_worker_whose_running_job_is_in_another_tenant(
+    db: Db,
+) -> None:
+    db.run_up_to(4)
+    tenant_a = _tenant(db, "a")
+    tenant_b = _tenant(db, "b")
+    node_a = _node(db, tenant_a)
+    job_b = _job(db, tenant_b)
+    # Written by an older image: no tenant, so the composite key of 0004
+    # does not check it. The node is in tenant a and the job is in tenant b.
+    worker = _worker_without_tenant(db, node_a, running_job_id=job_b)
+
+    with pytest.raises((MigrationError, psycopg.Error)) as refused:
+        db.run_up_to(5)
+
+    message = f"{refused.value} {refused.value.__cause__}"
+    assert "1 workers run a job in another tenant than their node" in message
+    assert _tenant_of(db, "workers", worker) is None
+    assert _nullable(db, "workers") and _nullable(db, "leases")
+    assert set(OLD_KEYS["workers"]) <= _constraint_names(db, "workers")
+    assert not _applied(db, 5)
+
+
+def test_the_migration_names_a_lease_whose_job_is_in_another_tenant(
+    db: Db,
+) -> None:
+    db.run_up_to(4)
+    tenant_a = _tenant(db, "a")
+    tenant_b = _tenant(db, "b")
+    node_a = _node(db, tenant_a)
+    job_b = _job(db, tenant_b)
+    # Written by an older image: no tenant on either row, so the composite
+    # keys of 0004 do not check them. The worker's node is in tenant a and
+    # the lease's job is in tenant b.
+    worker = _worker_without_tenant(db, node_a)
+    lease = _lease_without_tenant(db, worker, job_b)
+
+    with pytest.raises((MigrationError, psycopg.Error)) as refused:
+        db.run_up_to(5)
+
+    message = f"{refused.value} {refused.value.__cause__}"
+    assert "1 leases hold a job in another tenant than their worker" in message
+    assert _tenant_of(db, "workers", worker) is None
+    assert _tenant_of(db, "leases", lease) is None
+    assert _nullable(db, "workers") and _nullable(db, "leases")
+    assert set(OLD_KEYS["leases"]) <= _constraint_names(db, "leases")
+    assert not _applied(db, 5)

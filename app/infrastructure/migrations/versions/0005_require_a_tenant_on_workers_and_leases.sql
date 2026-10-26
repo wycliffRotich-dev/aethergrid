@@ -8,6 +8,42 @@
 -- It runs in one transaction together with its version row (ADR 0071,
 -- decision 4). If any step fails, none of it is applied.
 
+-- A row an older image wrote has no tenant, so the composite keys of
+-- 0004 never checked it. The backfill below would give it the tenant of
+-- its node or its worker, and a job in another tenant would then fail
+-- on a foreign key in the middle of the backfill. Look for those rows
+-- first, and name them, before anything is changed.
+DO $$
+DECLARE
+    crossing_workers bigint;
+    crossing_leases bigint;
+BEGIN
+    SELECT count(*) INTO crossing_workers
+    FROM workers
+    JOIN nodes ON nodes.id = workers.node_id
+    JOIN jobs ON jobs.id = workers.running_job_id
+    WHERE workers.tenant_id IS NULL
+      AND jobs.tenant_id <> nodes.tenant_id;
+
+    SELECT count(*) INTO crossing_leases
+    FROM leases
+    JOIN workers ON workers.id = leases.worker_id
+    JOIN nodes ON nodes.id = workers.node_id
+    JOIN jobs ON jobs.id = leases.job_id
+    WHERE leases.tenant_id IS NULL
+      AND jobs.tenant_id <> COALESCE(workers.tenant_id, nodes.tenant_id);
+
+    IF crossing_workers > 0 OR crossing_leases > 0 THEN
+        RAISE EXCEPTION USING
+            MESSAGE = crossing_workers::text
+                || ' workers run a job in another tenant than their node and '
+                || crossing_leases::text
+                || ' leases hold a job in another tenant than their worker',
+            HINT = 'Find the workers with: SELECT w.id FROM workers w JOIN nodes n ON n.id = w.node_id JOIN jobs j ON j.id = w.running_job_id WHERE w.tenant_id IS NULL AND j.tenant_id <> n.tenant_id; and the leases with: SELECT l.id FROM leases l JOIN workers w ON w.id = l.worker_id JOIN nodes n ON n.id = w.node_id JOIN jobs j ON j.id = l.job_id WHERE l.tenant_id IS NULL AND j.tenant_id <> COALESCE(w.tenant_id, n.tenant_id); then repair or remove them and run the migrations again.';
+    END IF;
+END
+$$;
+
 -- A worker an older image wrote after 0004 has no tenant. It takes the
 -- tenant of its node, then a lease takes the tenant of its worker, in
 -- that order. Nothing falls back to the default tenant.
