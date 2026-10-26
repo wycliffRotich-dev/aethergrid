@@ -18,6 +18,7 @@ from app.presentation.dependencies import (
     get_connection_pool,
     get_reconciliation_loop,
     get_request_logging_service,
+    get_scheduler_leadership,
 )
 from app.presentation.request_logging_middleware import (
     RequestLoggingMiddleware,
@@ -148,6 +149,40 @@ async def _run_cluster_tick(
         )
 
 
+async def _run_leader_tick(
+    leadership,
+    cluster_tick_service,
+    reconciliation_loop,
+) -> None:
+    """
+    Run one cluster tick, but only when this process leads the
+    scheduler (ADR 0078).
+
+    Asking for leadership talks to the database, so it runs on a
+    worker thread like every other repository call here. A
+    follower skips the tick and asks again on the next one. An
+    error from the election is logged and skips the tick, so it
+    can never end the loop. Extracted from _run_cluster_loop so
+    the gate is directly testable without a while-loop or a
+    sleep.
+    """
+    try:
+        leads = await asyncio.to_thread(leadership.try_acquire)
+    except Exception:
+        logger.exception(
+            "Unexpected error electing the scheduler.",
+        )
+        return
+
+    if not leads:
+        return
+
+    await _run_cluster_tick(
+        cluster_tick_service,
+        reconciliation_loop,
+    )
+
+
 async def _run_cluster_loop() -> None:
     """
     Repeatedly drive the cluster forward: schedule queued
@@ -158,6 +193,12 @@ async def _run_cluster_loop() -> None:
     Runs as a background asyncio task for the lifetime of
     the application. See _run_cluster_tick for the
     per-phase failure isolation this loop relies on.
+
+    Each tick runs only while this process leads the scheduler
+    (ADR 0078), so a second process on the same database waits
+    its turn instead of scheduling against the same nodes. The
+    lock is released when the loop ends, so a clean shutdown
+    hands leadership over at once.
 
     ClusterTickService.execute() now runs on a worker thread via
     asyncio.to_thread (ADR 0032), since it may execute a
@@ -179,14 +220,19 @@ async def _run_cluster_loop() -> None:
     """
     cluster_tick_service = get_cluster_tick_service()
     reconciliation_loop = get_reconciliation_loop()
+    leadership = get_scheduler_leadership()
 
-    while True:
-        await _run_cluster_tick(
-            cluster_tick_service,
-            reconciliation_loop,
-        )
+    try:
+        while True:
+            await _run_leader_tick(
+                leadership,
+                cluster_tick_service,
+                reconciliation_loop,
+            )
 
-        await asyncio.sleep(TICK_INTERVAL_SECONDS)
+            await asyncio.sleep(TICK_INTERVAL_SECONDS)
+    finally:
+        await asyncio.to_thread(leadership.release)
 
 
 @asynccontextmanager

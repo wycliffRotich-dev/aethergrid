@@ -13,6 +13,9 @@ from app.application.reconciliation.recover_expired_lease_service import (
 from app.application.reconciliation.recover_offline_node_service import (
     RecoverOfflineNodeService,
 )
+from app.application.scheduler_leadership import (
+    SchedulerLeadership,
+)
 from app.application.services.acquire_lease_service import (
     AcquireLeaseService,
 )
@@ -167,11 +170,17 @@ from app.domain.services.scheduler import Scheduler
 from app.infrastructure.database_credentials import (
     resolve_database_password,
 )
+from app.infrastructure.in_memory_scheduler_leadership import (
+    InMemorySchedulerLeadership,
+)
 from app.infrastructure.migrations.runner import (
     MIGRATIONS_DIR,
     load_migrations,
 )
 from app.infrastructure.migrations.startup_check import check_schema
+from app.infrastructure.postgres_scheduler_leadership import (
+    PostgresSchedulerLeadership,
+)
 from app.infrastructure.repositories.in_memory_api_key_repository import (
     InMemoryApiKeyRepository,
 )
@@ -367,6 +376,31 @@ _tenant_repository: TenantRepository = (
 )
 
 
+def _build_scheduler_leadership(
+    connection_pool: ConnectionPool | None,
+) -> SchedulerLeadership:
+    """
+    Choose how this process decides whether it runs the cluster
+    tick (ADR 0078).
+
+    Postgres is the only backend a second process can share, so
+    it is the only one that needs an election. The sqlite and
+    memory backends keep their state in this process, so it
+    always leads.
+    """
+    if connection_pool is None:
+        return InMemorySchedulerLeadership()
+
+    database_url = os.environ["NEUROMESH_DATABASE_URL"]
+    return PostgresSchedulerLeadership(
+        database_url,
+        password=resolve_database_password(database_url, os.environ),
+    )
+
+
+_scheduler_leadership = _build_scheduler_leadership(_connection_pool)
+
+
 _record_job_events_service = RecordJobEventsService(
     event_repository=_event_repository,
 )
@@ -513,6 +547,14 @@ def get_connection_pool() -> ConnectionPool | None:
     which every other caller correctly relies on.
     """
     return _connection_pool
+
+
+def get_scheduler_leadership() -> SchedulerLeadership:
+    """
+    Return the SchedulerLeadership that decides whether this
+    process runs the cluster tick (ADR 0078).
+    """
+    return _scheduler_leadership
 
 
 def check_database_schema(
