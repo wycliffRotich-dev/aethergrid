@@ -607,3 +607,41 @@ What the guard does not see: a call made through getattr or a stored
 reference, and the one call in the sqlite node repository, which is
 outside the scanned directories. The status stays Proposed, and the
 conditions in the Status section are unchanged.
+
+2026-10-26. Migration 0005 now looks for rows that cross tenants before
+it changes anything (#419).
+
+A worker or a lease that an older image wrote after 0004 has no tenant,
+so the composite keys of 0004 never checked it, because a foreign key is
+skipped while any of its columns is NULL. Such a worker could run a job
+in another tenant than its node, and such a lease could hold a job in
+another tenant than its worker. The backfill gave each row the tenant of
+its node or its worker, and the foreign key then fired in the middle of
+the update. A probe through the real runner showed the result: a
+MigrationError that wrapped a ForeignKeyViolation on
+workers_running_job_same_tenant, with a key and a tenant in it and no
+count and no repair. The transaction rolled back, so the failure was
+safe and the message was poor.
+
+Two tests build each case at the 0004 schema and run 0005 through the
+runner, one for a worker and one for a lease. Both failed against the
+old migration, and the only assertion that failed was the message. They
+pass now. They also show that the row is still without a tenant, the
+single column keys are still there and version 5 is not recorded.
+
+The check runs before the backfill, because the failure was inside the
+backfill. It counts the workers whose running job is in another tenant
+than their node, and the leases whose job is in another tenant than the
+one their worker has or would get from its node. It stops with both
+counts and a query for each. It covers these two shapes and no others.
+
+0005 is in no tag, as before. v0.6.0 is the newest tag and does not
+carry it. Its checksum changed from fcd7c9e8da93 to 053c39106e8a, and
+the runner refuses a database that applied the old text, so such a
+database has to be recreated. The only one found was a local test
+database, which was dropped and migrated again. The full suite passed
+with 974 tests.
+
+Condition 5 of the Status is still not met. No release carries 0005, and
+no database upgraded from v0.6.0 has been run through it. The status
+stays Proposed, and the conditions in the Status section are unchanged.
