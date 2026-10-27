@@ -335,7 +335,6 @@ Answered after slice 1:
 
 - The wording of the Status of ADR 0064, after slice 3, so that it says
   what is proven and what is not.
-- A test that pins the checksums of applied migration files.
 
 ## How to Verify
 
@@ -645,3 +644,15 @@ with 974 tests.
 Condition 5 of the Status is still not met. No release carries 0005, and
 no database upgraded from v0.6.0 has been run through it. The status
 stays Proposed, and the conditions in the Status section are unchanged.
+
+2026-10-27. The follow-up that pins the checksums of the applied
+migration files is done, and it is removed from the Follow-ups list.
+`tests/infrastructure/test_applied_migrations_are_frozen.py` loads the
+real files through `load_migrations` and compares each checksum with a
+literal SHA-256, so editing or deleting a merged file fails in CI. It
+also fails for a migration file that has no pin, so the next migration
+cannot merge without one. Appending a newline to 0001 made it fail
+with the file named in the message, and restoring the file made it
+pass again. The pins were taken from the files as committed on main.
+A change that edits a file and its pin together still passes, so a
+reviewer has to refuse it. The full suite passed (1002).
