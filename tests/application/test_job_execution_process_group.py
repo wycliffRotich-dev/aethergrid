@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import contextlib
+import errno
+import logging
 import os
 import signal
 import threading
 import time
 from datetime import timedelta
 from pathlib import Path
+
+import pytest
 
 from app.application.services.job_execution_service import (
     JobExecutionService,
@@ -209,3 +213,117 @@ def test_an_interrupt_while_waiting_stops_the_children_of_the_command(
         assert _wait_until_gone(child_pid)
     finally:
         _kill_leftover(child_pid)
+
+
+# A command that starts a child with its output detached, records the
+# child's pid and exits at once. The child is detached so that the
+# command's own output pipes close when the command exits.
+_EXIT_LEAVING_A_CHILD = (
+    "import subprocess, sys; "
+    "child = subprocess.Popen(['sleep', '60'], "
+    "stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, "
+    "stderr=subprocess.DEVNULL); "
+    "open(sys.argv[1], 'w').write(str(child.pid))"
+)
+
+# A child that ignores SIGTERM and records its own pid only after it
+# does, so a test never signals it before the handler is in place.
+_CHILD_THAT_IGNORES_SIGTERM = (
+    "import os, signal, sys, time; "
+    "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+    "open(sys.argv[1], 'w').write(str(os.getpid())); "
+    "time.sleep(60)"
+)
+
+# A command that starts that child with its output detached and then
+# waits. The command dies on SIGTERM and the child does not.
+_SPAWN_A_DETACHED_CHILD_THAT_IGNORES_SIGTERM = (
+    "import subprocess, sys, time; "
+    "subprocess.Popen(['python3', '-c', sys.argv[2], sys.argv[1]], "
+    "stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, "
+    "stderr=subprocess.DEVNULL); "
+    "time.sleep(60)"
+)
+
+
+def test_a_command_that_exits_leaves_no_children_behind(
+    tmp_path: Path,
+) -> None:
+    pid_file = tmp_path / "child.pid"
+    service = JobExecutionService(
+        termination_grace_period=timedelta(seconds=1),
+    )
+    child_pid = None
+
+    try:
+        result = service.execute(
+            command=["python3", "-c", _EXIT_LEAVING_A_CHILD, str(pid_file)],
+            timeout=timedelta(seconds=30),
+        )
+        child_pid = _wait_for_pid(pid_file, seconds=1.0)
+
+        assert result.succeeded is True
+        assert child_pid is not None
+        assert _wait_until_gone(child_pid)
+    finally:
+        _kill_leftover(child_pid)
+
+
+def test_a_descendant_that_ignores_sigterm_is_killed_when_the_command_exits(
+    tmp_path: Path,
+) -> None:
+    pid_file = tmp_path / "child.pid"
+    lease_lost = threading.Event()
+    threading.Thread(
+        target=_set_when_a_child_exists,
+        args=(pid_file, lease_lost),
+        daemon=True,
+    ).start()
+    service = JobExecutionService(
+        termination_grace_period=timedelta(seconds=1),
+    )
+    child_pid = None
+
+    try:
+        result = service.execute(
+            command=[
+                "python3",
+                "-c",
+                _SPAWN_A_DETACHED_CHILD_THAT_IGNORES_SIGTERM,
+                str(pid_file),
+                _CHILD_THAT_IGNORES_SIGTERM,
+            ],
+            timeout=timedelta(seconds=30),
+            lease_lost_event=lease_lost,
+        )
+        child_pid = _wait_for_pid(pid_file, seconds=1.0)
+
+        assert result.lease_lost is True
+        assert child_pid is not None
+        assert _wait_until_gone(child_pid)
+    finally:
+        _kill_leftover(child_pid)
+
+
+def test_a_signal_the_kernel_refuses_does_not_discard_the_result(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def refuse(pgid: int, sig: int) -> None:
+        raise PermissionError(errno.EPERM, "Operation not permitted")
+
+    monkeypatch.setattr(os, "killpg", refuse)
+    service = JobExecutionService()
+
+    with caplog.at_level(
+        logging.WARNING,
+        logger="app.application.services.job_execution_service",
+    ):
+        result = service.execute(
+            command=["python3", "-c", "print('done')"],
+            timeout=timedelta(seconds=5),
+        )
+
+    assert result.succeeded is True
+    assert "done" in result.stdout
+    assert "process group" in caplog.text
