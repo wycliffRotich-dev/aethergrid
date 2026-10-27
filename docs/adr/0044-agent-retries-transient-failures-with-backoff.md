@@ -144,3 +144,10 @@ number generator and would be harder through a library's clock.
 - ADR 0021: Per-API-Key Rate Limiting
 - ADR 0030: Idempotent Worker Registration Per Node
 - ADR 0036: Fence Outcome Reports by Lease Identity for Agents
+
+2026-10-27. Since #424 the command runs in its own session and every
+signal goes to its process group, so the preemption above reaches the
+command's children and not only the command. It still misses a
+descendant that ignores SIGTERM and has detached its output when the
+command itself dies on SIGTERM. ADR 0079 proposes the fix, and the
+same fix for a child left running by a command that exits normally.
