@@ -5,6 +5,7 @@ import json
 import logging
 import os
 from contextlib import asynccontextmanager
+from importlib.metadata import version as package_version
 from typing import Annotated
 
 from fastapi import Depends, FastAPI
@@ -276,7 +277,7 @@ _DOCS_ON = _docs_enabled()
 app = FastAPI(
     title="NeuroMesh API",
     description="Distributed AI Control Plane",
-    version="0.1.0",
+    version=package_version("neuromesh"),
     lifespan=lifespan,
     docs_url="/docs" if _DOCS_ON else None,
     redoc_url="/redoc" if _DOCS_ON else None,

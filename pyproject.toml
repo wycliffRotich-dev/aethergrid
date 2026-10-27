@@ -4,7 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "neuromesh"
-version = "0.1.0"
+# Between releases the tree carries the next version as .dev0. The
+# release commit removes the suffix and is the commit that is tagged.
+version = "0.7.0.dev0"
 description = "Distributed AI Control Plane"
 readme = "README.md"
 requires-python = ">=3.11"
