@@ -1,13 +1,48 @@
 from __future__ import annotations
 
+import contextlib
+import os
+import signal
 import subprocess
 import threading
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import timedelta
 
 DEFAULT_TERMINATION_GRACE_PERIOD = timedelta(seconds=5)
 DEFAULT_POLL_INTERVAL = timedelta(seconds=0.2)
+
+
+def _signal_group(process: subprocess.Popen[str], sig: int) -> None:
+    """
+    Send sig to the whole process group of process.
+
+    The command runs in its own session, so its group id is its pid
+    and the group holds the command and everything it started. A group
+    that is already gone is not an error.
+    """
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(process.pid, sig)
+
+
+@contextlib.contextmanager
+def _kill_the_group_on_error(
+    process: subprocess.Popen[str],
+) -> Iterator[None]:
+    """
+    Kill the whole process group if anything escapes the wait, a
+    KeyboardInterrupt included.
+
+    The command is in its own session, so a Ctrl-C that reaches the
+    agent no longer reaches it. Without this, the agent would stop
+    waiting while the work went on after its lease expired.
+    """
+    try:
+        yield
+    except BaseException:
+        _signal_group(process, signal.SIGKILL)
+        raise
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,7 +160,8 @@ class JobExecutionService:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-        ) as process:
+            start_new_session=True,
+        ) as process, _kill_the_group_on_error(process):
             while True:
                 remaining = deadline - time.monotonic()
 
@@ -191,7 +227,7 @@ class JobExecutionService:
 
     def _terminate_early(
         self,
-        process: subprocess.Popen,
+        process: subprocess.Popen[str],
         start: float,
         *,
         timed_out: bool,
@@ -219,14 +255,16 @@ class JobExecutionService:
         mode worth bounding rather than trusting
         unconditionally.
         """
-        process.terminate()
+        # The command runs in its own session, so this reaches
+        # everything it started and not only the command itself.
+        _signal_group(process, signal.SIGTERM)
 
         try:
             stdout, stderr = process.communicate(
                 timeout=self._termination_grace_period.total_seconds(),
             )
         except subprocess.TimeoutExpired:
-            process.kill()
+            _signal_group(process, signal.SIGKILL)
 
             try:
                 stdout, stderr = process.communicate(
