@@ -238,8 +238,6 @@ Answered while writing slice 1:
 - A later migration that drops `events_job_and_tenant_together`,
   which both columns being required makes redundant (ADR 0071,
   decision 7).
-- A test that pins the checksums of the applied migration files, so
-  editing a frozen file fails in CI and not at deploy time.
 - The route registry test of ADR 0064 point 10. It lists every route.
   `GET /events` and `POST /workers/{id}/heartbeat` were unscoped when
   this was written and are scoped now (this ADR and ADR 0073). The
@@ -318,3 +316,15 @@ routes have two-tenant tests, and the status is Accepted. Whether any
 environment still runs an image from before slice 1 is not recorded
 here, and `0003` must not be applied to one until no such image can
 write events there.
+
+2026-10-27. The follow-up that pins the checksums of the applied
+migration files is done, and it is removed from the Follow-ups list.
+`tests/infrastructure/test_applied_migrations_are_frozen.py` loads the
+real files through `load_migrations` and compares each checksum with a
+literal SHA-256, so editing or deleting a merged file fails in CI. It
+also fails for a migration file that has no pin, so the next migration
+cannot merge without one. Appending a newline to 0001 made it fail
+with the file named in the message, and restoring the file made it
+pass again. The pins were taken from the files as committed on main.
+A change that edits a file and its pin together still passes, so a
+reviewer has to refuse it. The full suite passed (1002).
