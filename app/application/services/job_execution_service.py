@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
 import signal
 import subprocess
@@ -9,6 +10,8 @@ import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import timedelta
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_TERMINATION_GRACE_PERIOD = timedelta(seconds=5)
 DEFAULT_POLL_INTERVAL = timedelta(seconds=0.2)
@@ -20,19 +23,34 @@ def _signal_group(process: subprocess.Popen[str], sig: int) -> None:
 
     The command runs in its own session, so its group id is its pid
     and the group holds the command and everything it started. A group
-    that is already gone is not an error.
+    that is already gone is not an error. A signal the kernel refuses
+    is logged and not raised, because this runs after a job has ended
+    and must not discard its result (ADR 0079).
     """
-    with contextlib.suppress(ProcessLookupError):
+    try:
         os.killpg(process.pid, sig)
+    except ProcessLookupError:
+        return
+    except PermissionError:
+        logger.warning(
+            "Not permitted to send %s to process group %s, so a "
+            "process of the job may be left running.",
+            signal.Signals(sig).name,
+            process.pid,
+        )
 
 
 @contextlib.contextmanager
-def _kill_the_group_on_error(
+def _kill_the_group_on_exit(
     process: subprocess.Popen[str],
 ) -> Iterator[None]:
     """
-    Kill the whole process group if anything escapes the wait, a
-    KeyboardInterrupt included.
+    Kill the whole process group when the wait ends, for any reason.
+
+    Whatever the command left running is killed before execute()
+    returns, whether the command exited, was stopped, or an exception
+    escaped the wait, a KeyboardInterrupt included. A group with no
+    member left is not an error (ADR 0079).
 
     The command is in its own session, so a Ctrl-C that reaches the
     agent no longer reaches it. Without this, the agent would stop
@@ -40,9 +58,8 @@ def _kill_the_group_on_error(
     """
     try:
         yield
-    except BaseException:
+    finally:
         _signal_group(process, signal.SIGKILL)
-        raise
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,7 +178,7 @@ class JobExecutionService:
             stderr=subprocess.PIPE,
             text=True,
             start_new_session=True,
-        ) as process, _kill_the_group_on_error(process):
+        ) as process, _kill_the_group_on_exit(process):
             while True:
                 remaining = deadline - time.monotonic()
 
