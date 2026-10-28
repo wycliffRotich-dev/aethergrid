@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import json
 import sqlite3
 from datetime import datetime
@@ -195,7 +196,7 @@ class SqliteNodeRepository(NodeRepository):
 
     def list_across_tenants(
         self,
-    ) -> list[Node]:
+    ) -> builtins.list[Node]:
         rows = self._connection.execute(
             "SELECT * FROM nodes",
         ).fetchall()
@@ -204,7 +205,7 @@ class SqliteNodeRepository(NodeRepository):
 
     def list_available_across_tenants(
         self,
-    ) -> list[Node]:
+    ) -> builtins.list[Node]:
         return [
             node
             for node in self.list_across_tenants()

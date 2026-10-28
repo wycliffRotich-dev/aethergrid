@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import json
 from datetime import UTC, datetime
 from sqlite3 import Connection
@@ -157,7 +158,7 @@ class SqliteEventRepository(EventRepository):
         self,
         aggregate_id: str,
         tenant_id: TenantId,
-    ) -> list[Event]:
+    ) -> builtins.list[Event]:
         """
         Return every event belonging to one aggregate.
         """

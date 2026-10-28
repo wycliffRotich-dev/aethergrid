@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 from abc import ABC, abstractmethod
 
 from app.domain.entities.node import Node
@@ -69,7 +70,7 @@ class NodeRepository(ABC):
     @abstractmethod
     def list_across_tenants(
         self,
-    ) -> list[Node]:
+    ) -> builtins.list[Node]:
         """
         List every node in every tenant. System actors only.
         """
@@ -78,7 +79,7 @@ class NodeRepository(ABC):
     @abstractmethod
     def list_available_across_tenants(
         self,
-    ) -> list[Node]:
+    ) -> builtins.list[Node]:
         """
         List nodes that are eligible for scheduling, in every
         tenant: alive (a recent heartbeat) and not draining.

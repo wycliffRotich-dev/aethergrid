@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import json
 
 from psycopg.rows import dict_row
@@ -112,7 +113,7 @@ class PostgresEventRepository(EventRepository):
         self,
         aggregate_id: str,
         tenant_id: TenantId,
-    ) -> list[Event]:
+    ) -> builtins.list[Event]:
         """
         Return the events of one aggregate in this tenant (ADR 0074
         decisions 4 and 7).

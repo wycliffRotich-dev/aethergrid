@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import builtins
+
 from app.domain.entities.event import Event
 from app.domain.repositories.event_repository import (
     EventRepository,
@@ -35,7 +37,7 @@ class InMemoryEventRepository(EventRepository):
         self,
         aggregate_id: str,
         tenant_id: TenantId,
-    ) -> list[Event]:
+    ) -> builtins.list[Event]:
         return [
             event
             for event in self._events

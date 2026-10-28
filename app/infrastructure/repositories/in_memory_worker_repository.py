@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import builtins
+
 from app.domain.entities.worker import Worker
 from app.domain.repositories.worker_repository import (
     WorkerRepository,
@@ -98,7 +100,7 @@ class InMemoryWorkerRepository(WorkerRepository):
 
     def list_across_tenants(
         self,
-    ) -> list[Worker]:
+    ) -> builtins.list[Worker]:
         """
         Return every registered worker, in every tenant.
         """

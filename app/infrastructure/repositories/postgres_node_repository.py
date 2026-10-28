@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import json
 
 from psycopg.rows import dict_row
@@ -111,7 +112,7 @@ class PostgresNodeRepository(NodeRepository):
             ).fetchone()
         return self._to_entity(row) if row else None
 
-    def list_across_tenants(self) -> list[Node]:
+    def list_across_tenants(self) -> builtins.list[Node]:
         with self._pool.connection() as conn:
             rows = (
                 conn.cursor(row_factory=dict_row)
@@ -120,7 +121,7 @@ class PostgresNodeRepository(NodeRepository):
             )
         return [self._to_entity(row) for row in rows]
 
-    def list_available_across_tenants(self) -> list[Node]:
+    def list_available_across_tenants(self) -> builtins.list[Node]:
         with self._pool.connection() as conn:
             rows = conn.cursor(row_factory=dict_row).execute(
                 "SELECT * FROM nodes WHERE draining = false"

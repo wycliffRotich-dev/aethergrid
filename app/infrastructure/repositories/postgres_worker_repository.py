@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import json
 from datetime import timedelta
 
@@ -115,7 +116,7 @@ class PostgresWorkerRepository(WorkerRepository):
             )
             return [self._to_entity(conn, row) for row in rows]
 
-    def list_across_tenants(self) -> list[Worker]:
+    def list_across_tenants(self) -> builtins.list[Worker]:
         with self._pool.connection() as conn:
             rows = (
                 conn.cursor(row_factory=dict_row)

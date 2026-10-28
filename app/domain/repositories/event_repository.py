@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 from abc import ABC, abstractmethod
 
 from app.domain.entities.event import Event
@@ -36,7 +37,7 @@ class EventRepository(ABC):
         self,
         aggregate_id: str,
         tenant_id: TenantId,
-    ) -> list[Event]:
+    ) -> builtins.list[Event]:
         """
         Return the events of an aggregate in this tenant. The same
         empty answer covers an aggregate that does not exist and one
