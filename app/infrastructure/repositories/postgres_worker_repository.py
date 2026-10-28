@@ -3,10 +3,13 @@ from __future__ import annotations
 import builtins
 import json
 from datetime import timedelta
+from typing import Any
 
+from psycopg import Connection
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
+from app.domain.entities.job import DEFAULT_EXECUTION_TIMEOUT, Job
 from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
 from app.domain.enums.worker_management import WorkerManagement
@@ -114,7 +117,8 @@ class PostgresWorkerRepository(WorkerRepository):
                 )
                 .fetchall()
             )
-            return [self._to_entity(conn, row) for row in rows]
+            workers = (self._to_entity(conn, row) for row in rows)
+            return [worker for worker in workers if worker is not None]
 
     def list_across_tenants(self) -> builtins.list[Worker]:
         with self._pool.connection() as conn:
@@ -123,7 +127,8 @@ class PostgresWorkerRepository(WorkerRepository):
                 .execute("SELECT * FROM workers")
                 .fetchall()
             )
-            return [self._to_entity(conn, row) for row in rows]
+            workers = (self._to_entity(conn, row) for row in rows)
+            return [worker for worker in workers if worker is not None]
 
     def delete(self, worker_id: WorkerId, tenant_id: TenantId) -> None:
         with self._pool.connection() as conn:
@@ -132,9 +137,17 @@ class PostgresWorkerRepository(WorkerRepository):
                 (str(worker_id), str(tenant_id.value)),
             )
 
-    def _to_entity(self, conn, row: dict) -> Worker:
+    def _to_entity(
+        self, conn: Connection[Any], row: dict[str, Any]
+    ) -> Worker | None:
         """
         Reconstruct a Worker, including its Node.
+
+        Returns None when the worker's node no longer exists.
+        workers.node_id is ON DELETE CASCADE, so a worker whose
+        node is gone has been deleted too, and the worker and node
+        reads are separate statements, so the delete can land
+        between them (ADR 0027). Such a worker no longer exists.
 
         NOTE: this issues a second query per worker to
         fetch the owning Node. Acceptable for now given
@@ -147,6 +160,9 @@ class PostgresWorkerRepository(WorkerRepository):
             "SELECT * FROM nodes WHERE id = %s",
             (str(row["node_id"]),),
         ).fetchone()
+
+        if node_row is None:
+            return None
 
         node = PostgresWorkerRepository._node_from_row(node_row)
 
@@ -170,7 +186,7 @@ class PostgresWorkerRepository(WorkerRepository):
         )
 
     @staticmethod
-    def _node_from_row(row: dict) -> Node:
+    def _node_from_row(row: dict[str, Any]) -> Node:
         from app.domain.value_objects.resource_requirements import (
             ResourceRequirements,
         )
@@ -194,9 +210,7 @@ class PostgresWorkerRepository(WorkerRepository):
         )
 
     @staticmethod
-    def _job_from_row(row: dict):
-
-        from app.domain.entities.job import DEFAULT_EXECUTION_TIMEOUT, Job
+    def _job_from_row(row: dict[str, Any]) -> Job:
         from app.domain.enums.job_status import JobStatus
         from app.domain.value_objects.resource_requirements import (
             ResourceRequirements,
