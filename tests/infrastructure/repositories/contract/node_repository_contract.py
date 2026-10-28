@@ -63,7 +63,7 @@ class NodeRepositoryContract:
             ResourceRequirements(
                 cpu_cores=3,
                 memory_mib=4096,
-                vram_mib=0,
+                vram_mib=1024,
             )
         )
 
@@ -72,7 +72,7 @@ class NodeRepositoryContract:
 
         assert fetched.available.cpu_cores == 5
         assert fetched.available.memory_mib == 12288
-        assert fetched.available.vram_mib == 8192
+        assert fetched.available.vram_mib == 7168
 
     def test_save_upserts_existing_node(self, repository):
         node = self._make_node()
