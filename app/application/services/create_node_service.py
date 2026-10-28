@@ -45,19 +45,11 @@ class CreateNodeService:
         Returns:
             The newly created node.
         """
-        node = (
-            Node(
-                id=NodeId.new(),
-                capacity=capacity,
-                tenant_id=tenant_id,
-                name=name,
-            )
-            if name
-            else Node(
-                id=NodeId.new(),
-                capacity=capacity,
-                tenant_id=tenant_id,
-            )
+        node = Node.register(
+            id=NodeId.new(),
+            capacity=capacity,
+            tenant_id=tenant_id,
+            name=name,
         )
 
         self._node_repository.save(node)

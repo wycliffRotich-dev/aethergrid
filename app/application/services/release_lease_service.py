@@ -111,14 +111,18 @@ class ReleaseLeaseService:
         if worker is None:
             raise WorkerNotFoundError(worker_id)
 
+        # __init__ refuses a recorder without a job repository, so
+        # both are set together or neither is.
+        recorder = self._record_job_events_service
+        job_repository = self._job_repository
         job = None
 
-        if self._record_job_events_service is not None:
+        if recorder is not None and job_repository is not None:
             # The lookup comes before the delete, so a missing job
             # leaves the lease in place. The lease was read in this
             # tenant, so its job is read in this tenant too. A job in
             # another tenant reads as missing.
-            job = self._job_repository.get_by_id(
+            job = job_repository.get_by_id(
                 lease.job_id,
                 tenant_id,
             )
@@ -131,8 +135,8 @@ class ReleaseLeaseService:
             tenant_id,
         )
 
-        if job is not None:
-            self._record_job_events_service.record_for_job(
+        if recorder is not None and job is not None:
+            recorder.record_for_job(
                 job,
                 event_type="LeaseReleased",
             )

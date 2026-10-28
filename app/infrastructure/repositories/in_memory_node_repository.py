@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import builtins
+
 from app.domain.entities.node import Node
 from app.domain.exceptions.node_tenant_conflict_error import (
     NodeTenantConflictError,
@@ -91,14 +93,14 @@ class InMemoryNodeRepository(NodeRepository):
 
     def list_across_tenants(
         self,
-    ) -> list[Node]:
+    ) -> builtins.list[Node]:
         return list(
             self._nodes.values(),
         )
 
     def list_available_across_tenants(
         self,
-    ) -> list[Node]:
+    ) -> builtins.list[Node]:
         return [
             node
             for node in self._nodes.values()

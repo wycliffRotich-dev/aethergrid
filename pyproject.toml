@@ -51,6 +51,10 @@ select = [
 python_version = "3.11"
 strict = true
 warn_unused_configs = true
+# app/ has no __init__.py, so without explicit_package_bases mypy finds
+# app/application twice, as application and as app.application.
+explicit_package_bases = true
+files = ["app"]
 
 [tool.setuptools.packages.find]
 include = ["app*"]

@@ -182,11 +182,13 @@ def test_a_worker_in_another_tenant_is_not_heartbeated() -> None:
         repository,
     )
 
-    with pytest.raises(WorkerNotFoundError):
+    with pytest.raises(WorkerNotFoundError) as raised:
         service.execute(
             worker.id,
             Tenant.create("other").id,
         )
+
+    assert raised.value.worker_id == worker.id
 
     stored_worker = repository.get_by_id(
         worker.id,
@@ -204,8 +206,12 @@ def test_a_missing_worker_is_not_found() -> None:
         ),
     )
 
-    with pytest.raises(WorkerNotFoundError):
+    missing_id = WorkerId.new()
+
+    with pytest.raises(WorkerNotFoundError) as raised:
         service.execute(
-            WorkerId.new(),
+            missing_id,
             Tenant.create("any").id,
         )
+
+    assert raised.value.worker_id == missing_id

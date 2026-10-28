@@ -32,5 +32,8 @@ def make_node(**overrides: Any) -> Node:
         "tenant_id": DEFAULT_TENANT_ID,
     }
     defaults.update(overrides)
+    # A test node starts fully free unless a test says otherwise,
+    # the same as Node.register.
+    defaults.setdefault("available", defaults["capacity"])
 
     return Node(**defaults)

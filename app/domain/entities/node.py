@@ -79,20 +79,37 @@ class Node:
         default_factory=utc_now,
     )
     draining: bool = False
-    available: ResourceRequirements | None = None
+    available: ResourceRequirements = field(kw_only=True)
+
+    @classmethod
+    def register(
+        cls,
+        *,
+        id: NodeId,
+        capacity: ResourceRequirements,
+        tenant_id: TenantId,
+        name: str | None = None,
+    ) -> Node:
+        """
+        Build a brand-new node that is fully free: its available
+        capacity equals its capacity. A missing or empty name gets
+        a generated one. A node rebuilt from storage does not come
+        through here. It passes its stored available capacity to
+        the constructor.
+        """
+        return cls(
+            id=id,
+            capacity=capacity,
+            tenant_id=tenant_id,
+            name=name or generate_node_name(),
+            available=capacity,
+        )
 
     def __post_init__(self) -> None:
         """
-        Default `available` to full capacity only when it
-        was not explicitly provided. This lets a brand-new
-        node start fully free (available == capacity) while
-        still allowing a repository to reconstruct a node
-        from storage with its true, partially-allocated
-        available capacity intact.
+        Reject an available capacity above capacity, whether the
+        node is new or rebuilt from storage.
         """
-        if self.available is None:
-            self.available = self.capacity
-
         if self.available.cpu_cores > self.capacity.cpu_cores:
             raise ValueError("available cpu_cores cannot exceed capacity")
 

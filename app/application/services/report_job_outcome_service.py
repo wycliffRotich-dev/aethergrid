@@ -71,7 +71,7 @@ class ReportJobOutcomeService:
         worker_id: WorkerId,
         job_id: JobId,
         tenant_id: TenantId,
-    ) -> Worker:
+    ) -> tuple[Worker, Job]:
         worker = self._worker_repository.get_by_id(
             worker_id,
             tenant_id,
@@ -84,16 +84,18 @@ class ReportJobOutcomeService:
         if worker is None or worker.node.tenant_id != tenant_id:
             raise WorkerNotFoundError(worker_id)
 
-        if (
-            worker.running_job is None
-            or worker.running_job.id != job_id
-        ):
+        # The job is read here, before the caller changes the
+        # worker's state, because complete(), fail() and
+        # cancel_job() all clear running_job.
+        job = worker.running_job
+
+        if job is None or job.id != job_id:
             raise WorkerJobMismatchError(
                 f"Worker '{worker_id}' does not currently "
                 f"hold job '{job_id}'."
             )
 
-        return worker
+        return worker, job
 
     def _finish(
         self,
@@ -191,13 +193,11 @@ class ReportJobOutcomeService:
                 lease_id no longer matches what is actually
                 current (ADR 0036). Nothing is persisted.
         """
-        worker = self._get_owning_worker(
+        worker, job = self._get_owning_worker(
             worker_id,
             job_id,
             tenant_id,
         )
-
-        job = worker.running_job
 
         worker.complete(
             exit_code=exit_code,
@@ -226,13 +226,11 @@ class ReportJobOutcomeService:
         Raises the same exceptions as complete(), for the
         same reasons.
         """
-        worker = self._get_owning_worker(
+        worker, job = self._get_owning_worker(
             worker_id,
             job_id,
             tenant_id,
         )
-
-        job = worker.running_job
 
         worker.fail(
             exit_code=exit_code,
@@ -262,13 +260,11 @@ class ReportJobOutcomeService:
         Raises the same exceptions as complete()/fail(), for
         the same reasons.
         """
-        worker = self._get_owning_worker(
+        worker, job = self._get_owning_worker(
             worker_id,
             job_id,
             tenant_id,
         )
-
-        job = worker.running_job
 
         worker.cancel_job(
             exit_code=exit_code,

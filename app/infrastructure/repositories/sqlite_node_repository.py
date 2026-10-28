@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import json
 import sqlite3
 from datetime import datetime
@@ -41,11 +42,9 @@ class SqliteNodeRepository(NodeRepository):
     """
     SQLite-backed implementation of the node repository.
 
-    Reconstructs Node entities from persisted rows. Note
-    that Node.available is computed by Node.__post_init__
-    (always reset to equal capacity on construction), so
-    it must be assigned directly after construction to
-    restore the true persisted remaining capacity.
+    Reconstructs Node entities from persisted rows. The stored
+    available capacity is passed to the constructor, so the
+    node's invariants are checked on every load.
     """
 
     def __init__(
@@ -197,7 +196,7 @@ class SqliteNodeRepository(NodeRepository):
 
     def list_across_tenants(
         self,
-    ) -> list[Node]:
+    ) -> builtins.list[Node]:
         rows = self._connection.execute(
             "SELECT * FROM nodes",
         ).fetchall()
@@ -206,7 +205,7 @@ class SqliteNodeRepository(NodeRepository):
 
     def list_available_across_tenants(
         self,
-    ) -> list[Node]:
+    ) -> builtins.list[Node]:
         return [
             node
             for node in self.list_across_tenants()
@@ -217,7 +216,7 @@ class SqliteNodeRepository(NodeRepository):
         self,
         row: sqlite3.Row,
     ) -> Node:
-        node = Node(
+        return Node(
             id=NodeId(value=UUID(row["id"])),
             capacity=ResourceRequirements(
                 cpu_cores=row["capacity_cpu_cores"],
@@ -231,15 +230,9 @@ class SqliteNodeRepository(NodeRepository):
                 row["last_seen_at"],
             ),
             draining=bool(row["draining"]),
+            available=ResourceRequirements(
+                cpu_cores=row["available_cpu_cores"],
+                memory_mib=row["available_memory_mib"],
+                vram_mib=row["available_vram_mib"],
+            ),
         )
-
-        # available is init=False and gets reset to
-        # capacity by __post_init__, so it must be
-        # restored to its true persisted value here.
-        node.available = ResourceRequirements(
-            cpu_cores=row["available_cpu_cores"],
-            memory_mib=row["available_memory_mib"],
-            vram_mib=row["available_vram_mib"],
-        )
-
-        return node

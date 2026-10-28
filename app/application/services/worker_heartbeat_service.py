@@ -43,9 +43,7 @@ class WorkerHeartbeatService:
         )
 
         if worker is None or not worker.belongs_to(tenant_id):
-            raise WorkerNotFoundError(
-                "Worker does not exist."
-            )
+            raise WorkerNotFoundError(worker_id)
 
         worker.heartbeat()
 

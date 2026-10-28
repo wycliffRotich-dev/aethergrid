@@ -67,17 +67,12 @@ class CreateApiKeyService:
         issuer: ApiKey | None = None,
         tenant_id: TenantId | None = None,
     ) -> IssuedApiKey:
-        if (issuer is None) == (tenant_id is None):
-            raise ValueError(
-                "exactly one of issuer and tenant_id is required"
-            )
-
-        if issuer is not None:
+        if issuer is not None and tenant_id is None:
             api_key, raw_key = issuer.issue_child(
                 label=label,
                 scopes=scopes,
             )
-        else:
+        elif issuer is None and tenant_id is not None:
             if self._tenant_repository.get_by_id(tenant_id) is None:
                 raise TenantNotFoundError(
                     f"tenant {tenant_id} does not exist"
@@ -86,6 +81,10 @@ class CreateApiKeyService:
                 label=label,
                 tenant_id=tenant_id,
                 scopes=scopes,
+            )
+        else:
+            raise ValueError(
+                "exactly one of issuer and tenant_id is required"
             )
 
         self._api_key_repository.save(

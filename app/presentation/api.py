@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from importlib.metadata import version as package_version
 from typing import Annotated
@@ -13,6 +14,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from psycopg_pool import ConnectionPool
 
+from app.application.reconciliation.reconciliation_loop import ReconciliationLoop
+from app.application.scheduler_leadership import SchedulerLeadership
+from app.application.services.cluster_tick_service import ClusterTickService
 from app.presentation.dependencies import (
     check_database_schema,
     get_cluster_tick_service,
@@ -117,8 +121,8 @@ _configure_logging()
 
 
 async def _run_cluster_tick(
-    cluster_tick_service,
-    reconciliation_loop,
+    cluster_tick_service: ClusterTickService,
+    reconciliation_loop: ReconciliationLoop,
 ) -> None:
     """
     Run one cluster tick: a scheduling/execution pass
@@ -151,9 +155,9 @@ async def _run_cluster_tick(
 
 
 async def _run_leader_tick(
-    leadership,
-    cluster_tick_service,
-    reconciliation_loop,
+    leadership: SchedulerLeadership,
+    cluster_tick_service: ClusterTickService,
+    reconciliation_loop: ReconciliationLoop,
 ) -> None:
     """
     Run one cluster tick, but only when this process leads the
@@ -237,7 +241,7 @@ async def _run_cluster_loop() -> None:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     pool = get_connection_pool()
     if pool is not None:
         await asyncio.to_thread(pool.wait, timeout=30.0)

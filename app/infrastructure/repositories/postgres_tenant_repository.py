@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from psycopg.errors import UniqueViolation
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
@@ -91,7 +93,7 @@ class PostgresTenantRepository(TenantRepository):
         return None if row is None else self._to_entity(row)
 
     @staticmethod
-    def _to_entity(row: dict) -> Tenant:
+    def _to_entity(row: dict[str, Any]) -> Tenant:
         return Tenant(
             id=TenantId(row["id"]),
             name=row["name"],

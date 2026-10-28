@@ -57,16 +57,16 @@ def _make_node(
 
 
 def test_save_and_get_by_id_round_trips_full_node(db_path) -> None:
-    node = _make_node()
+    node = _make_node(vram_mib=2)
 
-    # Partially allocate so available diverges from capacity --
-    # this is the field most at risk of silently reloading wrong,
-    # since Node.__post_init__ resets it to capacity on construction.
+    # Partially allocate every dimension so available diverges from
+    # capacity: this is the field most at risk of silently reloading
+    # wrong.
     node.allocate(
         ResourceRequirements(
             cpu_cores=1,
             memory_mib=1024,
-            vram_mib=0,
+            vram_mib=1,
         ),
     )
 
@@ -86,8 +86,10 @@ def test_save_and_get_by_id_round_trips_full_node(db_path) -> None:
     assert reloaded.id == node.id
     assert reloaded.capacity.cpu_cores == 4
     assert reloaded.capacity.memory_mib == 4096
+    assert reloaded.capacity.vram_mib == 2
     assert reloaded.available.cpu_cores == 3
     assert reloaded.available.memory_mib == 3072
+    assert reloaded.available.vram_mib == 1
     assert reloaded.labels == {"zone": "us-east"}
     assert reloaded.draining is False
 
