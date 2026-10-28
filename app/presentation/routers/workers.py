@@ -35,6 +35,7 @@ from app.application.services.worker_heartbeat_service import (
 )
 from app.domain.entities.api_key import ApiKey
 from app.domain.entities.lease import Lease
+from app.domain.entities.worker import Worker
 from app.domain.enums.worker_management import WorkerManagement
 from app.domain.exceptions.lease_not_found_error import (
     LeaseNotFoundError,
@@ -101,7 +102,7 @@ router = APIRouter(
 )
 
 
-def _build_worker_response(worker, lease: Lease | None) -> GetWorkerResponse:
+def _build_worker_response(worker: Worker, lease: Lease | None) -> GetWorkerResponse:
     """
     Build a GetWorkerResponse for a worker, including its
     running job if any.
