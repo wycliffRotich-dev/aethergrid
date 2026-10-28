@@ -16,6 +16,15 @@ logger = logging.getLogger(__name__)
 DEFAULT_TERMINATION_GRACE_PERIOD = timedelta(seconds=5)
 DEFAULT_POLL_INTERVAL = timedelta(seconds=0.2)
 
+# Faults of the command itself that stop it from starting (ADR 0081).
+# A fault of the host, such as a failed fork, is not in this list and
+# still raises.
+_LAUNCH_FAULTS = (
+    FileNotFoundError,
+    PermissionError,
+    NotADirectoryError,
+)
+
 
 def _signal_group(process: subprocess.Popen[str], sig: int) -> None:
     """
@@ -172,13 +181,18 @@ class JobExecutionService:
         deadline = start + timeout.total_seconds()
         poll_interval_seconds = self._poll_interval.total_seconds()
 
-        with subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            start_new_session=True,
-        ) as process, _kill_the_group_on_exit(process):
+        try:
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                start_new_session=True,
+            )
+        except _LAUNCH_FAULTS as error:
+            return self._could_not_start(command, error, start)
+
+        with process, _kill_the_group_on_exit(process):
             while True:
                 remaining = deadline - time.monotonic()
 
@@ -241,6 +255,37 @@ class JobExecutionService:
 
                 except subprocess.TimeoutExpired:
                     continue
+
+    def _could_not_start(
+        self,
+        command: list[str],
+        error: OSError,
+        start: float,
+    ) -> JobExecutionResult:
+        """
+        The result of a command that could not be started (ADR 0081).
+
+        A missing, unreadable or non-executable file is a fault of
+        the job's command, so the job fails like any other failed job
+        and the caller reports it under its lease. The reason goes in
+        stderr and in the log. Only the program name is logged, never
+        its arguments, which can hold secrets.
+        """
+        logger.warning(
+            "The command %r could not be started: %s",
+            command[0],
+            error.strerror,
+        )
+
+        return JobExecutionResult(
+            exit_code=None,
+            timed_out=False,
+            cancelled=False,
+            duration=timedelta(seconds=time.monotonic() - start),
+            stdout="",
+            stderr=f"The command could not be started: {error}\n",
+            lease_lost=False,
+        )
 
     def _terminate_early(
         self,
