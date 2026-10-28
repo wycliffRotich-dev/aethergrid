@@ -74,6 +74,8 @@ jobs:
           color: brightgreen
       - name: Lint with ruff
         run: ruff check .
+      - name: Type check with mypy
+        run: mypy
 
   frontend:
     runs-on: ubuntu-24.04
