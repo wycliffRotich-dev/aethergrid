@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 import time
 from datetime import timedelta
+from pathlib import Path
 
 from app.application.services.job_execution_service import (
     JobExecutionService,
@@ -1188,3 +1189,68 @@ def test_run_once_persists_the_released_node_resources_in_sqlite(
 
     assert reloaded is not None
     assert reloaded.available == reloaded.capacity
+
+
+def test_run_once_marks_job_failed_when_the_command_cannot_start(
+    tmp_path: Path,
+) -> None:
+    """
+    ADR 0081. A command that does not exist is a failed job. The
+    loop must record it, release the lease and free the node, and
+    must not let the exception skip all of that.
+    """
+    worker, job, node = _make_worker_and_job(
+        command=[str(tmp_path / "no-such-binary")],
+    )
+
+    loop, worker_repository, job_repository, node_repository, lease_repository = (
+        _build_loop(worker, job, node)
+    )
+
+    loop.execute(worker.id)
+
+    saved_worker = worker_repository.get_by_id(worker.id, worker.tenant_id)
+    saved_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
+    saved_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
+
+    assert saved_worker is not None
+    assert saved_worker.is_idle()
+
+    assert saved_job is not None
+    assert saved_job.is_failed()
+    assert saved_job.exit_code is None
+
+    assert lease_repository.get_by_worker_id(worker.id, worker.tenant_id) is None
+
+    assert saved_node is not None
+    assert saved_node.available == saved_node.capacity
+
+
+def test_run_once_records_job_failed_event_when_the_command_cannot_start(
+    tmp_path: Path,
+) -> None:
+    """
+    ADR 0081. A command that does not exist is a failed job, so the
+    run records a JobFailed event like any other failed run.
+    """
+    worker, job, node = _make_worker_and_job(
+        command=[str(tmp_path / "no-such-binary")],
+    )
+
+    events = InMemoryEventRepository()
+    record_job_events_service = RecordJobEventsService(
+        event_repository=events,
+    )
+
+    loop, worker_repository, job_repository, node_repository, lease_repository = (
+        _build_loop(worker, job, node, record_job_events_service)
+    )
+
+    loop.execute(worker.id)
+
+    recorded = events.list(DEFAULT_TENANT_ID)
+
+    assert len(recorded) == 1
+    assert recorded[0].event_type == "JobFailed"
+    assert recorded[0].aggregate_id == str(job.id)
+    assert recorded[0].aggregate_type == "Job"
