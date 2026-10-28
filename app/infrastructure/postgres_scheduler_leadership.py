@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from typing import Any
 
 import psycopg
 
@@ -53,7 +54,7 @@ class PostgresSchedulerLeadership(SchedulerLeadership):
     ) -> None:
         self._lock_key = lock_key
         self._database_url = database_url
-        self._connect_kwargs: dict[str, object] = {
+        self._connect_kwargs: dict[str, Any] = {
             "autocommit": True,
             "connect_timeout": connect_timeout_seconds,
             "keepalives": 1,
