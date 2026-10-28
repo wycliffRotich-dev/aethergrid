@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import timedelta
+from typing import Any
 
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
@@ -168,7 +169,7 @@ class PostgresJobRepository(JobRepository):
         return [self._to_entity(row) for row in rows]
 
     @staticmethod
-    def _to_entity(row: dict) -> Job:
+    def _to_entity(row: dict[str, Any]) -> Job:
         constraints = row["constraints"]
         if isinstance(constraints, str):
             constraints = json.loads(constraints)

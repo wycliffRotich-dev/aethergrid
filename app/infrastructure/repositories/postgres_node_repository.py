@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import builtins
 import json
+from typing import Any
 
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
@@ -133,7 +134,7 @@ class PostgresNodeRepository(NodeRepository):
         ]
 
     @staticmethod
-    def _to_entity(row: dict) -> Node:
+    def _to_entity(row: dict[str, Any]) -> Node:
         capacity = ResourceRequirements(
             cpu_cores=row["capacity_cpu_cores"],
             memory_mib=row["capacity_memory_mib"],

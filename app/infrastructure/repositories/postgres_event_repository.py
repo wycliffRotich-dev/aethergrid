@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import builtins
 import json
+from typing import Any
 
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
@@ -143,7 +144,7 @@ class PostgresEventRepository(EventRepository):
 
     @staticmethod
     def _to_entity(
-        row: dict,
+        row: dict[str, Any],
     ) -> Event:
         """
         Convert a database row into an Event.

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
@@ -149,7 +151,7 @@ class PostgresApiKeyRepository(ApiKeyRepository):
         return [self._to_entity(row) for row in rows]
 
     @staticmethod
-    def _to_entity(row: dict) -> ApiKey:
+    def _to_entity(row: dict[str, Any]) -> ApiKey:
         return ApiKey(
             id=ApiKeyId(row["id"]),
             key_hash=row["key_hash"],
