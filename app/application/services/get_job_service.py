@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from ...domain.entities.job import Job
-from ...domain.exceptions.job_not_found_error import JobNotFoundError
-from ...domain.repositories.job_repository import JobRepository
-from ...domain.value_objects.job_id import JobId
-from ...domain.value_objects.tenant_id import TenantId
+from app.domain.entities.job import Job
+from app.domain.exceptions.job_not_found_error import JobNotFoundError
+from app.domain.repositories.job_repository import JobRepository
+from app.domain.value_objects.job_id import JobId
+from app.domain.value_objects.tenant_id import TenantId
 
 
 class GetJobService:
