@@ -122,4 +122,11 @@ app/presentation/dependencies.py for the in-process execution loop.
 ## Follow-ups
 
 - An agent or API process that is killed outright runs no cleanup, so
-  its children outlive it. That is the next change.
+  its children outlive it. That is the next change. Done in ADR 0080,
+  see Progress.
+
+## Progress
+
+2026-10-29. The follow-up about a process killed outright is done in
+ADR 0080. The command now starts through a supervisor that ends its
+process group when its owner dies.

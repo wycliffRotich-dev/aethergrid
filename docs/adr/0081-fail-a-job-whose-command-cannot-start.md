@@ -113,4 +113,13 @@ written wrong by a caller holding the jobs:execute scope (ADR 0054).
   It has to give back this same failed result for a command that
   cannot start, and not an exit code of its own. A test for that goes
   with it.
+  Done in ADR 0080, see Progress.
 - A way for the reason to reach the server, so an operator can see it.
+
+## Progress
+
+2026-10-29. The follow-up about the supervisor is done in ADR 0080. A
+command that cannot start is reported on a status pipe and becomes
+this same failed result. The seven tests of this ADR pass through the
+supervisor unchanged, and a missing interpreter, which is a fault of
+the host, raises.
