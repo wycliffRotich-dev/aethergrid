@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import os
+import select
 import signal
 import subprocess
+import sys
 import threading
 import time
 from collections.abc import Iterator
@@ -24,6 +27,15 @@ _LAUNCH_FAULTS = (
     PermissionError,
     NotADirectoryError,
 )
+
+_SUPERVISOR_MODULE = "app.application.services.job_supervisor"
+
+
+class _Pending:
+    """The supervisor has not said yet whether the command started."""
+
+
+_PENDING = _Pending()
 
 
 def _signal_group(process: subprocess.Popen[str], sig: int) -> None:
@@ -69,6 +81,103 @@ def _kill_the_group_on_exit(
         yield
     finally:
         _signal_group(process, signal.SIGKILL)
+
+
+def _start_supervised(
+    command: list[str],
+) -> tuple[subprocess.Popen[str], int, int]:
+    """
+    Start the supervisor, and through it the command (ADR 0080).
+
+    Returns the supervisor's process and the two pipe ends this process
+    keeps: the write end of the watch pipe and the read end of the
+    status pipe. The ends the supervisor uses are closed here once it
+    has them. The ends kept here are not inheritable, so no other job
+    started by this process holds the write end, which would keep the
+    supervisor from ever reading end of file.
+
+    -P keeps the working directory off sys.path, so a job started in a
+    directory with an app package of its own cannot make the supervisor
+    import that one.
+    """
+    watch_read, watch_write = os.pipe()
+    status_read, status_write = os.pipe()
+
+    try:
+        process = subprocess.Popen(
+            [
+                sys.executable,
+                "-P",
+                "-m",
+                _SUPERVISOR_MODULE,
+                str(watch_read),
+                str(status_write),
+                "--",
+                *command,
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+            pass_fds=(watch_read, status_write),
+        )
+    except BaseException:
+        os.close(watch_write)
+        os.close(status_read)
+        raise
+    finally:
+        os.close(watch_read)
+        os.close(status_write)
+
+    return process, watch_write, status_read
+
+
+@contextlib.contextmanager
+def _close_on_exit(*descriptors: int) -> Iterator[None]:
+    try:
+        yield
+    finally:
+        for descriptor in descriptors:
+            with contextlib.suppress(OSError):
+                os.close(descriptor)
+
+
+def _read_launch_failure(
+    status_read: int, deadline: float
+) -> OSError | _Pending | None:
+    """
+    Wait for the supervisor to say whether the command started.
+
+    The supervisor closes the status pipe once the command is running.
+    If it could not start the command, it writes why and then closes
+    it. Nothing by the deadline is _PENDING, and the wait loop asks
+    again after it has checked the stop events and the timeout, so a
+    supervisor that stays silent is stopped like any other job.
+    """
+    remaining = max(0.0, deadline - time.monotonic())
+    ready, _, _ = select.select([status_read], [], [], remaining)
+
+    if not ready:
+        return _PENDING
+
+    data = b""
+    while chunk := os.read(status_read, 4096):
+        data += chunk
+
+    if not data:
+        return None
+
+    try:
+        report = json.loads(data)
+        return OSError(report["errno"], report["strerror"], report["filename"])
+    except (ValueError, KeyError, TypeError):
+        # A supervisor killed in the middle of its report leaves a part of
+        # it. That is not a launch failure to act on, so the wait loop
+        # reports how the supervisor ended.
+        logger.warning(
+            "unreadable launch report from the job supervisor: %r", data[:200]
+        )
+        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,18 +290,18 @@ class JobExecutionService:
         deadline = start + timeout.total_seconds()
         poll_interval_seconds = self._poll_interval.total_seconds()
 
-        try:
-            process = subprocess.Popen(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                start_new_session=True,
-            )
-        except _LAUNCH_FAULTS as error:
-            return self._could_not_start(command, error, start)
+        # A fault of the host while starting the supervisor, such as a
+        # missing interpreter, is not a fault of the job, so it raises
+        # (ADR 0081, Decision 3). A command that cannot start is
+        # reported by the supervisor and handled in the loop below.
+        process, watch_write, status_read = _start_supervised(command)
+        launch_pending = True
 
-        with process, _kill_the_group_on_exit(process):
+        with (
+            process,
+            _close_on_exit(watch_write, status_read),
+            _kill_the_group_on_exit(process),
+        ):
             while True:
                 remaining = deadline - time.monotonic()
 
@@ -233,6 +342,28 @@ class JobExecutionService:
                     poll_interval_seconds,
                     remaining,
                 )
+
+                if launch_pending:
+                    # Waiting for the supervisor to report is bounded by
+                    # one poll interval, so a cancel, a lost lease or a
+                    # timeout is acted on while it is still silent.
+                    failure = _read_launch_failure(
+                        status_read,
+                        time.monotonic() + wait_for,
+                    )
+
+                    if isinstance(failure, _Pending):
+                        continue
+
+                    launch_pending = False
+
+                    if failure is not None:
+                        if not isinstance(failure, _LAUNCH_FAULTS):
+                            raise failure
+
+                        return self._could_not_start(command, failure, start)
+
+                    continue
 
                 try:
                     stdout, stderr = process.communicate(
