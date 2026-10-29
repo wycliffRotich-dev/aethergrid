@@ -149,3 +149,16 @@ achieves the same fast-fail behavior with no duplicate resource.
   for the same limited connection slots (`max_size=10`) concurrently,
   though `/health`'s own explicit timeout was observed to be honored
   correctly under this exact concurrent load in two separate trials.
+
+2026-10-29. /health no longer depends on ConnectionPool or calls
+pool.connection itself, which amends the Decision and the Consequences
+above. It calls check_database_reachable with
+HEALTH_CHECK_TIMEOUT_SECONDS, in app/presentation/dependencies.py, the
+composition root. That function opens the connection on the caller's
+timeout, runs the same trivial query and does nothing without a pool.
+The 2 second timeout, the skip under sqlite and memory, the 200 and
+503 bodies and the bypass of NodeRepository do not change. The narrow
+exception that the Consequences describe now lives in the composition
+root, and ADR 0082 fails the suite if another presentation module
+imports psycopg_pool. GET /health had no test in tests/, so four were
+written first against the unmodified code.

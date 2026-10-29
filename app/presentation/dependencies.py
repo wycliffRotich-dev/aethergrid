@@ -549,6 +549,23 @@ def get_connection_pool() -> ConnectionPool | None:
     return _connection_pool
 
 
+def check_database_reachable(timeout_seconds: float) -> None:
+    """
+    Prove that the database behind the shared pool is reachable, and
+    raise what the pool or the query raises when it is not.
+
+    Waits at most timeout_seconds for a connection. The caller's
+    timeout is used and not the pool's general purpose default of 30
+    seconds, so a health check can fail fast (ADR 0046). Does nothing
+    when there is no pool, which is sqlite and memory: there is no
+    network round trip to hang on there.
+    """
+    if _connection_pool is None:
+        return
+    with _connection_pool.connection(timeout=timeout_seconds) as conn:
+        conn.execute("SELECT 1")
+
+
 def get_scheduler_leadership() -> SchedulerLeadership:
     """
     Return the SchedulerLeadership that decides whether this
