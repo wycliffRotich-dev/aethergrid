@@ -130,3 +130,8 @@ app/presentation/dependencies.py for the in-process execution loop.
 2026-10-29. The follow-up about a process killed outright is done in
 ADR 0080. The command now starts through a supervisor that ends its
 process group when its owner dies.
+
+2026-10-29. A command that exits and leaves a child holding its
+stdout or stderr was not covered. The wait did not end, so the SIGKILL
+of Decision 1 did not run until the timeout, and a job that succeeded
+was reported as timed out. ADR 0083 closes it.

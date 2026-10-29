@@ -385,7 +385,50 @@ class JobExecutionService:
                     )
 
                 except subprocess.TimeoutExpired:
-                    continue
+                    if process.poll() is None:
+                        continue
+
+                    # The supervisor has ended, so the pipes are not what
+                    # tells us the job is over: a child of the command may
+                    # still hold them. End the group and collect what is
+                    # left (ADR 0083).
+                    return self._collect_after_supervisor_ended(process, start)
+
+    def _collect_after_supervisor_ended(
+        self,
+        process: subprocess.Popen[str],
+        start: float,
+    ) -> JobExecutionResult:
+        """
+        The result of a job whose supervisor ended while the pipes were
+        still open (ADR 0083).
+
+        The supervisor ends with the command, or alone if it was killed.
+        Either way something in the group can still hold stdout and
+        stderr, and communicate() would wait for it until the timeout.
+        The group is killed, the output is collected, and the result is
+        the supervisor's own: the command's exit code, or the signal that
+        ended the supervisor. It is not a timeout, because the job did
+        not overrun.
+        """
+        _signal_group(process, signal.SIGKILL)
+
+        try:
+            stdout, stderr = process.communicate(
+                timeout=self._termination_grace_period.total_seconds(),
+            )
+        except subprocess.TimeoutExpired:
+            stdout, stderr = "", ""
+
+        return JobExecutionResult(
+            exit_code=process.returncode,
+            timed_out=False,
+            cancelled=False,
+            duration=timedelta(seconds=time.monotonic() - start),
+            stdout=stdout,
+            stderr=stderr,
+            lease_lost=False,
+        )
 
     def _could_not_start(
         self,

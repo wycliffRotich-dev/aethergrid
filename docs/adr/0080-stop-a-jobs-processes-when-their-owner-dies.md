@@ -206,3 +206,13 @@ position.
   that is reparented to uvicorn is reaped.
 - Measure the time between the death of the owner and the end of the
   group.
+
+## Progress
+
+2026-10-29. A supervisor killed on its own no longer leaves the job
+to run to its timeout. ADR 0083 ends the job when the supervisor
+ends, with the supervisor's own exit code and no timeout flag. The
+Consequences and Not Claimed entries above describe the behavior this
+ADR was accepted with. test_job_supervisor_killed_alone.py, which
+pinned it, was replaced by test_job_execution_supervisor_ends.py.
+Whether the PR_SET_PDEATHSIG follow-up is still needed is open.
