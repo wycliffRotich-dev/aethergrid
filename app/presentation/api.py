@@ -7,17 +7,16 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from importlib.metadata import version as package_version
-from typing import Annotated
 
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
-from psycopg_pool import ConnectionPool
 
 from app.application.reconciliation.reconciliation_loop import ReconciliationLoop
 from app.application.scheduler_leadership import SchedulerLeadership
 from app.application.services.cluster_tick_service import ClusterTickService
 from app.presentation.dependencies import (
+    check_database_reachable,
     check_database_schema,
     get_cluster_tick_service,
     get_connection_pool,
@@ -354,12 +353,7 @@ HEALTH_CHECK_TIMEOUT_SECONDS = 2.0
 
 
 @app.get("/health")
-def health(
-    pool: Annotated[
-        ConnectionPool | None,
-        Depends(get_connection_pool),
-    ],
-) -> Response:
+def health() -> Response:
     """
     Real health check: proves the configured storage backend
     is actually reachable, not just that the process is up.
@@ -371,29 +365,24 @@ def health(
     own short timeout instead of inheriting one meant for
     patient, latency-tolerant callers.
 
-    Under sqlite or memory, pool is None -- there is no
-    network round-trip to hang on, so those backends are
-    trivially healthy as long as the process is running at
-    all.
+    Under sqlite or memory there is no network round-trip to
+    hang on, so those backends are trivially healthy as long
+    as the process is running at all.
 
     Returns 503, not a raised exception, on failure -- a
     healthcheck consumer (Docker, an external monitor) expects
     a status code to poll, not a stack trace.
     """
-    if pool is not None:
-        try:
-            with pool.connection(
-                timeout=HEALTH_CHECK_TIMEOUT_SECONDS,
-            ) as conn:
-                conn.execute("SELECT 1")
-        except Exception as exc:
-            return JSONResponse(
-                status_code=503,
-                content={
-                    "status": "unhealthy",
-                    "error": type(exc).__name__,
-                },
-            )
+    try:
+        check_database_reachable(HEALTH_CHECK_TIMEOUT_SECONDS)
+    except Exception as exc:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "error": type(exc).__name__,
+            },
+        )
 
     return JSONResponse(
         status_code=200,
