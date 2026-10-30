@@ -2,9 +2,11 @@
 
 ## Status
 
-Proposed. This ADR becomes Accepted when the enforcement test
-described under Decision, point 10, merges. Until then no document
-may describe AetherGrid as multi-tenant.
+Accepted. The enforcement test described under Decision, point 10, is on
+main. The last entry under Follow-ups records what it covers and what it
+does not. No release carries migration 0005 yet, so a database on the
+released v0.6.0 can still hold a worker or lease with no tenant (ADR
+0075).
 
 ## Context
 
@@ -179,3 +181,44 @@ server, and a caller-supplied tenant is spoofable by definition.
 2026-10-20. The registry did not see routes the framework adds itself. A
 guard test now fails if the app holds any plain `Route`, so the registry and
 the app cannot disagree about which routes exist (ADR 0077).
+
+2026-10-30. Accepted. The enforcement test of point 10 is on main, and
+the full suite passed (1078) on the branch that added events to the
+repository rule test.
+
+The registry is tests/presentation/test_route_tenancy_registry.py. It
+requires every route to be classified as scoped or exempt, and every
+scoped route to name its two-tenant test. Ten files under
+tests/presentation hold the two-tenant tests for the key, event, job,
+node and worker routes. The repository rule of point 4 is
+tests/domain/test_repository_tenant_rule.py. It holds the API key,
+event, job, lease, node and worker repositories to the rule. The tenant
+repository is not in it.
+
+The migration tests start from the pre-tenancy schema in
+tests/infrastructure/schema_pre_tenancy.sql.
+tests/infrastructure/test_upgrade_from_the_pre_tenancy_schema.py creates
+the pre-tenancy schema, inserts one row into each of the six tables and
+runs every migration through the real runner. It asserts that each row
+lands in the default tenant, that tenant_id is NOT NULL on all six
+tables, that the links between the rows survive and that a second run
+applies nothing. The per-table tests cover what one database cannot. An
+event takes the tenant of its own job, a worker the tenant of its node
+and a lease the tenant of its worker, and the workers and leases test
+builds two tenants to show that each row takes its owner's. This is
+stricter than point 10 in two places. An event with no job stops the
+migration and changes nothing, and migration 0005 stops with a count
+when a worker or lease crosses tenants or has no tenant.
+
+Not claimed. No release carries migration 0005. v0.6.0 is the newest tag
+and carries 0004, so a database on that release can still hold a worker
+or a lease with no tenant, and no database upgraded from v0.6.0 has been
+run through 0005. ADR 0075 stays Proposed for that reason. The SQLite
+backends keep workers and leases in memory, so the composite keys of
+point 7 exist on Postgres only. The boundary is application and database
+enforcement inside one shared database, and it does not defend against
+compromised database credentials. The product deck's partly shipped
+slide is still to be updated, as the list above says.
+
+AetherGrid on main is multi-tenant as this ADR defines it. The paragraph
+above says what that does not cover.

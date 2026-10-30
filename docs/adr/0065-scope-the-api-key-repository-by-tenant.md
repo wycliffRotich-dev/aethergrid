@@ -98,3 +98,10 @@ behaviour does not belong on a production class.
 - Scope the remaining resources, ADR 0064 points 2 and 5 to 8.
 - Add a `--tenant` option to the bootstrap script, which still places
   keys in the default tenant.
+
+2026-10-30. ADR 0064 was accepted today. Where this ADR says that ADR
+0064 stays Proposed, or that AetherGrid is not multi-tenant, that was
+true when it was written and is superseded. AetherGrid on main is now
+multi-tenant as ADR 0064 defines it. The last entry of ADR 0064 records
+what that covers and what it does not, including that no release carries
+migration 0005 yet.
