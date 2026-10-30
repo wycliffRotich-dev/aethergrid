@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 import pytest
 
 from app.domain.entities.api_key import ApiKey
+from app.domain.entities.event import Event
 from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
 from app.domain.entities.node import Node
@@ -14,6 +15,7 @@ from app.domain.entities.worker import Worker
 from app.domain.repositories.api_key_repository import (
     ApiKeyRepository,
 )
+from app.domain.repositories.event_repository import EventRepository
 from app.domain.repositories.job_repository import JobRepository
 from app.domain.repositories.lease_repository import LeaseRepository
 from app.domain.repositories.node_repository import NodeRepository
@@ -24,6 +26,7 @@ from app.domain.value_objects.tenant_id import TenantId
 # joins this list in the same change that scopes it.
 SCOPED_REPOSITORIES = [
     ApiKeyRepository,
+    EventRepository,
     JobRepository,
     LeaseRepository,
     NodeRepository,
@@ -32,7 +35,7 @@ SCOPED_REPOSITORIES = [
 
 # Entity types that carry their own tenant_id, so a method
 # that takes one is scoped by that entity.
-TENANT_CARRYING_ENTITIES = (ApiKey, Job, Lease, Node, Worker)
+TENANT_CARRYING_ENTITIES = (ApiKey, Event, Job, Lease, Node, Worker)
 
 ACROSS_TENANTS_SUFFIX = "_across_tenants"
 
