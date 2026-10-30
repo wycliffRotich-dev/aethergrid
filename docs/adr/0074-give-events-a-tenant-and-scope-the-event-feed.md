@@ -328,3 +328,10 @@ with the file named in the message, and restoring the file made it
 pass again. The pins were taken from the files as committed on main.
 A change that edits a file and its pin together still passes, so a
 reviewer has to refuse it. The full suite passed (1002).
+
+2026-10-30. ADR 0064 was accepted today. Where this ADR says that ADR
+0064 stays Proposed, or that AetherGrid is not multi-tenant, that was
+true when it was written and is superseded. AetherGrid on main is now
+multi-tenant as ADR 0064 defines it. The last entry of ADR 0064 records
+what that covers and what it does not, including that no release carries
+migration 0005 yet.

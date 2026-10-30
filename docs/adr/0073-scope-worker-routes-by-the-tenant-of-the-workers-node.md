@@ -306,3 +306,9 @@ service, so no system actor needed a tenant-free path. The dashboard's
 heartbeats only the ids it receives, so scoping heartbeat does not
 take its workers offline. Every route under `/workers` is scoped and
 has a two-tenant test, and the status is Accepted.
+
+2026-10-30. ADR 0064 was accepted today. Where this ADR says that
+AetherGrid is not multi-tenant, that was true when it was written and is
+superseded. AetherGrid on main is now multi-tenant as ADR 0064 defines
+it. The last entry of ADR 0064 records what that covers and what it does
+not, including that no release carries migration 0005 yet.

@@ -121,3 +121,10 @@ procedural code.
 - Apply `schema.sql` to an existing database as part of deployment.
   Today it reaches a database only through the compose init mount,
   which runs when the data volume is first created.
+
+2026-10-30. ADR 0064 was accepted today. Where this ADR says that ADR
+0064 stays Proposed, or that AetherGrid is not multi-tenant, that was
+true when it was written and is superseded. AetherGrid on main is now
+multi-tenant as ADR 0064 defines it. The last entry of ADR 0064 records
+what that covers and what it does not, including that no release carries
+migration 0005 yet.
