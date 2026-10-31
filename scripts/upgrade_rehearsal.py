@@ -24,6 +24,9 @@ import tarfile
 import tempfile
 import threading
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 import uuid
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -358,6 +361,75 @@ def seed_cluster(post: Post) -> SeedIds:
     return SeedIds(node=node, worker=worker, job=job)
 
 
+Compose = Callable[[Sequence[str]], subprocess.CompletedProcess[str]]
+
+
+def issue_key(compose: Compose) -> str:
+    """
+    Issue a key inside the old release's own service, so the database
+    URL, the backend and the secret are the ones the release runs with.
+    A failure reports the exit code and stderr and never stdout, because
+    stdout is where the key is printed.
+    """
+    result = compose(
+        [
+            "run",
+            "--rm",
+            "--no-deps",
+            "-T",
+            "neuromesh",
+            "python",
+            "-c",
+            ISSUE_KEY_SNIPPET,
+        ]
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"issuing the key failed with exit code {result.returncode}: "
+            f"{result.stderr.strip()[-500:]}"
+        )
+    return parse_issued_key(result.stdout)
+
+
+def http_post(base_url: str, key: str) -> Post:
+    """
+    A post function for seed_cluster that sends the key as a bearer
+    token. The key is only ever sent to http://127.0.0.1:<port>, checked
+    on the parsed URL so a userinfo trick cannot point it elsewhere.
+    """
+    parts = urllib.parse.urlsplit(base_url)
+    if not (
+        parts.scheme == "http"
+        and parts.hostname == "127.0.0.1"
+        and parts.port is not None
+        and parts.netloc == f"127.0.0.1:{parts.port}"
+        and parts.path in ("", "/")
+        and not parts.query
+        and not parts.fragment
+    ):
+        raise ValueError("the key is only sent to the loopback address")
+    base = f"http://{parts.netloc}"
+
+    def post(path: str, payload: Mapping[str, object]) -> tuple[int, str]:
+        request = urllib.request.Request(
+            base + path,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                return int(response.status), response.read().decode("utf-8")
+        except urllib.error.HTTPError as error:
+            with error:
+                return error.code, error.read().decode("utf-8")
+
+    return post
+
+
 def _resolve(ref: str) -> str:
     result = _run(
         ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
@@ -627,14 +699,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     with rehearsal_environment(args.old, args.new) as environment:
-        config = environment.compose("old", "config").stdout
-        for line in config.splitlines():
-            if any(
-                key in line
-                for key in ("name:", "image:", "published:", "file:", "context:")
-            ):
-                print(line)
-        print(f"environment ready: project {environment.project}")
+        environment.compose(
+            "old", "up", "-d", "--build", "--wait", "--wait-timeout", "180"
+        )
+        api_port = parse_published_port(
+            environment.compose("old", "port", "neuromesh", "8000").stdout
+        )
+        key = issue_key(
+            lambda arguments: environment.compose(
+                "old", *arguments, check=False
+            )
+        )
+        ids = seed_cluster(http_post(f"http://127.0.0.1:{api_port}", key))
+        print(f"seeded node {ids.node}, worker {ids.worker}, job {ids.job}")
     return 0
 
 
