@@ -23,8 +23,9 @@ import sys
 import tarfile
 import tempfile
 import threading
+import time
 import uuid
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import FrameType
@@ -210,6 +211,32 @@ def parse_published_port(output: str) -> int:
     if match is None:
         raise ValueError(f"no published port in {output!r}")
     return int(match.group(1))
+
+
+def wait_until(
+    check: Callable[[], bool],
+    *,
+    timeout: float,
+    interval: float,
+    describe: str,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
+    """
+    Call check until it returns true. The check runs once more when the
+    deadline is reached, so an answer that arrives during the last sleep
+    is not missed, and the last sleep is cut to what is left. An error
+    raised by the check is not retried: a command that cannot run is not
+    the same as a condition that is not true yet.
+    """
+    deadline = clock() + timeout
+    while not check():
+        remaining = deadline - clock()
+        if remaining <= 0:
+            raise TimeoutError(
+                f"timed out after {timeout}s waiting for {describe}"
+            )
+        sleep(min(interval, remaining))
 
 
 def _resolve(ref: str) -> str:
