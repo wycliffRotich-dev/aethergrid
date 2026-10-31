@@ -43,6 +43,11 @@ def _read(
 
     rows: dict[str, dict[str, str]] = {}
     for row in reader:
+        if None in row or None in row.values():
+            raise ValueError(
+                f"{table}: line {reader.line_num} has the wrong number "
+                "of fields"
+            )
         row_id = row[columns[0]]
         if row_id in rows:
             raise ValueError(f"{table}: id {row_id} appears twice")
