@@ -135,6 +135,33 @@ def compare_snapshots(before: Snapshot, after: Snapshot) -> list[str]:
     return differences
 
 
+# The tables the seed creates rows in, which migration 0005 reads or
+# changes. A rehearsal that compares empty tables passes by construction.
+REQUIRED_SEED_TABLES = (
+    "public.nodes",
+    "public.workers",
+    "public.jobs",
+    "public.leases",
+)
+
+
+def empty_seed_tables(snapshot: Mapping[str, str]) -> list[str]:
+    """
+    One line for each required table that is missing from the snapshot
+    or holds no rows, in the order of REQUIRED_SEED_TABLES. An empty
+    list means the seed put data where the upgrade will look for it.
+    """
+    problems: list[str] = []
+    for table in REQUIRED_SEED_TABLES:
+        if table not in snapshot:
+            problems.append(f"{table}: not in the snapshot")
+            continue
+        _, rows = _read(table, snapshot[table])
+        if not rows:
+            problems.append(f"{table}: has no rows")
+    return problems
+
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # What a cleanup step can raise when its command cannot run at all: a
