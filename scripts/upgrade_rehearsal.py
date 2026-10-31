@@ -32,11 +32,45 @@ from typing import Any
 
 Snapshot = dict[str, str]
 
+# How an export writes a null, so that it stays apart from an empty string.
+NULL_MARKER = "\\N"
+
+# The tables of every schema but the system ones, quoted by Postgres
+# itself. schema_migrations is left out because it changes on every
+# upgrade by design.
+TABLES_SQL = """
+SELECT format('%I.%I', schemaname, tablename)
+FROM pg_tables
+WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+  AND tablename <> 'schema_migrations'
+ORDER BY 1
+"""
+
+
+def copy_sql(table: str) -> str:
+    """
+    The statement that exports one table as CSV with a header, a null
+    written as the null marker. The table must be a name taken from
+    TABLES_SQL, which has already quoted its identifiers.
+    """
+    return (
+        f"COPY {table} TO STDOUT "
+        f"WITH (FORMAT csv, HEADER, NULL '{NULL_MARKER}')"
+    )
+
 
 def _read(
     table: str,
     text: str,
 ) -> tuple[list[str], dict[str, dict[str, str]]]:
+    # The csv module drops quotes, so a text value equal to the marker
+    # (which COPY writes quoted) could not be told from a null.
+    if f'"{NULL_MARKER}"' in text:
+        raise ValueError(
+            f"{table}: the export holds a quoted {NULL_MARKER}, which "
+            "cannot be told from the null marker"
+        )
+
     reader = csv.DictReader(io.StringIO(text))
     columns = list(reader.fieldnames or [])
     if not columns:
