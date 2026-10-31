@@ -101,6 +101,10 @@ def compare_snapshots(before: Snapshot, after: Snapshot) -> list[str]:
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+# What a cleanup step can raise when its command cannot run at all: a
+# missing binary, a timeout. A command that runs and fails is not one.
+_STEP_FAILURES = (OSError, subprocess.SubprocessError)
+
 
 def render_override(
     *,
@@ -233,7 +237,11 @@ def _leftovers(project: str, tag_prefix: str, root: Path) -> list[str]:
     found: list[str] = []
 
     for name, command in queries:
-        result = _run(command, check=False)
+        try:
+            result = _run(command, check=False)
+        except _STEP_FAILURES:
+            found.append(f"{name} (could not be listed)")
+            continue
         if result.returncode != 0:
             found.append(f"{name} (could not be listed)")
         elif result.stdout.split():
@@ -313,6 +321,31 @@ class Environment:
         )
 
 
+def _teardown(environment: Environment) -> None:
+    """
+    Stop what the run started and remove the images it built. Each
+    step is tried on its own, so one that cannot run (no docker, a
+    daemon that is down) does not stop the others. What this misses
+    is found by _leftovers, which the caller checks afterwards.
+    """
+    with contextlib.suppress(*_STEP_FAILURES):
+        environment.compose(
+            "old", "down", "-v", "--remove-orphans", check=False
+        )
+    for side in ("old", "new"):
+        with contextlib.suppress(*_STEP_FAILURES):
+            _run(
+                [
+                    "docker",
+                    "image",
+                    "rm",
+                    "-f",
+                    f"neuromesh-app:{environment.tag_prefix}-{side}",
+                ],
+                check=False,
+            )
+
+
 @contextlib.contextmanager
 def rehearsal_environment(
     old_ref: str,
@@ -386,20 +419,7 @@ def _environment(
         failed = False
     finally:
         if environment is not None:
-            environment.compose(
-                "old", "down", "-v", "--remove-orphans", check=False
-            )
-            for side in ("old", "new"):
-                _run(
-                    [
-                        "docker",
-                        "image",
-                        "rm",
-                        "-f",
-                        f"neuromesh-app:{environment.tag_prefix}-{side}",
-                    ],
-                    check=False,
-                )
+            _teardown(environment)
         shutil.rmtree(root, ignore_errors=True)
         if environment is not None:
             remaining = _leftovers(
