@@ -8,8 +8,6 @@ from scripts.upgrade_rehearsal import render_override
 def test_a_secret_path_with_yaml_syntax_in_it_is_quoted() -> None:
     override = render_override(
         secret_file=Path("/tmp/a run: #1/postgres_password"),
-        db_port=41001,
-        api_port=41002,
         tag_prefix="rehearsal-abc",
     )
 

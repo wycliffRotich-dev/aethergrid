@@ -16,15 +16,13 @@ from scripts.upgrade_rehearsal import REPO_ROOT, render_override
 
 OVERRIDE = render_override(
     secret_file=Path("/tmp/run/postgres_password"),
-    db_port=41001,
-    api_port=41002,
     tag_prefix="rehearsal-abc",
 )
 
 
-def test_the_override_publishes_the_given_ports_on_loopback_only() -> None:
-    assert '"127.0.0.1:41001:5432"' in OVERRIDE
-    assert '"127.0.0.1:41002:8000"' in OVERRIDE
+def test_the_override_lets_docker_pick_loopback_only_host_ports() -> None:
+    assert '"127.0.0.1::5432"' in OVERRIDE
+    assert '"127.0.0.1::8000"' in OVERRIDE
     assert OVERRIDE.count("ports: !override") == 2
     assert "5433" not in OVERRIDE
     assert ":8000:8000" not in OVERRIDE

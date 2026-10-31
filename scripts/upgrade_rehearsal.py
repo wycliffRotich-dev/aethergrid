@@ -14,10 +14,10 @@ import csv
 import io
 import json
 import os
+import re
 import secrets
 import shutil
 import signal
-import socket
 import subprocess
 import sys
 import tarfile
@@ -110,8 +110,6 @@ _STEP_FAILURES = (OSError, subprocess.SubprocessError)
 def render_override(
     *,
     secret_file: Path,
-    db_port: int,
-    api_port: int,
     tag_prefix: str,
 ) -> str:
     """
@@ -125,11 +123,11 @@ def render_override(
         "services:\n"
         "  postgres:\n"
         "    ports: !override\n"
-        f'      - "127.0.0.1:{db_port}:5432"\n'
+        '      - "127.0.0.1::5432"\n'
         "  neuromesh:\n"
         f"    image: {image}\n"
         "    ports: !override\n"
-        f'      - "127.0.0.1:{api_port}:8000"\n'
+        '      - "127.0.0.1::8000"\n'
         "  migrate:\n"
         f"    image: {image}\n"
         "secrets:\n"
@@ -166,13 +164,18 @@ def _run(
     return result
 
 
-def _free_ports() -> tuple[int, int]:
-    ports: list[int] = []
-    while len(ports) < 2 or ports[0] == ports[1]:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.bind(("127.0.0.1", 0))
-            ports = [*ports[-1:], int(sock.getsockname()[1])]
-    return ports[0], ports[1]
+_PUBLISHED_PORT = re.compile(r":(\d+)$")
+
+
+def parse_published_port(output: str) -> int:
+    """
+    The host port in the output of docker compose port, which prints an
+    address and a port, such as 127.0.0.1:49153 or [::]:49153.
+    """
+    match = _PUBLISHED_PORT.search(output.strip())
+    if match is None:
+        raise ValueError(f"no published port in {output!r}")
+    return int(match.group(1))
 
 
 def _resolve(ref: str) -> str:
@@ -293,8 +296,6 @@ class Environment:
     project: str
     override: Path
     tag_prefix: str
-    db_port: int
-    api_port: int
 
     def compose(
         self,
@@ -395,14 +396,11 @@ def _environment(
         secret.write_text(secrets.token_hex(24))
         secret.chmod(0o644)
 
-        db_port, api_port = _free_ports()
         tag_prefix = f"rehearsal-{run_id}"
         override = root / "override.yml"
         override.write_text(
             render_override(
                 secret_file=secret,
-                db_port=db_port,
-                api_port=api_port,
                 tag_prefix=tag_prefix,
             )
         )
@@ -413,8 +411,6 @@ def _environment(
             project=f"upgrade-rehearsal-{run_id}",
             override=override,
             tag_prefix=tag_prefix,
-            db_port=db_port,
-            api_port=api_port,
         )
         yield environment
         failed = False
@@ -458,11 +454,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 for key in ("name:", "image:", "published:", "file:", "context:")
             ):
                 print(line)
-        print(
-            f"environment ready: project {environment.project}, "
-            f"database port {environment.db_port}, "
-            f"api port {environment.api_port}"
-        )
+        print(f"environment ready: project {environment.project}")
     return 0
 
 
