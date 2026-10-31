@@ -37,7 +37,7 @@ def test_the_override_names_one_image_per_side_through_the_environment() -> None
 
 
 def test_the_override_points_the_secret_at_the_file_of_this_run() -> None:
-    assert "file: /tmp/run/postgres_password" in OVERRIDE
+    assert 'file: "/tmp/run/postgres_password"' in OVERRIDE
 
 
 # A child process that enters the environment with every command faked.

@@ -12,6 +12,7 @@ import argparse
 import contextlib
 import csv
 import io
+import json
 import os
 import secrets
 import shutil
@@ -133,7 +134,7 @@ def render_override(
         f"    image: {image}\n"
         "secrets:\n"
         "  postgres_password:\n"
-        f"    file: {secret_file}\n"
+        f"    file: {json.dumps(str(secret_file))}\n"
     )
 
 
