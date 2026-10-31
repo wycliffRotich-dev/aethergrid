@@ -303,6 +303,61 @@ def parse_issued_key(output: str) -> str:
     return key
 
 
+NODE_PAYLOAD: Mapping[str, object] = {
+    "cpu_cores": 4,
+    "memory_mib": 8192,
+    "vram_mib": 0,
+    "name": "upgrade-rehearsal-node",
+}
+
+# A job with no command, so it needs no scope and nothing runs it.
+JOB_PAYLOAD: Mapping[str, object] = {
+    "cpu_cores": 1,
+    "memory_mib": 512,
+    "vram_mib": 0,
+}
+
+# An agent manages the worker, so the in-process tick never executes
+# the job. The scheduler still assigns it and takes the lease, and
+# nothing renews that lease, which is why the stack is frozen at once.
+WORKER_MANAGED_BY = "AGENT"
+
+Post = Callable[[str, Mapping[str, object]], tuple[int, str]]
+
+
+@dataclass(frozen=True)
+class SeedIds:
+    node: str
+    worker: str
+    job: str
+
+
+def _created_id(path: str, response: tuple[int, str]) -> str:
+    status, body = response
+    if status != 201:
+        raise ValueError(f"POST {path} returned {status}: {body[:200]}")
+    created = json.loads(body)
+    identifier = created.get("id") if isinstance(created, dict) else None
+    if not isinstance(identifier, str) or not identifier:
+        raise ValueError(f"POST {path} returned no id")
+    return identifier
+
+
+def seed_cluster(post: Post) -> SeedIds:
+    """
+    One node, one worker on it and one job, through the API of the old
+    release, so each row is written by that release's own code. post
+    takes a path and a payload and returns a status and a body.
+    """
+    node = _created_id("/nodes", post("/nodes", NODE_PAYLOAD))
+    worker = _created_id(
+        "/workers",
+        post("/workers", {"node_id": node, "managed_by": WORKER_MANAGED_BY}),
+    )
+    job = _created_id("/jobs", post("/jobs", JOB_PAYLOAD))
+    return SeedIds(node=node, worker=worker, job=job)
+
+
 def _resolve(ref: str) -> str:
     result = _run(
         ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
