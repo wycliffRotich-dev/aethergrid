@@ -23,8 +23,12 @@ import sys
 import tarfile
 import tempfile
 import threading
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 import uuid
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import FrameType
@@ -134,6 +138,33 @@ def compare_snapshots(before: Snapshot, after: Snapshot) -> list[str]:
     return differences
 
 
+# The tables the seed creates rows in, which migration 0005 reads or
+# changes. A rehearsal that compares empty tables passes by construction.
+REQUIRED_SEED_TABLES = (
+    "public.nodes",
+    "public.workers",
+    "public.jobs",
+    "public.leases",
+)
+
+
+def empty_seed_tables(snapshot: Mapping[str, str]) -> list[str]:
+    """
+    One line for each required table that is missing from the snapshot
+    or holds no rows, in the order of REQUIRED_SEED_TABLES. An empty
+    list means the seed put data where the upgrade will look for it.
+    """
+    problems: list[str] = []
+    for table in REQUIRED_SEED_TABLES:
+        if table not in snapshot:
+            problems.append(f"{table}: not in the snapshot")
+            continue
+        _, rows = _read(table, snapshot[table])
+        if not rows:
+            problems.append(f"{table}: has no rows")
+    return problems
+
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # What a cleanup step can raise when its command cannot run at all: a
@@ -210,6 +241,193 @@ def parse_published_port(output: str) -> int:
     if match is None:
         raise ValueError(f"no published port in {output!r}")
     return int(match.group(1))
+
+
+def wait_until(
+    check: Callable[[], bool],
+    *,
+    timeout: float,
+    interval: float,
+    describe: str,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
+    """
+    Call check until it returns true. The check runs once more when the
+    deadline is reached, so an answer that arrives during the last sleep
+    is not missed, and the last sleep is cut to what is left. An error
+    raised by the check is not retried: a command that cannot run is not
+    the same as a condition that is not true yet.
+    """
+    deadline = clock() + timeout
+    while not check():
+        remaining = deadline - clock()
+        if remaining <= 0:
+            raise TimeoutError(
+                f"timed out after {timeout}s waiting for {describe}"
+            )
+        sleep(min(interval, remaining))
+
+
+KEY_MARKER = "REHEARSAL_API_KEY="
+
+# Run inside the old release's image, which ships the app package and
+# not scripts/issue_api_key.py. The key is printed last, on one marked
+# line, so log lines before it cannot be mistaken for it.
+ISSUE_KEY_SNIPPET = f"""\
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
+from app.presentation.dependencies import get_create_api_key_service
+
+issued = get_create_api_key_service().execute(
+    label="upgrade-rehearsal",
+    tenant_id=DEFAULT_TENANT_ID,
+)
+print("{KEY_MARKER}" + issued.plaintext_key)
+"""
+
+
+def parse_issued_key(output: str) -> str:
+    """
+    The key printed by ISSUE_KEY_SNIPPET. The errors never repeat the
+    output, because it may hold a key.
+    """
+    keys = [
+        line.removeprefix(KEY_MARKER)
+        for line in output.splitlines()
+        if line.startswith(KEY_MARKER)
+    ]
+    if not keys:
+        raise ValueError("no issued key in the output")
+    if len(keys) > 1:
+        raise ValueError("more than one issued key in the output")
+    key = keys[0]
+    if key != key.strip() or len(key.split()) != 1:
+        raise ValueError("the issued key is empty or contains whitespace")
+    return key
+
+
+NODE_PAYLOAD: Mapping[str, object] = {
+    "cpu_cores": 4,
+    "memory_mib": 8192,
+    "vram_mib": 0,
+    "name": "upgrade-rehearsal-node",
+}
+
+# A job with no command, so it needs no scope and nothing runs it.
+JOB_PAYLOAD: Mapping[str, object] = {
+    "cpu_cores": 1,
+    "memory_mib": 512,
+    "vram_mib": 0,
+}
+
+# An agent manages the worker, so the in-process tick never executes
+# the job. The scheduler still assigns it and takes the lease, and
+# nothing renews that lease, which is why the stack is frozen at once.
+WORKER_MANAGED_BY = "AGENT"
+
+Post = Callable[[str, Mapping[str, object]], tuple[int, str]]
+
+
+@dataclass(frozen=True)
+class SeedIds:
+    node: str
+    worker: str
+    job: str
+
+
+def _created_id(path: str, response: tuple[int, str]) -> str:
+    status, body = response
+    if status != 201:
+        raise ValueError(f"POST {path} returned {status}: {body[:200]}")
+    created = json.loads(body)
+    identifier = created.get("id") if isinstance(created, dict) else None
+    if not isinstance(identifier, str) or not identifier:
+        raise ValueError(f"POST {path} returned no id")
+    return identifier
+
+
+def seed_cluster(post: Post) -> SeedIds:
+    """
+    One node, one worker on it and one job, through the API of the old
+    release, so each row is written by that release's own code. post
+    takes a path and a payload and returns a status and a body.
+    """
+    node = _created_id("/nodes", post("/nodes", NODE_PAYLOAD))
+    worker = _created_id(
+        "/workers",
+        post("/workers", {"node_id": node, "managed_by": WORKER_MANAGED_BY}),
+    )
+    job = _created_id("/jobs", post("/jobs", JOB_PAYLOAD))
+    return SeedIds(node=node, worker=worker, job=job)
+
+
+Compose = Callable[[Sequence[str]], subprocess.CompletedProcess[str]]
+
+
+def issue_key(compose: Compose) -> str:
+    """
+    Issue a key inside the old release's own service, so the database
+    URL, the backend and the secret are the ones the release runs with.
+    A failure reports the exit code and stderr and never stdout, because
+    stdout is where the key is printed.
+    """
+    result = compose(
+        [
+            "run",
+            "--rm",
+            "--no-deps",
+            "-T",
+            "neuromesh",
+            "python",
+            "-c",
+            ISSUE_KEY_SNIPPET,
+        ]
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"issuing the key failed with exit code {result.returncode}: "
+            f"{result.stderr.strip()[-500:]}"
+        )
+    return parse_issued_key(result.stdout)
+
+
+def http_post(base_url: str, key: str) -> Post:
+    """
+    A post function for seed_cluster that sends the key as a bearer
+    token. The key is only ever sent to http://127.0.0.1:<port>, checked
+    on the parsed URL so a userinfo trick cannot point it elsewhere.
+    """
+    parts = urllib.parse.urlsplit(base_url)
+    if not (
+        parts.scheme == "http"
+        and parts.hostname == "127.0.0.1"
+        and parts.port is not None
+        and parts.netloc == f"127.0.0.1:{parts.port}"
+        and parts.path in ("", "/")
+        and not parts.query
+        and not parts.fragment
+    ):
+        raise ValueError("the key is only sent to the loopback address")
+    base = f"http://{parts.netloc}"
+
+    def post(path: str, payload: Mapping[str, object]) -> tuple[int, str]:
+        request = urllib.request.Request(
+            base + path,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                return int(response.status), response.read().decode("utf-8")
+        except urllib.error.HTTPError as error:
+            with error:
+                return error.code, error.read().decode("utf-8")
+
+    return post
 
 
 def _resolve(ref: str) -> str:
@@ -481,14 +699,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     with rehearsal_environment(args.old, args.new) as environment:
-        config = environment.compose("old", "config").stdout
-        for line in config.splitlines():
-            if any(
-                key in line
-                for key in ("name:", "image:", "published:", "file:", "context:")
-            ):
-                print(line)
-        print(f"environment ready: project {environment.project}")
+        environment.compose(
+            "old", "up", "-d", "--build", "--wait", "--wait-timeout", "180"
+        )
+        api_port = parse_published_port(
+            environment.compose("old", "port", "neuromesh", "8000").stdout
+        )
+        key = issue_key(
+            lambda arguments: environment.compose(
+                "old", *arguments, check=False
+            )
+        )
+        ids = seed_cluster(http_post(f"http://127.0.0.1:{api_port}", key))
+        print(f"seeded node {ids.node}, worker {ids.worker}, job {ids.job}")
     return 0
 
 
