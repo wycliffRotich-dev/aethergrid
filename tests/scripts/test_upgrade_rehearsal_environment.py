@@ -57,7 +57,7 @@ tarfile.open(fileobj=buffer, mode="w").close()
 EMPTY_TAR = buffer.getvalue()
 
 
-def fake_run(command, *, cwd=None, env=None, check=True):
+def fake_run(command, *, cwd=None, env=None, check=True, timeout=None):
     with log.open("a") as handle:
         handle.write(" ".join(command) + "\\n")
     stdout = "a" * 40 + "\\n" if list(command[:2]) == ["git", "rev-parse"] else ""

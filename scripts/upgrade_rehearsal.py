@@ -201,21 +201,43 @@ def render_override(
     )
 
 
+# Seconds a command may run before it is stopped. A command that is
+# stuck, such as a download on a bad connection, must not hold the
+# run for as long as the caller is willing to wait. The build limit is
+# a ceiling, not a measurement: no good build has been timed yet.
+DEFAULT_COMMAND_TIMEOUT = 120.0
+BUILD_TIMEOUT = 600.0
+
+
+def stage(message: str) -> None:
+    """Say on stderr which step starts, so silence never means unknown."""
+    clock = time.strftime("%H:%M:%S")
+    sys.stderr.write(f"{clock} ==> {message}\n")
+
+
 def _run(
     command: Sequence[str],
     *,
     cwd: Path | None = None,
     env: Mapping[str, str] | None = None,
     check: bool = True,
+    timeout: float = DEFAULT_COMMAND_TIMEOUT,
 ) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(
-        list(command),
-        cwd=cwd,
-        env=None if env is None else dict(env),
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            list(command),
+            cwd=cwd,
+            env=None if env is None else dict(env),
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        sys.stderr.write(
+            f"$ {' '.join(command)}\ntimed out after {timeout:g}s\n"
+        )
+        raise
     if check and result.returncode != 0:
         sys.stderr.write(
             f"$ {' '.join(command)}\n{result.stdout}{result.stderr}"
@@ -554,6 +576,7 @@ class Environment:
         side: str,
         *args: str,
         check: bool = True,
+        timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str]:
         directory = self.old_dir if side == "old" else self.new_dir
         return _run(
@@ -572,6 +595,9 @@ class Environment:
             ],
             env={**os.environ, "REHEARSAL_SIDE": side},
             check=check,
+            timeout=(
+                DEFAULT_COMMAND_TIMEOUT if timeout is None else timeout
+            ),
         )
 
 
@@ -698,18 +724,32 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    stage("preparing the two releases")
     with rehearsal_environment(args.old, args.new) as environment:
+        stage(
+            "building and starting the old release "
+            f"(limit {BUILD_TIMEOUT:g}s)"
+        )
         environment.compose(
-            "old", "up", "-d", "--build", "--wait", "--wait-timeout", "180"
+            "old",
+            "up",
+            "-d",
+            "--build",
+            "--wait",
+            "--wait-timeout",
+            "180",
+            timeout=BUILD_TIMEOUT,
         )
         api_port = parse_published_port(
             environment.compose("old", "port", "neuromesh", "8000").stdout
         )
+        stage("issuing the API key")
         key = issue_key(
             lambda arguments: environment.compose(
                 "old", *arguments, check=False
             )
         )
+        stage("seeding the cluster through the API")
         ids = seed_cluster(http_post(f"http://127.0.0.1:{api_port}", key))
         print(f"seeded node {ids.node}, worker {ids.worker}, job {ids.job}")
     return 0
