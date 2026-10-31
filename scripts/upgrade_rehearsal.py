@@ -266,6 +266,43 @@ def wait_until(
         sleep(min(interval, remaining))
 
 
+KEY_MARKER = "REHEARSAL_API_KEY="
+
+# Run inside the old release's image, which ships the app package and
+# not scripts/issue_api_key.py. The key is printed last, on one marked
+# line, so log lines before it cannot be mistaken for it.
+ISSUE_KEY_SNIPPET = f"""\
+from app.domain.entities.tenant import DEFAULT_TENANT_ID
+from app.presentation.dependencies import get_create_api_key_service
+
+issued = get_create_api_key_service().execute(
+    label="upgrade-rehearsal",
+    tenant_id=DEFAULT_TENANT_ID,
+)
+print("{KEY_MARKER}" + issued.plaintext_key)
+"""
+
+
+def parse_issued_key(output: str) -> str:
+    """
+    The key printed by ISSUE_KEY_SNIPPET. The errors never repeat the
+    output, because it may hold a key.
+    """
+    keys = [
+        line.removeprefix(KEY_MARKER)
+        for line in output.splitlines()
+        if line.startswith(KEY_MARKER)
+    ]
+    if not keys:
+        raise ValueError("no issued key in the output")
+    if len(keys) > 1:
+        raise ValueError("more than one issued key in the output")
+    key = keys[0]
+    if key != key.strip() or len(key.split()) != 1:
+        raise ValueError("the issued key is empty or contains whitespace")
+    return key
+
+
 def _resolve(ref: str) -> str:
     result = _run(
         ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
