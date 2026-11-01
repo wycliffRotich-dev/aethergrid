@@ -452,6 +452,48 @@ def http_post(base_url: str, key: str) -> Post:
     return post
 
 
+# Assignment saves the lease first and the worker after it. The seed is
+# at rest only when both exist, so stopping the API cannot cut it
+# between the two writes.
+ASSIGNMENT_SQL = (
+    "SELECT (SELECT count(*) FROM leases), "
+    "(SELECT count(*) FROM workers WHERE running_job_id IS NOT NULL)"
+)
+
+
+def parse_assignment_state(output: str) -> bool:
+    """
+    True when a lease exists and a worker holds a job, from the output
+    of ASSIGNMENT_SQL run through psql with unaligned, tuples only
+    output. Anything that is not two counts is an error, not false, so
+    a broken query ends the wait at once and does not poll to the limit.
+    """
+    parts = output.strip().split("|")
+    if len(parts) != 2 or not all(part.isdecimal() for part in parts):
+        raise ValueError("unexpected assignment state from the database")
+    leases, busy_workers = (int(part) for part in parts)
+    return leases > 0 and busy_workers > 0
+
+
+def require_clean_exit(state: str) -> None:
+    """
+    Check the state of the stopped API, from docker inspect with the
+    format status then exit code. Only a clean exit means the last tick
+    finished its writes. 137 means the stop timeout expired and the
+    container was killed, possibly in the middle of one.
+    """
+    parts = state.split()
+    if len(parts) != 2 or not parts[1].isdecimal():
+        raise ValueError("unexpected container state from docker")
+    status, code = parts[0], int(parts[1])
+    if status != "exited":
+        raise RuntimeError(f"the API did not stop: its status is {status}")
+    if code == 137:
+        raise RuntimeError("the API was killed (exit code 137), not stopped")
+    if code != 0:
+        raise RuntimeError(f"the API exited with code {code}")
+
+
 def _resolve(ref: str) -> str:
     result = _run(
         ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
