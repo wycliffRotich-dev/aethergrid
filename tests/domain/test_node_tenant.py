@@ -26,7 +26,7 @@ def test_make_node_defaults_to_the_default_tenant() -> None:
 
 def test_a_node_cannot_be_built_without_a_tenant() -> None:
     with pytest.raises(TypeError, match="tenant_id"):
-        Node(
+        Node(  # type: ignore[call-arg]
             id=NodeId.new(),
             capacity=ResourceRequirements(
                 cpu_cores=8,

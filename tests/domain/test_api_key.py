@@ -9,24 +9,24 @@ from app.domain.exceptions.api_key_already_revoked_error import (
 from tests.support.api_keys import make_api_key
 
 
-def test_issue_returns_distinct_plaintext_and_hash():
+def test_issue_returns_distinct_plaintext_and_hash() -> None:
     api_key, raw_key = make_api_key(label="ci-runner")
 
     assert api_key.key_hash != raw_key
     assert api_key.key_hash == ApiKey.hash_secret(raw_key)
 
 
-def test_issue_rejects_empty_label():
+def test_issue_rejects_empty_label() -> None:
     with pytest.raises(ValueError):
         make_api_key(label="")
 
 
-def test_issue_rejects_whitespace_only_label():
+def test_issue_rejects_whitespace_only_label() -> None:
     with pytest.raises(ValueError):
         make_api_key(label="   ")
 
 
-def test_two_issued_keys_never_collide():
+def test_two_issued_keys_never_collide() -> None:
     first, first_raw = make_api_key(label="a")
     second, second_raw = make_api_key(label="b")
 
@@ -34,14 +34,14 @@ def test_two_issued_keys_never_collide():
     assert first.key_hash != second.key_hash
 
 
-def test_newly_issued_key_is_active():
+def test_newly_issued_key_is_active() -> None:
     api_key, _ = make_api_key(label="ci-runner")
 
     assert api_key.is_active() is True
     assert api_key.revoked_at is None
 
 
-def test_revoke_sets_revoked_at_and_deactivates():
+def test_revoke_sets_revoked_at_and_deactivates() -> None:
     api_key, _ = make_api_key(label="ci-runner")
 
     api_key.revoke()
@@ -50,7 +50,7 @@ def test_revoke_sets_revoked_at_and_deactivates():
     assert api_key.revoked_at is not None
 
 
-def test_revoking_twice_raises():
+def test_revoking_twice_raises() -> None:
     api_key, _ = make_api_key(label="ci-runner")
     api_key.revoke()
 
@@ -58,7 +58,7 @@ def test_revoking_twice_raises():
         api_key.revoke()
 
 
-def test_mark_used_sets_timestamp():
+def test_mark_used_sets_timestamp() -> None:
     api_key, _ = make_api_key(label="ci-runner")
 
     assert api_key.last_used_at is None

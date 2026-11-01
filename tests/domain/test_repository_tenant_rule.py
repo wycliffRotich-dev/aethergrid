@@ -93,12 +93,12 @@ def tenant_rule_violations(repository: type) -> list[str]:
 
 
 @pytest.mark.parametrize("repository", SCOPED_REPOSITORIES)
-def test_scoped_repositories_follow_the_tenant_rule(repository):
+def test_scoped_repositories_follow_the_tenant_rule(repository: type) -> None:
     assert _abstract_methods(repository), "no abstract methods found"
     assert tenant_rule_violations(repository) == []
 
 
-def test_the_check_flags_an_unscoped_method():
+def test_the_check_flags_an_unscoped_method() -> None:
     class UnscopedRepository(ABC):
         @abstractmethod
         def list_all(self) -> list[ApiKey]:
@@ -109,7 +109,7 @@ def test_the_check_flags_an_unscoped_method():
     ]
 
 
-def test_the_check_flags_a_mislabeled_method():
+def test_the_check_flags_a_mislabeled_method() -> None:
     class MislabeledRepository(ABC):
         @abstractmethod
         def get_by_hash_across_tenants(
@@ -139,7 +139,7 @@ def _repository_ports() -> set[type]:
     return ports
 
 
-def test_every_repository_port_is_scoped_or_exempt():
+def test_every_repository_port_is_scoped_or_exempt() -> None:
     classified = set(SCOPED_REPOSITORIES) | set(EXEMPT_REPOSITORIES)
 
     unclassified = sorted(port.__name__ for port in _repository_ports() - classified)
@@ -150,7 +150,7 @@ def test_every_repository_port_is_scoped_or_exempt():
     )
 
 
-def test_no_classification_names_a_repository_that_is_gone():
+def test_no_classification_names_a_repository_that_is_gone() -> None:
     classified = set(SCOPED_REPOSITORIES) | set(EXEMPT_REPOSITORIES)
 
     stale = sorted(port.__name__ for port in classified - _repository_ports())
@@ -158,9 +158,9 @@ def test_no_classification_names_a_repository_that_is_gone():
     assert stale == []
 
 
-def test_the_exempt_tenant_repository_has_only_the_methods_it_was_written_for():
+def test_the_exempt_tenant_repository_has_only_the_methods_it_was_written_for() -> None:
     assert set(_abstract_methods(TenantRepository)) == TENANT_REPOSITORY_METHODS
 
 
-def test_every_exemption_gives_a_reason():
+def test_every_exemption_gives_a_reason() -> None:
     assert all(reason.strip() for reason in EXEMPT_REPOSITORIES.values())

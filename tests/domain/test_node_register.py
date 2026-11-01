@@ -14,7 +14,7 @@ _CAPACITY = ResourceRequirements(cpu_cores=8, memory_mib=16384, vram_mib=2)
 
 def test_a_node_cannot_be_built_without_available() -> None:
     with pytest.raises(TypeError, match="available"):
-        Node(
+        Node(  # type: ignore[call-arg]
             id=NodeId.new(),
             capacity=_CAPACITY,
             tenant_id=DEFAULT_TENANT_ID,
@@ -33,7 +33,7 @@ def test_register_starts_a_node_fully_free() -> None:
 
 
 @pytest.mark.parametrize("name", [None, ""])
-def test_register_generates_a_name_when_none_is_given(name) -> None:
+def test_register_generates_a_name_when_none_is_given(name: str | None) -> None:
     node = Node.register(
         id=NodeId.new(),
         capacity=_CAPACITY,
