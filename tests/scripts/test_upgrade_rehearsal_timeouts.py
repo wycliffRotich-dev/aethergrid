@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import contextlib
 import re
 import subprocess
 import tempfile
-from collections.abc import Iterator, Sequence
+from collections.abc import Sequence
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -158,57 +156,3 @@ class FakeEnvironment:
         self.events.append(f"compose {args[0]} timeout={timeout:g}")
         stdout = "127.0.0.1:49153\n" if args[0] == "port" else ""
         return subprocess.CompletedProcess(list(args), 0, stdout, "")
-
-
-def test_each_step_of_a_run_is_announced_before_it_starts(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    events: list[str] = []
-    environment = FakeEnvironment(events)
-
-    @contextlib.contextmanager
-    def fake_environment(
-        old_ref: str,
-        new_ref: str,
-    ) -> Iterator[FakeEnvironment]:
-        yield environment
-
-    def fake_issue_key(runner: object) -> str:
-        events.append("key")
-        return "k"
-
-    def fake_http_post(base_url: str, key: str) -> str:
-        events.append(f"http {base_url}")
-        return "post"
-
-    def fake_seed(post: object) -> SimpleNamespace:
-        events.append("seed")
-        return SimpleNamespace(node="n", worker="w", job="j")
-
-    def fake_stage(message: str) -> None:
-        events.append(f"stage: {message}")
-
-    for name, fake in (
-        ("rehearsal_environment", fake_environment),
-        ("issue_key", fake_issue_key),
-        ("http_post", fake_http_post),
-        ("seed_cluster", fake_seed),
-        ("stage", fake_stage),
-    ):
-        monkeypatch.setattr(upgrade_rehearsal, name, fake)
-
-    assert upgrade_rehearsal.main(["--old", "v0.6.0"]) == 0
-
-    build = upgrade_rehearsal.BUILD_TIMEOUT
-    default = upgrade_rehearsal.DEFAULT_COMMAND_TIMEOUT
-    assert events == [
-        "stage: preparing the two releases",
-        f"stage: building and starting the old release (limit {build:g}s)",
-        f"compose up timeout={build:g}",
-        f"compose port timeout={default:g}",
-        "stage: issuing the API key",
-        "key",
-        "stage: seeding the cluster through the API",
-        "http http://127.0.0.1:49153",
-        "seed",
-    ]

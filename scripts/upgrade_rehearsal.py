@@ -571,6 +571,19 @@ def snapshot(compose: Compose) -> Snapshot:
     }
 
 
+def docker_inspect(container_id: str) -> str:
+    """The status and exit code of a container, as require_clean_exit reads them."""
+    return _run(
+        [
+            "docker",
+            "inspect",
+            "--format",
+            "{{.State.Status}} {{.State.ExitCode}}",
+            container_id,
+        ]
+    ).stdout
+
+
 def _resolve(ref: str) -> str:
     result = _run(
         ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
@@ -871,6 +884,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         stage("seeding the cluster through the API")
         ids = seed_cluster(http_post(f"http://127.0.0.1:{api_port}", key))
         print(f"seeded node {ids.node}, worker {ids.worker}, job {ids.job}")
+
+        def old_compose(
+            arguments: Sequence[str],
+        ) -> subprocess.CompletedProcess[str]:
+            return environment.compose("old", *arguments, check=False)
+
+        stage("waiting for the seeded cluster to settle")
+        at_rest(old_compose)
+        stage("stopping the old API")
+        stop_old_api(old_compose, docker_inspect)
+        stage("exporting the tables before the upgrade")
+        before = snapshot(old_compose)
+        stage("checking that the seed left data in every required table")
+        problems = empty_seed_tables(before)
+        if problems:
+            raise RuntimeError("the seed is not usable: " + "; ".join(problems))
+        print(f"exported {len(before)} tables before the upgrade")
     return 0
 
 
