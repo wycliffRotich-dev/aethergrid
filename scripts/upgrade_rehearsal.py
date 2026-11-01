@@ -494,6 +494,83 @@ def require_clean_exit(state: str) -> None:
         raise RuntimeError(f"the API exited with code {code}")
 
 
+# The lease lasts 30 seconds, so the wait stays under it: past that,
+# what the seed holds may already be expiring.
+AT_REST_TIMEOUT = 25.0
+AT_REST_INTERVAL = 0.25
+
+_PSQL = ["exec", "-T", "postgres", "psql", "-U", "neuromesh", "-d", "neuromesh"]
+
+
+def _psql(compose: Compose, sql: str, what: str) -> str:
+    """
+    Run one statement in the database container and return its output.
+    A failure reports the exit code and the end of stderr, never stdout,
+    because stdout is table data.
+    """
+    result = compose([*_PSQL, "-At", "-c", sql])
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"{what} failed with exit code {result.returncode}: "
+            f"{result.stderr.strip()[-500:]}"
+        )
+    return result.stdout
+
+
+def at_rest(
+    compose: Compose,
+    *,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
+    """
+    Wait until the seeded cluster holds a lease and a busy worker. A
+    statement that cannot run ends the wait at once: it is an error, not
+    a condition that is not true yet.
+    """
+    wait_until(
+        lambda: parse_assignment_state(
+            _psql(compose, ASSIGNMENT_SQL, "the assignment query")
+        ),
+        timeout=AT_REST_TIMEOUT,
+        interval=AT_REST_INTERVAL,
+        describe="the seeded cluster to hold a lease and a busy worker",
+        clock=clock,
+        sleep=sleep,
+    )
+
+
+def stop_old_api(
+    compose: Compose,
+    inspect: Callable[[str], str],
+) -> None:
+    """
+    Stop the API of the old release and check how it ended. inspect
+    takes a container id and returns its status and exit code.
+    """
+    stopped = compose(["stop", "neuromesh"])
+    if stopped.returncode != 0:
+        raise RuntimeError(
+            f"stopping the API failed with exit code {stopped.returncode}: "
+            f"{stopped.stderr.strip()[-500:]}"
+        )
+    listed = compose(["ps", "-aq", "neuromesh"])
+    ids = listed.stdout.split()
+    if listed.returncode != 0 or len(ids) != 1:
+        raise RuntimeError("expected exactly one API container to inspect")
+    require_clean_exit(inspect(ids[0]))
+
+
+def snapshot(compose: Compose) -> Snapshot:
+    """Every table of the database exported as CSV, by table name."""
+    tables = _psql(compose, TABLES_SQL, "listing the tables").split("\n")
+    return {
+        table: _psql(compose, copy_sql(table), f"exporting {table}")
+        for table in tables
+        if table
+    }
+
+
 def _resolve(ref: str) -> str:
     result = _run(
         ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
