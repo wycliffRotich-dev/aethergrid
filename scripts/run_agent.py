@@ -55,7 +55,7 @@ import time
 from collections.abc import Callable
 from datetime import timedelta
 from functools import partial
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import httpx
 
@@ -251,7 +251,7 @@ def register_worker(client: httpx.Client, node_id: str) -> str:
         json={"node_id": node_id, "managed_by": "AGENT"},
     )
     response.raise_for_status()
-    worker_id = response.json()["id"]
+    worker_id: str = response.json()["id"]
     print(f"Registered worker {worker_id} against node {node_id}")
     return worker_id
 
@@ -298,12 +298,13 @@ def heartbeat_node(client: httpx.Client, node_id: str) -> None:
     response.raise_for_status()
 
 
-def get_worker(client: httpx.Client, worker_id: str) -> dict:
+def get_worker(client: httpx.Client, worker_id: str) -> dict[str, Any]:
     response = client.get(
         f"/workers/{worker_id}",
     )
     response.raise_for_status()
-    return response.json()
+    worker: dict[str, Any] = response.json()
+    return worker
 
 
 def start_job(client: httpx.Client, worker_id: str, job_id: str) -> None:
@@ -411,7 +412,7 @@ def report_outcome(
 def run_job(
     client: httpx.Client,
     worker_id: str,
-    job: dict,
+    job: dict[str, Any],
 ) -> None:
     job_id = job["id"]
     command = job["command"]
