@@ -452,6 +452,138 @@ def http_post(base_url: str, key: str) -> Post:
     return post
 
 
+# Assignment saves the lease first and the worker after it. The seed is
+# at rest only when both exist, so stopping the API cannot cut it
+# between the two writes.
+ASSIGNMENT_SQL = (
+    "SELECT (SELECT count(*) FROM leases), "
+    "(SELECT count(*) FROM workers WHERE running_job_id IS NOT NULL)"
+)
+
+
+def parse_assignment_state(output: str) -> bool:
+    """
+    True when a lease exists and a worker holds a job, from the output
+    of ASSIGNMENT_SQL run through psql with unaligned, tuples only
+    output. Anything that is not two counts is an error, not false, so
+    a broken query ends the wait at once and does not poll to the limit.
+    """
+    parts = output.strip().split("|")
+    if len(parts) != 2 or not all(part.isdecimal() for part in parts):
+        raise ValueError("unexpected assignment state from the database")
+    leases, busy_workers = (int(part) for part in parts)
+    return leases > 0 and busy_workers > 0
+
+
+def require_clean_exit(state: str) -> None:
+    """
+    Check the state of the stopped API, from docker inspect with the
+    format status then exit code. Only a clean exit means the last tick
+    finished its writes. 137 means the stop timeout expired and the
+    container was killed, possibly in the middle of one.
+    """
+    parts = state.split()
+    if len(parts) != 2 or not parts[1].isdecimal():
+        raise ValueError("unexpected container state from docker")
+    status, code = parts[0], int(parts[1])
+    if status != "exited":
+        raise RuntimeError(f"the API did not stop: its status is {status}")
+    if code == 137:
+        raise RuntimeError("the API was killed (exit code 137), not stopped")
+    if code != 0:
+        raise RuntimeError(f"the API exited with code {code}")
+
+
+# The lease lasts 30 seconds, so the wait stays under it: past that,
+# what the seed holds may already be expiring.
+AT_REST_TIMEOUT = 25.0
+AT_REST_INTERVAL = 0.25
+
+_PSQL = ["exec", "-T", "postgres", "psql", "-U", "neuromesh", "-d", "neuromesh"]
+
+
+def _psql(compose: Compose, sql: str, what: str) -> str:
+    """
+    Run one statement in the database container and return its output.
+    A failure reports the exit code and the end of stderr, never stdout,
+    because stdout is table data.
+    """
+    result = compose([*_PSQL, "-At", "-c", sql])
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"{what} failed with exit code {result.returncode}: "
+            f"{result.stderr.strip()[-500:]}"
+        )
+    return result.stdout
+
+
+def at_rest(
+    compose: Compose,
+    *,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
+    """
+    Wait until the seeded cluster holds a lease and a busy worker. A
+    statement that cannot run ends the wait at once: it is an error, not
+    a condition that is not true yet.
+    """
+    wait_until(
+        lambda: parse_assignment_state(
+            _psql(compose, ASSIGNMENT_SQL, "the assignment query")
+        ),
+        timeout=AT_REST_TIMEOUT,
+        interval=AT_REST_INTERVAL,
+        describe="the seeded cluster to hold a lease and a busy worker",
+        clock=clock,
+        sleep=sleep,
+    )
+
+
+def stop_old_api(
+    compose: Compose,
+    inspect: Callable[[str], str],
+) -> None:
+    """
+    Stop the API of the old release and check how it ended. inspect
+    takes a container id and returns its status and exit code.
+    """
+    stopped = compose(["stop", "neuromesh"])
+    if stopped.returncode != 0:
+        raise RuntimeError(
+            f"stopping the API failed with exit code {stopped.returncode}: "
+            f"{stopped.stderr.strip()[-500:]}"
+        )
+    listed = compose(["ps", "-aq", "neuromesh"])
+    ids = listed.stdout.split()
+    if listed.returncode != 0 or len(ids) != 1:
+        raise RuntimeError("expected exactly one API container to inspect")
+    require_clean_exit(inspect(ids[0]))
+
+
+def snapshot(compose: Compose) -> Snapshot:
+    """Every table of the database exported as CSV, by table name."""
+    tables = _psql(compose, TABLES_SQL, "listing the tables").split("\n")
+    return {
+        table: _psql(compose, copy_sql(table), f"exporting {table}")
+        for table in tables
+        if table
+    }
+
+
+def docker_inspect(container_id: str) -> str:
+    """The status and exit code of a container, as require_clean_exit reads them."""
+    return _run(
+        [
+            "docker",
+            "inspect",
+            "--format",
+            "{{.State.Status}} {{.State.ExitCode}}",
+            container_id,
+        ]
+    ).stdout
+
+
 def _resolve(ref: str) -> str:
     result = _run(
         ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
@@ -752,6 +884,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         stage("seeding the cluster through the API")
         ids = seed_cluster(http_post(f"http://127.0.0.1:{api_port}", key))
         print(f"seeded node {ids.node}, worker {ids.worker}, job {ids.job}")
+
+        def old_compose(
+            arguments: Sequence[str],
+        ) -> subprocess.CompletedProcess[str]:
+            return environment.compose("old", *arguments, check=False)
+
+        stage("waiting for the seeded cluster to settle")
+        at_rest(old_compose)
+        stage("stopping the old API")
+        stop_old_api(old_compose, docker_inspect)
+        stage("exporting the tables before the upgrade")
+        before = snapshot(old_compose)
+        stage("checking that the seed left data in every required table")
+        problems = empty_seed_tables(before)
+        if problems:
+            raise RuntimeError("the seed is not usable: " + "; ".join(problems))
+        print(f"exported {len(before)} tables before the upgrade")
     return 0
 
 
