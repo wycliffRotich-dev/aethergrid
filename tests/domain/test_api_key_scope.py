@@ -43,7 +43,7 @@ def test_validate_scopes_rejects_known_mixed_with_unknown() -> None:
 
 def test_validate_scopes_rejects_a_bare_string() -> None:
     with pytest.raises(TypeError):
-        validate_scopes("jobs:execute")  # type: ignore[arg-type]
+        validate_scopes("jobs:execute")
 
 
 def test_issue_rejects_an_unknown_scope() -> None:

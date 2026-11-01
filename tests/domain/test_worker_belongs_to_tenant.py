@@ -35,6 +35,6 @@ def test_a_workers_tenant_cannot_be_assigned() -> None:
     worker = make_worker(node=make_node(tenant_id=owner))
 
     with pytest.raises(AttributeError):
-        worker.tenant_id = other
+        worker.tenant_id = other  # type: ignore[misc]
 
     assert worker.tenant_id == owner

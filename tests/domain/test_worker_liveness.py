@@ -73,7 +73,8 @@ def test_heartbeat_recovers_offline_worker_with_no_running_job() -> None:
     worker = create_worker()
     worker.offline()
 
-    assert worker.status is WorkerStatus.OFFLINE
+    status_before = worker.status
+    assert status_before is WorkerStatus.OFFLINE
     assert worker.running_job is None
 
     worker.heartbeat()

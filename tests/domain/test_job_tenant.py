@@ -26,7 +26,7 @@ def test_make_job_defaults_to_the_default_tenant() -> None:
 
 def test_a_job_cannot_be_built_without_a_tenant() -> None:
     with pytest.raises(TypeError):
-        Job(
+        Job(  # type: ignore[call-arg]
             id=JobId.new(),
             resources=ResourceRequirements(
                 cpu_cores=1,

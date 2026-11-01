@@ -40,12 +40,12 @@ def test_event_is_immutable() -> None:
     )
 
     with pytest.raises(FrozenInstanceError):
-        event.event_type = "JobCompleted"
+        event.event_type = "JobCompleted"  # type: ignore[misc]
 
 
 def test_an_event_requires_a_tenant() -> None:
     with pytest.raises(TypeError):
-        Event(
+        Event(  # type: ignore[call-arg]
             id=EventId.new(),
             aggregate_id="job-123",
             aggregate_type="Job",
