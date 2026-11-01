@@ -33,7 +33,9 @@ def test_scope_flag_is_repeatable_and_deduplicated() -> None:
     assert scopes == frozenset({JOBS_EXECUTE})
 
 
-def test_unknown_scope_is_rejected_by_the_parser(capsys) -> None:
+def test_unknown_scope_is_rejected_by_the_parser(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     with pytest.raises(SystemExit) as excinfo:
         parse_args(["runner", "--scope", "job:execute"])
 

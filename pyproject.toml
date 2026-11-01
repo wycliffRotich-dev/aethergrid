@@ -54,7 +54,9 @@ warn_unused_configs = true
 # app/ has no __init__.py, so without explicit_package_bases mypy finds
 # app/application twice, as application and as app.application.
 explicit_package_bases = true
-files = ["app"]
+# scripts and tests/scripts are held to the same standard as app.
+# The other test directories are added as each one is cleaned.
+files = ["app", "scripts", "tests/scripts"]
 
 [tool.setuptools.packages.find]
 include = ["app*"]
