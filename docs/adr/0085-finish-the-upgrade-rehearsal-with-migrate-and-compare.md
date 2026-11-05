@@ -140,4 +140,5 @@ starts and serves the migrated data.
 in ADR 0086. The rehearsal now reads schema_migrations before and
 after the migrate run and prints each version the upgrade added, and a
 real run from v0.6.0 printed 0005. The follow-up about the constraint
-changes, which a table export cannot show, is proposed in ADR 0087.
+changes, which a table export cannot show, is done in ADR 0087. That the new API starts and
+serves the migrated data is proposed in ADR 0088.
