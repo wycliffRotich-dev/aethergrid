@@ -23,6 +23,9 @@ UPGRADED = {
 }
 
 
+SCHEMA = "CREATE TABLE public.nodes (id uuid);"
+
+
 class Recorder:
     def __init__(self) -> None:
         self.events: list[str] = []
@@ -72,6 +75,8 @@ def wire(
         "stop_old_api": stop or fake_stop,
         "snapshot": fake_snapshot,
         "applied_migrations": lambda compose: next(reads),
+        "fresh_schema": lambda old, new: SCHEMA,
+        "schema_dump": lambda compose, database: SCHEMA,
     }
     for name, fake in patches.items():
         monkeypatch.setattr(upgrade_rehearsal, name, fake)
@@ -105,6 +110,9 @@ def test_the_old_side_is_brought_to_rest_before_it_is_exported(
         "stage: exporting the tables after the upgrade",
         "snapshot",
         "stage: comparing the tables before and after the upgrade",
+        "stage: building a fresh database with the new migrations",
+        "stage: dumping the schema of the upgraded database",
+        "stage: comparing the two schemas",
     ]
 
 

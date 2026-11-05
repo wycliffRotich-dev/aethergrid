@@ -2,14 +2,14 @@
 
 ## Status
 
-Proposed. It becomes Accepted when the rehearsal builds a second
-database with the new release's migrate service, dumps the schema of
+Accepted. It was Proposed until the rehearsal built a second
+database with the new release's migrate service, dumped the schema of
 the upgraded database and of the new one with pg_dump --schema-only,
-ignores the two kinds of line that carry a random key, fails on every
-other difference and names each one, and fails on a dump with no table
-in it. The tests are written first and each fails for the right reason
-against the script on main. One real run from v0.6.0 reports a match
-and no leftovers.
+ignored the two kinds of line that carry a random key, failed on every
+other difference and named each one, and failed on a dump with no table
+in it. The tests were written first and all 19 failed for the reasons
+expected against the script on main. One real run from v0.6.0 reported
+a match and no leftovers.
 
 Related: ADR 0071, ADR 0074, ADR 0075 (condition 5), ADR 0085 and
 ADR 0086.
@@ -71,6 +71,31 @@ EXTENSION found none.
 - A run gains one database, one migrate run and two dumps. Their time
   is read from the stage times of the real run.
 
+## Evidence
+
+- The 19 new tests in
+  `tests/scripts/test_upgrade_rehearsal_schema.py` were written first.
+  All 19 failed against the script on main: 14 with AttributeError
+  because `compare_schemas`, `schema_lines`, `schema_dump` and
+  `fresh_schema` did not exist, 2 with DID NOT RAISE, 1 for a missing
+  line of output and 1 for a missing stage line.
+- Six mutations each fail the new tests, and the script was restored
+  and compared byte for byte afterwards: removing the no-table check
+  fails 5, treating every line as equal fails 6, keeping the random-key
+  lines fails 9, disabling the guard in `main()` fails 2, running the
+  fresh migrate against the upgraded database fails 1, and dumping the
+  upgraded database as the fresh one fails 1.
+- `tests/scripts` passes (219, up from 200), ruff is clean and strict
+  mypy reports no issues in 239 source files. The full suite passes
+  (1237, up from 1218).
+- One real run, `python scripts/upgrade_rehearsal.py --old v0.6.0
+  --new HEAD`, ended with `the upgraded schema matches a fresh one
+  (452 lines)` after `the upgrade changed nothing in 7 tables`, and
+  printed no report of leftovers. The 452 lines are the 454 of the
+  probe without the two lines that carry a random key. From the stage
+  times, building the fresh database, dumping and comparing took 4
+  seconds. That is one run and not a measurement.
+
 ## Not Claimed
 
 - That the schema is right. It is shown to match a fresh install of the
@@ -107,10 +132,16 @@ EXTENSION found none.
 grep -c "compare_schemas" scripts/upgrade_rehearsal.py
 ```
 
-It prints 0 while this ADR is a proposal.
+It printed 0 before this change and prints 1 or more now.
 
 ## Progress
 
 2026-11-05. Written before any code. main() ends after the table
 comparison, so the schema of an upgraded database is not compared with
 anything.
+
+2026-11-05. main() now builds schema_fresh with the new release's
+migrate service, dumps both databases and compares them. The Evidence
+section has the runs. The schema of an upgraded database is shown to
+match a fresh install of the same release for one seed and one
+release pair. Condition 5 of ADR 0075 is still open.

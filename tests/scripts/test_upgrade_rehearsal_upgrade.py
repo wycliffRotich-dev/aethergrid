@@ -26,6 +26,9 @@ UPGRADED = {
 }
 
 
+SCHEMA = "CREATE TABLE public.nodes (id uuid);"
+
+
 class Recorder:
     def __init__(self, *, fail_migrate: bool = False) -> None:
         self.events: list[str] = []
@@ -78,6 +81,8 @@ def wire(
         "stop_old_api": lambda compose, inspect: events.append("stop"),
         "snapshot": fake_snapshot,
         "applied_migrations": lambda compose: next(reads),
+        "fresh_schema": lambda old, new: SCHEMA,
+        "schema_dump": lambda compose, database: SCHEMA,
     }
     for name, fake in patches.items():
         monkeypatch.setattr(upgrade_rehearsal, name, fake)

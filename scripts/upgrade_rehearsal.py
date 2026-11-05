@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import csv
+import difflib
 import io
 import json
 import os
@@ -637,6 +638,98 @@ def applied_migrations(compose: Compose) -> Migrations:
     )
 
 
+UPGRADED_DATABASE = "neuromesh"
+FRESH_DATABASE = "schema_fresh"
+FRESH_URL = f"postgresql://neuromesh@postgres:5432/{FRESH_DATABASE}"
+_PG_DUMP = ["exec", "-T", "postgres", "pg_dump", "-U", "neuromesh"]
+# The two commands pg_dump writes with a random key and nothing else.
+_RANDOM_KEY_LINES = ("\\restrict ", "\\unrestrict ")
+
+
+def schema_lines(dump: str) -> list[str]:
+    """
+    The lines of a pg_dump schema without the two commands that carry
+    a random key, which differ between any two dumps.
+    """
+    return [
+        line
+        for line in dump.splitlines()
+        if not line.startswith(_RANDOM_KEY_LINES)
+    ]
+
+
+def compare_schemas(upgraded: str, fresh: str) -> list[str]:
+    """
+    Return one line per problem: a dump with no CREATE TABLE line, then
+    every line that is in one schema and not in the other, upgraded side
+    first. The comparison is line by line and in order. An empty list
+    means the two match.
+    """
+    upgraded_lines = schema_lines(upgraded)
+    fresh_lines = schema_lines(fresh)
+
+    problems: list[str] = []
+    for name, lines in (("upgraded", upgraded_lines), ("fresh", fresh_lines)):
+        if not any(line.startswith("CREATE TABLE ") for line in lines):
+            problems.append(f"the {name} schema has no CREATE TABLE line")
+
+    matcher = difflib.SequenceMatcher(
+        None, upgraded_lines, fresh_lines, autojunk=False
+    )
+    for tag, a1, a2, b1, b2 in matcher.get_opcodes():
+        if tag == "equal":
+            continue
+        problems.extend(
+            f"only in the upgraded schema: {line}"
+            for line in upgraded_lines[a1:a2]
+        )
+        problems.extend(
+            f"only in the fresh schema: {line}" for line in fresh_lines[b1:b2]
+        )
+    return problems
+
+
+def schema_dump(compose: Compose, database: str) -> str:
+    """
+    The schema of one database as pg_dump writes it, without data and
+    without owners. A failure reports the exit code and the end of
+    stderr, never stdout.
+    """
+    result = compose(
+        [*_PG_DUMP, "-d", database, "--schema-only", "--no-owner"]
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"dumping the schema of {database} failed with exit code "
+            f"{result.returncode}: {result.stderr.strip()[-500:]}"
+        )
+    return result.stdout
+
+
+def fresh_schema(old: Compose, new: Compose) -> str:
+    """
+    Build a database from nothing with the new release's migrate service
+    and return its schema. The database is made in the Postgres of the
+    run, which the teardown removes with its volume.
+    """
+    _psql(
+        old,
+        f"CREATE DATABASE {FRESH_DATABASE}",
+        "creating the fresh database",
+    )
+    new(
+        [
+            "run",
+            "--rm",
+            "--no-deps",
+            "-e",
+            f"NEUROMESH_DATABASE_URL={FRESH_URL}",
+            "migrate",
+        ]
+    )
+    return schema_dump(old, FRESH_DATABASE)
+
+
 def docker_inspect(container_id: str) -> str:
     """The status and exit code of a container, as require_clean_exit reads them."""
     return _run(
@@ -999,6 +1092,25 @@ def main(argv: Sequence[str] | None = None) -> int:
                 + "; ".join(differences)
             )
         print(f"the upgrade changed nothing in {len(after)} tables")
+
+        def new_compose(
+            arguments: Sequence[str],
+        ) -> subprocess.CompletedProcess[str]:
+            return environment.compose("new", *arguments)
+
+        stage("building a fresh database with the new migrations")
+        fresh = fresh_schema(old_compose, new_compose)
+        stage("dumping the schema of the upgraded database")
+        upgraded = schema_dump(old_compose, UPGRADED_DATABASE)
+        stage("comparing the two schemas")
+        schema_problems = compare_schemas(upgraded, fresh)
+        if schema_problems:
+            raise RuntimeError(
+                "the upgraded schema differs from a fresh one: "
+                + "; ".join(schema_problems)
+            )
+        lines = len(schema_lines(upgraded))
+        print(f"the upgraded schema matches a fresh one ({lines} lines)")
     return 0
 
 
