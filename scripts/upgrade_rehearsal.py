@@ -35,6 +35,8 @@ from types import FrameType
 from typing import Any
 
 Snapshot = dict[str, str]
+# Applied migrations by version, each with its name and checksum.
+Migrations = dict[str, dict[str, str]]
 
 # How an export writes a null, so that it stays apart from an empty string.
 NULL_MARKER = "\\N"
@@ -571,6 +573,70 @@ def snapshot(compose: Compose) -> Snapshot:
     }
 
 
+MIGRATION_COLUMNS = ["version", "name", "checksum"]
+MIGRATIONS_SQL = (
+    "COPY (SELECT version, name, checksum FROM schema_migrations "
+    "ORDER BY version) TO STDOUT "
+    f"WITH (FORMAT csv, HEADER, NULL '{NULL_MARKER}')"
+)
+
+
+def read_migrations(text: str) -> Migrations:
+    """
+    The rows of an export of schema_migrations, by version. The export
+    must hold exactly the columns the comparison reads.
+    """
+    columns, rows = _read("schema_migrations", text)
+    if columns != MIGRATION_COLUMNS:
+        raise ValueError(
+            f"schema_migrations: expected the columns {MIGRATION_COLUMNS}, "
+            f"got {columns}"
+        )
+    return rows
+
+
+def added_migrations(before: Migrations, after: Migrations) -> list[str]:
+    """The versions the upgrade added, in numeric order, with their names."""
+    return [
+        f"{version} {after[version]['name']}"
+        for version in sorted(after.keys() - before.keys(), key=int)
+    ]
+
+
+def compare_migrations(before: Migrations, after: Migrations) -> list[str]:
+    """
+    Return one line per problem: a version applied before the upgrade
+    that is missing afterwards, a name or checksum that changed, and an
+    upgrade that applied nothing. An empty list means none.
+    """
+    problems: list[str] = []
+    for version in sorted(before, key=int):
+        old = before[version]
+        new = after.get(version)
+        if new is None:
+            problems.append(
+                f"schema_migrations {version}: applied before the upgrade "
+                "and missing after it"
+            )
+            continue
+        for column in ("name", "checksum"):
+            if old[column] != new[column]:
+                problems.append(
+                    f"schema_migrations {version}: {column} changed "
+                    f"from {old[column]!r} to {new[column]!r}"
+                )
+    if not added_migrations(before, after):
+        problems.append("the upgrade applied no migration")
+    return problems
+
+
+def applied_migrations(compose: Compose) -> Migrations:
+    """The migrations the database has recorded, by version."""
+    return read_migrations(
+        _psql(compose, MIGRATIONS_SQL, "reading schema_migrations")
+    )
+
+
 def docker_inspect(container_id: str) -> str:
     """The status and exit code of a container, as require_clean_exit reads them."""
     return _run(
@@ -901,6 +967,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if problems:
             raise RuntimeError("the seed is not usable: " + "; ".join(problems))
         print(f"exported {len(before)} tables before the upgrade")
+        migrations_before = applied_migrations(old_compose)
 
         stage(f"building the new release (limit {BUILD_TIMEOUT:g}s)")
         environment.compose(
@@ -913,7 +980,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         environment.compose("new", "run", "--rm", "--no-deps", "migrate")
         stage("exporting the tables after the upgrade")
         after = snapshot(old_compose)
+        migrations_after = applied_migrations(old_compose)
         stage("comparing the tables before and after the upgrade")
+        for added in added_migrations(migrations_before, migrations_after):
+            print(f"applied migration {added}")
+        migration_problems = compare_migrations(
+            migrations_before, migrations_after
+        )
+        if migration_problems:
+            raise RuntimeError(
+                "the migrations are not as expected: "
+                + "; ".join(migration_problems)
+            )
         differences = compare_snapshots(before, after)
         if differences:
             raise RuntimeError(
