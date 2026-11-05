@@ -901,6 +901,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         if problems:
             raise RuntimeError("the seed is not usable: " + "; ".join(problems))
         print(f"exported {len(before)} tables before the upgrade")
+
+        stage(f"building the new release (limit {BUILD_TIMEOUT:g}s)")
+        environment.compose(
+            "new", "build", "neuromesh", timeout=BUILD_TIMEOUT
+        )
+        stage("applying the new migrations to the seeded database")
+        # Only the one-shot migrate service runs. The new API stays
+        # down so nothing writes between the two exports, and
+        # --no-deps keeps compose from recreating postgres.
+        environment.compose("new", "run", "--rm", "--no-deps", "migrate")
+        stage("exporting the tables after the upgrade")
+        after = snapshot(old_compose)
+        stage("comparing the tables before and after the upgrade")
+        differences = compare_snapshots(before, after)
+        if differences:
+            raise RuntimeError(
+                "the upgrade changed the database: "
+                + "; ".join(differences)
+            )
+        print(f"the upgrade changed nothing in {len(after)} tables")
     return 0
 
 
