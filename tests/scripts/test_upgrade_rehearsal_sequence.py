@@ -91,6 +91,12 @@ def test_the_old_side_is_brought_to_rest_before_it_is_exported(
         "stage: exporting the tables before the upgrade",
         "snapshot",
         "stage: checking that the seed left data in every required table",
+        "stage: building the new release "
+        f"(limit {upgrade_rehearsal.BUILD_TIMEOUT:g}s)",
+        "stage: applying the new migrations to the seeded database",
+        "stage: exporting the tables after the upgrade",
+        "snapshot",
+        "stage: comparing the tables before and after the upgrade",
     ]
 
 

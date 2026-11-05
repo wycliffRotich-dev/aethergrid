@@ -2,10 +2,10 @@
 
 ## Status
 
-Proposed. It becomes Accepted when the rehearsal script applies the new
+Accepted. It was Proposed until the rehearsal script applies the new
 release's migrations to the seeded database, exports every table again
 and fails on any difference, with tests that failed for the right reason
-before the code was written, and when one real run from v0.6.0 is
+before the code was written, and one real run from v0.6.0 was
 recorded in the Progress section with what it printed.
 
 Related: ADR 0071 (the migrate service) and ADR 0075 (condition 5).
@@ -101,3 +101,37 @@ nothing. The name of the script is ahead of what it does.
 
 2026-11-05. Written before any code. `main()` still returns after the
 seed check, so nothing is migrated or compared yet.
+
+2026-11-05. The two stages are written. After the seed check, main()
+builds the neuromesh image of the new side, runs only the migrate
+service there with run --rm --no-deps, exports the tables again with the
+same function and fails on any difference, naming each one. The build
+is a step of its own because the migrate service names an image and has
+no build section. --no-deps keeps compose from recreating postgres,
+which both sides share through one project name.
+
+The tests were written first. Five failed for the reasons expected: the
+new side had no commands, there was no second export, a failed migrate
+and a changed row did not raise, and the extended order test was missing
+five steps. Two mutations each failed the tests. Starting the new side
+with up -d --wait failed 3, and disabling the difference check failed 1.
+The file was restored and compared byte for byte. tests/scripts passes
+(186), ruff is clean, and mypy as CI runs it reports no issues in 237
+source files.
+
+One real run, on 2026-11-05, from v0.6.0 to main at 0655914. It seeded
+one node, one worker and one job, exported 7 tables before and after,
+and printed "the upgrade changed nothing in 7 tables". It printed no
+report of leftovers. By the stage times the run took 4 minutes 21
+seconds: 3 minutes 14 seconds to build and start the old release, 57
+seconds to build the new one, and about 4 seconds for migrate and the
+second export. That is one run and not a measurement.
+
+Not shown by that run. That 0005 was applied: the export leaves
+schema_migrations out and the script does not print what migrate
+applied, so the claim rests on v0.6.0 carrying 0004 only and main
+carrying 0005. Printing the applied versions before and after is a
+follow-up. The constraint changes, which a table export cannot show.
+Condition 5 of ADR 0075, because the run was from a commit and no tag
+carries 0005. How long 0005 takes on a real table. That the new API
+starts and serves the migrated data.
