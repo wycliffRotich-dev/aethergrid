@@ -101,6 +101,9 @@ def test_the_export_of_schema_migrations_is_read_by_version() -> None:
     assert upgrade_rehearsal.read_migrations(text) == BEFORE
 
 
+SCHEMA = "CREATE TABLE public.nodes (id uuid);"
+
+
 class Recorder:
     def __init__(self) -> None:
         self.events: list[str] = []
@@ -149,6 +152,8 @@ def wire(
         "at_rest": lambda compose: events.append("rest"),
         "stop_old_api": lambda compose, inspect: events.append("stop"),
         "snapshot": fake_snapshot,
+        "fresh_schema": lambda old, new: SCHEMA,
+        "schema_dump": lambda compose, database: SCHEMA,
     }
     for name, fake in patches.items():
         monkeypatch.setattr(upgrade_rehearsal, name, fake)
