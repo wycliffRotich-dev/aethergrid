@@ -16,6 +16,12 @@ SEEDED = {
     "public.leases": "id\n1\n",
 }
 
+VERSIONS = {"4": {"version": "4", "name": "four", "checksum": "c4"}}
+UPGRADED = {
+    **VERSIONS,
+    "5": {"version": "5", "name": "five", "checksum": "c5"},
+}
+
 
 class Recorder:
     def __init__(self) -> None:
@@ -41,6 +47,7 @@ def wire(
 ) -> Recorder:
     recorder = Recorder()
     events = recorder.events
+    reads = iter([VERSIONS, UPGRADED])
 
     @contextlib.contextmanager
     def fake_environment(old_ref: str, new_ref: str) -> Iterator[Recorder]:
@@ -64,6 +71,7 @@ def wire(
         "at_rest": lambda compose: events.append("rest"),
         "stop_old_api": stop or fake_stop,
         "snapshot": fake_snapshot,
+        "applied_migrations": lambda compose: next(reads),
     }
     for name, fake in patches.items():
         monkeypatch.setattr(upgrade_rehearsal, name, fake)

@@ -19,6 +19,13 @@ SEEDED = {
 MIGRATE = "compose new run --rm --no-deps migrate"
 
 
+VERSIONS = {"4": {"version": "4", "name": "four", "checksum": "c4"}}
+UPGRADED = {
+    **VERSIONS,
+    "5": {"version": "5", "name": "five", "checksum": "c5"},
+}
+
+
 class Recorder:
     def __init__(self, *, fail_migrate: bool = False) -> None:
         self.events: list[str] = []
@@ -48,6 +55,7 @@ def wire(
 ) -> Recorder:
     recorder = Recorder(fail_migrate=fail_migrate)
     events = recorder.events
+    reads = iter([VERSIONS, UPGRADED])
     remaining = iter(snapshots)
 
     @contextlib.contextmanager
@@ -69,6 +77,7 @@ def wire(
         "at_rest": lambda compose: events.append("rest"),
         "stop_old_api": lambda compose, inspect: events.append("stop"),
         "snapshot": fake_snapshot,
+        "applied_migrations": lambda compose: next(reads),
     }
     for name, fake in patches.items():
         monkeypatch.setattr(upgrade_rehearsal, name, fake)

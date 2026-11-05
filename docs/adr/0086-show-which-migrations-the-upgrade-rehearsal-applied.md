@@ -2,13 +2,13 @@
 
 ## Status
 
-Proposed. It becomes Accepted when the rehearsal reads
-`schema_migrations` before and after the migrate run, prints the
-versions the run added, and fails when it added none, when an applied
-version is missing afterwards, and when the name or checksum of an
-applied version changed. The tests are written first and each fails
-for the right reason against the script on main. One real run from
-v0.6.0 prints the versions it applied.
+Accepted. It was Proposed until the rehearsal read
+`schema_migrations` before and after the migrate run, printed the
+versions the run added, and failed when it added none, when an applied
+version was missing afterwards, and when the name or checksum of an
+applied version changed. The tests were written first and all 14
+failed against the script on main. One real run from v0.6.0 printed
+the version it applied.
 
 Related: ADR 0071, ADR 0072, ADR 0074, ADR 0075 (condition 5) and
 ADR 0085.
@@ -56,6 +56,26 @@ without recording a version. Neither is caught today.
   passing.
 - The rehearsal reads one more table twice, which costs milliseconds.
 
+## Evidence
+
+- The 14 new tests in
+  `tests/scripts/test_upgrade_rehearsal_migrations.py` were written
+  first. All 14 failed against the script on main, and mypy reported
+  the three new functions missing.
+- Four mutations each fail the new tests, and the script was restored
+  and compared byte for byte afterwards: turning the "applied no
+  migration" check into `if False:` fails 3, the same for the name and
+  checksum comparison fails 3, the same for the missing-version check
+  fails 4, and the same for the guard in `main()` fails 3.
+- `tests/scripts` passes (200, up from 186), ruff is clean and strict
+  mypy reports no issues in 238 source files. The full suite passes
+  (1218, up from 1204).
+- One real run, `python scripts/upgrade_rehearsal.py --old v0.6.0
+  --new HEAD`, printed `applied migration 5
+  0005_require_a_tenant_on_workers_and_leases.sql` and then `the
+  upgrade changed nothing in 7 tables`. The read of `schema_migrations`
+  with its checksum column worked against the database v0.6.0 created.
+
 ## Not Claimed
 
 - That a migration changed the schema as intended. A version recorded
@@ -67,6 +87,10 @@ without recording a version. Neither is caught today.
   read files.
 - That a run from a commit satisfies condition 5 of ADR 0075. That
   needs a release that carries 0005.
+- That the check works for an old release other than v0.6.0. One run
+  was made, from that tag.
+- What `schema_migrations` held before the upgrade. The run printed
+  only the version it added.
 
 ## Alternatives Considered
 
@@ -90,8 +114,12 @@ without recording a version. Neither is caught today.
 grep -c "applied_migrations" scripts/upgrade_rehearsal.py
 ```
 
-It prints 0 while this ADR is a proposal.
+It printed 0 before this change and prints 1 or more now.
 
 ## Progress
 
-Nothing is merged. This ADR is a proposal.
+2026-11-05. The rehearsal reads `schema_migrations` before and after
+the migrate run, prints the versions the upgrade added and fails
+when none was added, when an applied version is missing afterwards
+and when a name or checksum changed. The Evidence section has the
+runs. Condition 5 of ADR 0075 is still open.
