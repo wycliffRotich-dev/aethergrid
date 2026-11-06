@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed. It becomes Accepted when `workers` and `leases` carry a
+Accepted. The conditions were that `workers` and `leases` carry a
 required tenant, the database refuses a worker, a running job or a
 lease that crosses tenants, both repositories read by that tenant,
 every existing two-tenant test passes with every assertion removed from
@@ -669,3 +669,13 @@ was merged, and it was corrected to match.
 AetherGrid on main is multi-tenant as ADR 0064 defines it. The sentence
 in the Status above that says it is not was true when it was written and
 is superseded.
+
+2026-11-06. Accepted. Condition 5 is met, and it was the one condition
+the 2026-10-30 entry named as still not met. v0.7.0 is the first
+release that carries 0005. It is an annotated tag on aa4eaca, and the
+upgrade rehearsal ran on that exact commit with v0.6.0 as the old
+release. It seeded a node, a worker and a job through the v0.6.0 API,
+applied migration 5 (0005_require_a_tenant_on_workers_and_leases.sql),
+changed nothing in the 7 exported tables, matched the schema of a fresh
+database (452 lines), and the new API served the seeded node, worker
+and job (ADR 0085 to 0088).
