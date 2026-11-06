@@ -254,6 +254,9 @@ def wire(
         "stop_old_api": lambda compose, inspect: events.append("stop"),
         "snapshot": fake_snapshot,
         "applied_migrations": lambda compose: next(reads),
+        "start_new_api": lambda compose: 49153,
+        "read_back": lambda get, ids: None,
+        "stop_new_api": lambda compose, inspect: None,
     }
     for name, fake in patches.items():
         monkeypatch.setattr(upgrade_rehearsal, name, fake)
