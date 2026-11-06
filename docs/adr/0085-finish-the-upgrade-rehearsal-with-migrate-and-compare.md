@@ -133,12 +133,11 @@ applied, so the claim rests on v0.6.0 carrying 0004 only and main
 carrying 0005. Printing the applied versions before and after is a
 follow-up. The constraint changes, which a table export cannot show.
 Condition 5 of ADR 0075, because the run was from a commit and no tag
-carries 0005. How long 0005 takes on a real table. That the new API
-starts and serves the migrated data.
+carries 0005. How long 0005 takes on a real table.
 
 2026-11-05. The follow-up about printing the applied versions is done
 in ADR 0086. The rehearsal now reads schema_migrations before and
 after the migrate run and prints each version the upgrade added, and a
 real run from v0.6.0 printed 0005. The follow-up about the constraint
 changes, which a table export cannot show, is done in ADR 0087. That the new API starts and
-serves the migrated data is proposed in ADR 0088.
+serves the migrated data is done in ADR 0088.
