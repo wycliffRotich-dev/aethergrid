@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How it holds up | AetherGrid</title>
+<meta name="description" content="How AetherGrid handles dead workers, duplicate owners, leftover processes, split schedulers, shared databases and upgrades.">
+<meta name="theme-color" content="#04244c">
+<meta property="og:type" content="website">
+<meta property="og:title" content="How it holds up | AetherGrid">
+<meta property="og:description" content="How AetherGrid handles dead workers, duplicate owners, leftover processes, split schedulers, shared databases and upgrades.">
+<meta property="og:url" content="https://wycliffrotich-dev.github.io/aethergrid/how.html">
+<meta property="og:image" content="https://wycliffrotich-dev.github.io/aethergrid/assets/logo.png">
+<link rel="canonical" href="https://wycliffrotich-dev.github.io/aethergrid/how.html">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2304244c'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23fc9c04'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css?v=14">
+</head>
+<body>
+<header><div class="wrap bar">
+<a class="brand" href="index.html" aria-label="AetherGrid home"><img src="assets/logo.png" alt="AetherGrid, open-source distributed AI orchestrator" height="56"></a>
+<nav>
+<a href="index.html">Home</a>
+<a href="why.html">Why AetherGrid</a>
+<a href="how.html" aria-current="page">How it holds up</a>
+<a href="proof.html">Source</a>
+<a href="about.html">About me</a>
+<a class="btn solid small" href="mailto:wycliffe@aethergrid.co.ke?subject=Opportunity%20for%20Wycliffe">Hire me</a>
+</nav></div></header>
+<main id="top">
+<section class="alt" id="how">
+<div class="wrap">
+<h2>Built for the day something breaks</h2>
+<p class="sub">Machines fail, processes linger and releases get rolled out. AetherGrid is designed around those moments.</p>
+<div class="exp pair numbered">
+<article class="exp-card"><h3>A worker disappears</h3><p>Its lease runs out, reconciliation finds the abandoned job, and the job goes back to a healthy worker.</p></article>
+<article class="exp-card"><h3>Two workers want the same job</h3><p>Only the worker holding the lease may act on it, and a worker that loses its lease stops acting as the owner.</p></article>
+<article class="exp-card"><h3>A job leaves processes behind</h3><p>When a job ends, times out or is cancelled, its whole process tree is stopped, not only the first process.</p></article>
+<article class="exp-card"><h3>The scheduler runs in two places</h3><p>The cluster tick runs in one process at a time, so two schedulers never place the same work.</p></article>
+<article class="exp-card"><h3>Customers share one database</h3><p>Tenant isolation is enforced in the application and in the database, so a worker, a job or a lease cannot be tied to another tenant’s records.</p></article>
+<article class="exp-card"><h3>You upgrade to a new release</h3><p>Each release is rehearsed on a database from the one before it: migrate, compare every table and the schema, then start the new API and read the data back.</p></article>
+</div>
+</div>
+</section>
+</main>
+<footer class="wrap">AetherGrid is open source under the MIT licence. © 2026 Wycliffe Kipleting Rotich.</footer>
+</body>
+</html>
