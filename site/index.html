@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AetherGrid: open-source orchestration for AI workloads</title>
+<meta name="description" content="AetherGrid gives every AI job one owner at a time, notices when that owner disappears, and hands the work to a healthy node. Built by Wycliffe Kipleting Rotich.">
+<meta name="theme-color" content="#04244c">
+<meta property="og:type" content="website">
+<meta property="og:title" content="AetherGrid: when a worker dies, the work moves on">
+<meta property="og:description" content="Open-source orchestration for AI workloads, with leases, reconciliation and tenant isolation.">
+<meta property="og:url" content="https://wycliffrotich-dev.github.io/aethergrid/">
+<meta property="og:image" content="https://wycliffrotich-dev.github.io/aethergrid/assets/logo.png">
+<link rel="canonical" href="https://wycliffrotich-dev.github.io/aethergrid/">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2304244c'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23fc9c04'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css?v=14">
+</head>
+<body>
+<header><div class="wrap bar">
+<a class="brand" href="#top" aria-label="AetherGrid home"><img src="assets/logo.png" alt="AetherGrid, open-source distributed AI orchestrator" height="56"></a>
+<nav>
+<a href="index.html" aria-current="page">Home</a>
+<a href="why.html">Why AetherGrid</a>
+<a href="how.html">How it holds up</a>
+<a href="proof.html">Source</a>
+<a href="about.html">About me</a>
+<a class="btn solid small" href="mailto:wycliffe@aethergrid.co.ke?subject=Opportunity%20for%20Wycliffe">Hire me</a>
+</nav></div></header>
+<main id="top">
+<div class="wrap hero">
+<div class="intro">
+<h1>I build systems that keep running when machines fail.</h1>
+<p class="lede">Platform engineer with 8 years in distributed systems. I built AetherGrid, an open-source orchestrator that notices a dead worker and hands its job to a healthy node.</p>
+</div>
+<div class="showcase">
+<div class="photo-wrap"><img class="hero-photo" src="assets/datacenter.webp" width="690" height="529" alt="A data center aisle between two rows of server racks lit in blue" decoding="async"><a class="btn small photo-cta" href="https://aethergrid-dashboard.onrender.com">Open the live dashboard</a></div>
+<div class="demo">
+<svg id="dc" viewBox="0 0 500 350" role="img" aria-label="A row of five server racks with blinking status lights. One server holds a job, marked with an orange frame."></svg>
+<p class="status" id="status" aria-live="polite"></p>
+<div class="row2">
+<button class="btn small" id="kill" type="button">Stop the server holding the job</button>
+<button class="btn small" id="reset" type="button">Reset</button>
+</div>
+<p class="hint">The orange frame marks the server that owns the job.</p>
+</div>
+</div>
+<div class="cta">
+</div>
+</div>
+
+<div class="wrap note-row"><div class="note left"><p>“Every hour an AI job stalls, you pay for machines that do nothing. I built AetherGrid to stop that.”</p></div></div>
+<section id="why">
+<div class="wrap">
+<div class="note right"><p>“One failed job used to mean a missed deadline and a wasted bill. Now the system handles it.”</p></div>
+<h2>Why AetherGrid</h2>
+<p class="sub">AI jobs run for a long time on expensive machines, and machines fail. A job that stalls, runs twice or leaves processes behind wastes GPU hours and delays everything waiting on it. AetherGrid makes the system responsible for those failures, so nobody has to catch them by hand.</p>
+<div class="exp pair numbered">
+<article class="exp-card"><h3>Less wasted compute</h3><p>Jobs are matched to nodes on CPU, memory and VRAM together, and a job that finishes, times out or is cancelled leaves nothing running behind it.</p></article>
+<article class="exp-card"><h3>No duplicated or lost work</h3><p>Each job has one owner, enforced by a lease. If the owner disappears, the job returns to a healthy worker without a person stepping in.</p></article>
+<article class="exp-card"><h3>Clear to operate</h3><p>A dashboard shows nodes, jobs, the event history of each job and a live cluster event feed, so an operator can see what happened and why.</p></article>
+<article class="exp-card"><h3>One platform for many customers</h3><p>Tenant isolation is enforced in the application and in the database, and the tenant is taken from the credential, never from the request.</p></article>
+<article class="exp-card"><h3>Upgrades you can trust</h3><p>Each release is rehearsed against a database from the release before it, so an upgrade is something you have already watched work.</p></article>
+<article class="exp-card"><h3>Yours to run and inspect</h3><p>Open source under the MIT licence and started with Docker Compose. Every route needs an API key, and the reasoning behind each design choice is public in the decision records.</p></article>
+</div>
+</div>
+</section>
+
+<section class="alt" id="how">
+<div class="wrap">
+<div class="note left"><p>“Machines break every week. With AetherGrid, your customers never find out.”</p></div>
+<h2>Built for the day something breaks</h2>
+<p class="sub">Machines fail, processes linger and releases get rolled out. AetherGrid is designed around those moments.</p>
+<div class="exp pair numbered">
+<article class="exp-card"><h3>A worker disappears</h3><p>Its lease runs out, reconciliation finds the abandoned job, and the job goes back to a healthy worker.</p></article>
+<article class="exp-card"><h3>Two workers want the same job</h3><p>Only the worker holding the lease may act on it, and a worker that loses its lease stops acting as the owner.</p></article>
+<article class="exp-card"><h3>A job leaves processes behind</h3><p>When a job ends, times out or is cancelled, its whole process tree is stopped, not only the first process.</p></article>
+<article class="exp-card"><h3>The scheduler runs in two places</h3><p>The cluster tick runs in one process at a time, so two schedulers never place the same work.</p></article>
+<article class="exp-card"><h3>Customers share one database</h3><p>Tenant isolation is enforced in the application and in the database, so a worker, a job or a lease cannot be tied to another tenant’s records.</p></article>
+<article class="exp-card"><h3>You upgrade to a new release</h3><p>Each release is rehearsed on a database from the one before it: migrate, compare every table and the schema, then start the new API and read the data back.</p></article>
+</div>
+</div>
+</section>
+
+<section id="power">
+<div class="wrap">
+<div class="note right"><p>“Not technical? Skip ahead. This is the engineering that stops small failures becoming outages.”</p></div>
+<h2>Technical depth</h2>
+<p class="sub">The guarantees above rest on specific engineering decisions. Each one is written down in a decision record with the reason it was made.</p>
+<div class="exp pair numbered">
+<article class="exp-card"><h3>Lease fencing</h3><p>Release, renewal and outcome reports are fenced by lease identity, not only by worker identity, so a stale worker cannot change a job it no longer owns.</p></article>
+<article class="exp-card"><h3>Reconciliation</h3><p>Bounded-retry reconciliation reclaims work from dead workers, expired leases and offline nodes through one shared reclaim operation.</p></article>
+<article class="exp-card"><h3>One scheduler at a time</h3><p>Scheduler leadership is elected with a PostgreSQL advisory lock, so two scheduler processes never place the same work.</p></article>
+<article class="exp-card"><h3>Process supervision</h3><p>Job commands start under a supervisor that stops the whole process group when the owner dies. Timeouts end with SIGTERM, then SIGKILL.</p></article>
+<article class="exp-card"><h3>Tenant boundary in the database</h3><p>On PostgreSQL, composite keys tie workers and leases to their tenant, and the migration stops with a count if any row crosses tenants or has none.</p></article>
+<article class="exp-card"><h3>Layers that are enforced</h3><p>Domain, Application, Infrastructure and Presentation stay separate, with a test that fails if an import crosses a layer boundary.</p></article>
+</div>
+</div>
+</section>
+
+<section class="alt" id="proof">
+<div class="wrap">
+<div class="note left"><p>“Don’t take my word for it. The code, releases and a live demo are all public.”</p></div>
+<h2>Every claim has a link</h2>
+<p class="sub">The code, the release history and the reasoning behind each design choice are public. Read them, run them, or try the dashboard.</p>
+<div class="links">
+<a href="https://github.com/wycliffRotich-dev/aethergrid">Source code</a>
+<a href="https://github.com/wycliffRotich-dev/aethergrid/releases">Releases</a>
+<a href="https://github.com/wycliffRotich-dev/aethergrid/tree/main/docs/adr">Decision records</a>
+<a href="https://github.com/wycliffRotich-dev/aethergrid#readme">Run it yourself</a>
+<a href="https://aethergrid-dashboard.onrender.com">Live dashboard</a>
+</div>
+</div>
+</section>
+
+<section id="stack">
+<div class="wrap">
+<div class="note right"><p>“Proven, mainstream tools, so your team can hire for them and maintain them.”</p></div>
+<h2>Technical stack</h2>
+<div class="stack">
+<div><h3>Languages</h3><ul class="chips"><li>Python</li><li>Go</li><li>TypeScript</li><li>JavaScript</li><li>SQL</li></ul></div>
+<div><h3>Backend</h3><ul class="chips"><li>FastAPI</li><li>REST API design</li><li>Async Python</li><li>Pydantic</li><li>PostgreSQL</li><li>Node.js</li></ul></div>
+<div><h3>Distributed systems</h3><ul class="chips"><li>Scheduling</li><li>Leases</li><li>Reconciliation</li><li>Concurrency</li><li>Retries with backoff and jitter</li><li>Circuit breakers</li><li>Idempotency</li><li>Worker heartbeats</li><li>Kafka</li></ul></div>
+<div><h3>Cloud and DevOps</h3><ul class="chips"><li>AWS</li><li>ECS</li><li>Kubernetes</li><li>Terraform</li><li>Docker</li><li>GitHub Actions</li><li>CI/CD</li></ul></div>
+<div><h3>Security</h3><ul class="chips"><li>API key authentication</li><li>Scoped authorization</li><li>Tenant isolation</li><li>Container hardening</li></ul></div>
+<div><h3>Frontend</h3><ul class="chips"><li>React</li><li>TypeScript</li><li>Vite</li><li>Tailwind CSS</li><li>Playwright</li></ul></div>
+<div><h3>Design and testing</h3><ul class="chips"><li>Clean Architecture</li><li>DDD</li><li>ADRs</li><li>TDD</li><li>pytest</li><li>Contract testing</li><li>Integration testing</li><li>End-to-end testing</li></ul></div>
+</div>
+</div>
+</section>
+
+<section class="alt" id="about">
+<div class="wrap">
+<div class="note left"><p>“Eight years keeping critical systems running. I treat your uptime like my reputation.”</p></div>
+<h2>Wycliffe Kipleting Rotich</h2>
+<p class="sub">Platform engineer focused on distributed systems. Based in Nairobi, open to remote roles and available to start immediately.</p>
+<div class="stats">
+<div><b>8 years</b><span>building backend and distributed systems in production</span></div>
+<div><b>29 s to 0.124 s</b><span>worst-case latency on an unrelated endpoint during a database outage, measured on AetherGrid</span></div>
+</div>
+<p class="summary">Platform engineer with 8 years building backend and distributed systems on cloud platforms, focused on concurrency, race-condition debugging, execution ownership and failure recovery. Creator and maintainer of AetherGrid, an open-source distributed AI workload orchestrator covering scheduling, lease-based execution ownership, reconciliation, scoped API keys, hardened containers and tenant-scoped data access. Previously at Toyota and the Kenya Revenue Authority, working on systems that handle vehicle telemetry and national-scale financial data.</p>
+<h3 class="subhead">Experience</h3>
+<div class="exp">
+<article class="exp-card"><h3>Founder and Platform Engineer, AetherGrid</h3><div class="meta">Jan 2026 to present, Nairobi</div><p>Designed and built AetherGrid end to end with Python, FastAPI, PostgreSQL, React, TypeScript, Docker Compose and GitHub Actions. A best-fit scheduler across CPU, memory and VRAM, time-bound leases, and reconciliation that reclaims work from dead workers, expired leases and offline nodes. Race conditions closed by fencing on lease identity, a subprocess engine with enforced timeouts and cancellation, key authentication on every route, hardened containers, and tenant scoping where the tenant comes from the credential, never the request.</p></article>
+<article class="exp-card"><h3>LLM Technical Trainer, Mercor</h3><div class="meta">Aug 2025 to Oct 2026, remote</div><p>Evaluated LLM-generated code for correctness, architecture, concurrency and API behavior, and wrote technical feedback that improves model reasoning and code quality.</p></article>
+<article class="exp-card"><h3>AI Data Specialist, Atlas Capture</h3><div class="meta">Dec 2024 to May 2025</div><p>Annotated and reviewed video datasets for machine-learning workflows, and resolved inconsistent or ambiguous annotations in QA reviews.</p></article>
+<article class="exp-card"><h3>Software Engineer, Cloud Platforms, Toyota</h3><div class="meta">Jan 2024 to Nov 2024, Nairobi</div><p>Fixed race conditions in Kafka-based ingestion pipelines for vehicle and telematics event data, and deployed containerized workloads on Kubernetes and ECS across AWS, with infrastructure provisioned in Terraform.</p></article>
+<article class="exp-card"><h3>Backend Cloud Engineer, Kenya Revenue Authority</h3><div class="meta">Nov 2018 to Oct 2023, Nairobi</div><p>Worked on production revenue systems handling real financial data at national scale, and traced race conditions across application logic, shared state and database interactions.</p></article>
+</div>
+<h3 class="subhead">Education</h3>
+<div class="exp pair">
+<article class="exp-card"><h3>MSc Computer Science</h3><div class="meta">USIU-Africa, part-time</div><p>Jan 2022 to Dec 2024</p></article>
+<article class="exp-card"><h3>BEng Computer Software Engineering</h3><div class="meta">The Technical University of Kenya</div><p>Aug 2014 to Nov 2018</p></article>
+</div>
+</div>
+</section>
+
+<div class="band">
+<div class="wrap">
+<div class="note right"><p>“Downtime or wasted compute costing you? Let’s talk. I read every message.”</p></div>
+<h2>Need an engineer who plans for failure?</h2>
+<p>Tell me about the role or the project. I read every message.</p>
+<div class="icons"><a class="ico" href="https://www.linkedin.com/in/rotichkipleting" aria-label="LinkedIn" title="LinkedIn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg></a><a class="ico" href="https://github.com/wycliffRotich-dev" aria-label="GitHub" title="GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg></a><a class="ico" href="mailto:wycliffe@aethergrid.co.ke?subject=Opportunity%20for%20Wycliffe" aria-label="Email" title="Email"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></a><a class="ico" href="https://wa.me/254745275288" aria-label="WhatsApp" title="WhatsApp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg></a><a class="ico" href="tel:+254745275288" aria-label="Call" title="Call"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></a></div>
+</div>
+</div>
+</main>
+<footer class="wrap">AetherGrid is open source under the MIT licence. © 2026 Wycliffe Kipleting Rotich.</footer>
+
+<script>
+(()=>{
+const NS="http://www.w3.org/2000/svg",svg=document.getElementById("dc");
+const el=(t,a,p=svg)=>{const n=document.createElementNS(NS,t);for(const k in a)n.setAttribute(k,a[k]);p.appendChild(n);return n};
+el("defs",{}).innerHTML='<filter id="glow" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="1.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter><radialGradient id="floor"><stop offset="0" stop-color="#04acfc" stop-opacity=".5"/><stop offset="1" stop-color="#04acfc" stop-opacity="0"/></radialGradient><linearGradient id="sw" x1="0" x2="1"><stop offset="0" stop-color="#e8f8f8" stop-opacity="0"/><stop offset=".5" stop-color="#e8f8f8" stop-opacity=".16"/><stop offset="1" stop-color="#e8f8f8" stop-opacity="0"/></linearGradient>';
+el("ellipse",{cx:250,cy:336,rx:245,ry:12,fill:"url(#floor)"});
+el("rect",{x:16,y:10,width:468,height:3,rx:1.5,fill:"#04acfc",filter:"url(#glow)"});
+const R=5,S=9,U=[];
+for(let r=0;r<R;r++){
+const x=16+r*96;
+el("rect",{x,y:20,width:84,height:304,rx:6,fill:"#06183f",stroke:"#04acfc","stroke-opacity":".45"});
+const g=el("g",{filter:"url(#glow)"});
+for(let u=0;u<S;u++){
+const y=30+u*32,s=el("g",{class:"srv"},g);
+el("rect",{x:x+6,y,width:72,height:26,rx:3,fill:"#0b2a63",stroke:"rgba(232,248,248,.2)"},s);
+for(let v=0;v<3;v++)el("rect",{x:x+12,y:y+7+v*5,width:26,height:2,rx:1,fill:"rgba(232,248,248,.25)"},s);
+for(let l=0;l<3;l++){const c=el("circle",{cx:x+52+l*9,cy:y+13,r:2.2,class:"led"},s);c.style.animationDuration=(.7+Math.random()*1.9).toFixed(2)+"s";c.style.animationDelay=(-Math.random()*2.5).toFixed(2)+"s"}
+U.push({r,u,x,y,s,dead:false});
+}}
+el("rect",{x:0,y:18,width:70,height:308,fill:"url(#sw)",class:"sweep"});
+const job=el("rect",{width:78,height:32,rx:5,class:"jobbox"});
+const st=document.getElementById("status"),kill=document.getElementById("kill"),reset=document.getElementById("reset");
+const name=o=>"Rack "+(o.r+1)+", server "+(o.u+1);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+let cur,busy=false;
+const place=o=>{cur=o;job.classList.remove("stale");job.style.transform="translate("+(o.x+3)+"px,"+(o.y-3)+"px)"};
+const start=()=>{job.style.transition="none";place(U.find(o=>o.r===2&&o.u===3));void job.getBoundingClientRect();job.style.transition="";st.textContent=name(cur)+" holds the job and keeps renewing its lease."};
+kill.addEventListener("click",async()=>{
+if(busy)return;busy=true;kill.disabled=true;
+const old=cur;old.dead=true;old.s.classList.add("dead");job.classList.add("stale");
+for(let i=3;i>0;i--){st.textContent=name(old)+" stopped. Its lease expires in "+i+"s.";await sleep(900)}
+st.textContent="The lease expired. Reconciliation takes the job back.";await sleep(900);
+let next;for(let d=1;d<R&&!next;d++)next=U.find(o=>o.r===(old.r+d)%R&&o.u===old.u&&!o.dead);
+next=next||U.find(o=>!o.dead);
+place(next);st.textContent=name(next)+" holds the job and runs it again.";
+busy=false;kill.disabled=false;
+});
+reset.addEventListener("click",()=>{if(busy)return;U.forEach(o=>{o.dead=false;o.s.classList.remove("dead")});kill.disabled=false;start()});
+start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Why AetherGrid | AetherGrid</title>
+<meta name="description" content="Why AetherGrid: clear to operate, built to recover from failure, and open source.">
+<meta name="theme-color" content="#04244c">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Why AetherGrid | AetherGrid">
+<meta property="og:description" content="Why AetherGrid: clear to operate, built to recover from failure, and open source.">
+<meta property="og:url" content="https://wycliffrotich-dev.github.io/aethergrid/why.html">
+<meta property="og:image" content="https://wycliffrotich-dev.github.io/aethergrid/assets/logo.png">
+<link rel="canonical" href="https://wycliffrotich-dev.github.io/aethergrid/why.html">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2304244c'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23fc9c04'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css?v=14">
+</head>
+<body>
+<header><div class="wrap bar">
+<a class="brand" href="index.html" aria-label="AetherGrid home"><img src="assets/logo.png" alt="AetherGrid, open-source distributed AI orchestrator" height="56"></a>
+<nav>
+<a href="index.html">Home</a>
+<a href="why.html" aria-current="page">Why AetherGrid</a>
+<a href="how.html">How it holds up</a>
+<a href="proof.html">Source</a>
+<a href="about.html">About me</a>
+<a class="btn solid small" href="mailto:wycliffe@aethergrid.co.ke?subject=Opportunity%20for%20Wycliffe">Hire me</a>
+</nav></div></header>
+<main id="top">
+<section id="why">
+<div class="wrap">
+<h2>Why AetherGrid</h2>
+<p class="sub">AI jobs run for a long time on expensive machines, and machines fail. A job that stalls, runs twice or leaves processes behind wastes GPU hours and delays everything waiting on it. AetherGrid makes the system responsible for those failures, so nobody has to catch them by hand.</p>
+<div class="exp pair numbered">
+<article class="exp-card"><h3>Less wasted compute</h3><p>Jobs are matched to nodes on CPU, memory and VRAM together, and a job that finishes, times out or is cancelled leaves nothing running behind it.</p></article>
+<article class="exp-card"><h3>No duplicated or lost work</h3><p>Each job has one owner, enforced by a lease. If the owner disappears, the job returns to a healthy worker without a person stepping in.</p></article>
+<article class="exp-card"><h3>Clear to operate</h3><p>A dashboard shows nodes, jobs, the event history of each job and a live cluster event feed, so an operator can see what happened and why.</p></article>
+<article class="exp-card"><h3>One platform for many customers</h3><p>Tenant isolation is enforced in the application and in the database, and the tenant is taken from the credential, never from the request.</p></article>
+<article class="exp-card"><h3>Upgrades you can trust</h3><p>Each release is rehearsed against a database from the release before it, so an upgrade is something you have already watched work.</p></article>
+<article class="exp-card"><h3>Yours to run and inspect</h3><p>Open source under the MIT licence and started with Docker Compose. Every route needs an API key, and the reasoning behind each design choice is public in the decision records.</p></article>
+</div>
+</div>
+</section>
+</main>
+<footer class="wrap">AetherGrid is open source under the MIT licence. © 2026 Wycliffe Kipleting Rotich.</footer>
+</body>
+</html>
