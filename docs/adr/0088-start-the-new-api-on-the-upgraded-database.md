@@ -2,13 +2,13 @@
 
 ## Status
 
-Proposed. It becomes Accepted when the rehearsal starts the new
-release's API on the upgraded database, reads back the seeded node,
-worker and job with the key the old release issued, and fails when the
-API does not start, when a read is not a 200 and when a body carries a
-different id. The tests are written first and each fails for the right
-reason against the script on main. One real run from v0.6.0 reads all
-three back and stops the new API cleanly.
+Accepted. The rehearsal starts the new release's API on the
+upgraded database, reads back the seeded node, worker and job with the
+key the old release issued, and fails when the API does not start, when
+a read is not a 200 and when a body carries a different id. The tests
+were written first and each failed for the right reason against the
+script on main. One real run from v0.6.0 read all three back and
+stopped the new API cleanly.
 
 Related: ADR 0064, ADR 0072, ADR 0075 (condition 5), ADR 0085, ADR 0086
 and ADR 0087.
@@ -94,9 +94,19 @@ tick never runs the job. The responses of GET /nodes/{id},
 grep -c "http_get" scripts/upgrade_rehearsal.py
 ```
 
-It prints 0 while this ADR is a proposal.
+It prints a number above 0, because the rehearsal reads the new API.
 
 ## Progress
 
 2026-11-05. Written before any code. main() ends after the schema
 comparison, so the new API is never started on the upgraded database.
+
+2026-11-06. Accepted. The rehearsal starts the new release's API on
+the upgraded database, reads back the seeded node, worker and job with
+the key the old release issued, and stops the new API with the same
+stop and exit-code check as the old one (main 3ee379b). A real run from
+v0.6.0 applied migration 0005, changed nothing in 7 tables, matched the
+fresh schema (452 lines) and read all three rows back. loopback_base
+also refuses a malformed port with the same message as every other
+rejected URL, and a probe over 19968 URLs found no verdict differences
+from the check it replaced. Condition 5 of ADR 0075 is still open.
