@@ -351,6 +351,7 @@ JOB_PAYLOAD: Mapping[str, object] = {
 WORKER_MANAGED_BY = "AGENT"
 
 Post = Callable[[str, Mapping[str, object]], tuple[int, str]]
+Get = Callable[[str], tuple[int, str]]
 
 
 @dataclass(frozen=True)
@@ -416,24 +417,38 @@ def issue_key(compose: Compose) -> str:
     return parse_issued_key(result.stdout)
 
 
+def loopback_base(base_url: str) -> str:
+    """
+    The base of a URL the key may be sent to. Anything but the loopback
+    address with a port raises ValueError. It is checked on the parsed
+    URL so a userinfo trick cannot point it elsewhere, and every function
+    that sends the key uses this one check.
+    """
+    message = "the key is only sent to the loopback address"
+    try:
+        parts = urllib.parse.urlsplit(base_url)
+        port = parts.port
+    except ValueError:
+        raise ValueError(message) from None
+    if not (
+        parts.scheme == "http"
+        and port is not None
+        and parts.netloc == f"127.0.0.1:{port}"
+        and parts.path in ("", "/")
+        and not parts.query
+        and not parts.fragment
+    ):
+        raise ValueError(message)
+    return f"http://{parts.netloc}"
+
+
 def http_post(base_url: str, key: str) -> Post:
     """
     A post function for seed_cluster that sends the key as a bearer
     token. The key is only ever sent to http://127.0.0.1:<port>, checked
     on the parsed URL so a userinfo trick cannot point it elsewhere.
     """
-    parts = urllib.parse.urlsplit(base_url)
-    if not (
-        parts.scheme == "http"
-        and parts.hostname == "127.0.0.1"
-        and parts.port is not None
-        and parts.netloc == f"127.0.0.1:{parts.port}"
-        and parts.path in ("", "/")
-        and not parts.query
-        and not parts.fragment
-    ):
-        raise ValueError("the key is only sent to the loopback address")
-    base = f"http://{parts.netloc}"
+    base = loopback_base(base_url)
 
     def post(path: str, payload: Mapping[str, object]) -> tuple[int, str]:
         request = urllib.request.Request(
@@ -453,6 +468,30 @@ def http_post(base_url: str, key: str) -> Post:
                 return error.code, error.read().decode("utf-8")
 
     return post
+
+
+def http_get(base_url: str, key: str) -> Get:
+    """
+    A get function for read_back that sends the key as a bearer token,
+    only where loopback_base allows. An error status is returned with
+    its body, not raised.
+    """
+    base = loopback_base(base_url)
+
+    def get(path: str) -> tuple[int, str]:
+        request = urllib.request.Request(
+            base + path,
+            headers={"Authorization": f"Bearer {key}"},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                return int(response.status), response.read().decode("utf-8")
+        except urllib.error.HTTPError as error:
+            with error:
+                return error.code, error.read().decode("utf-8")
+
+    return get
 
 
 # Assignment saves the lease first and the worker after it. The seed is
@@ -728,6 +767,89 @@ def fresh_schema(old: Compose, new: Compose) -> str:
         ]
     )
     return schema_dump(old, FRESH_DATABASE)
+
+
+def read_back(get: Get, ids: SeedIds) -> None:
+    """
+    Read the seeded node, worker and job through the new API. Each must
+    answer 200 with its own id. Nothing about state is asserted, because
+    the new API may reclaim a lease on startup (ADR 0088). Every problem
+    is reported, and a body is never repeated, because it may hold data.
+    """
+    problems: list[str] = []
+    for path, expected in (
+        (f"/nodes/{ids.node}", ids.node),
+        (f"/workers/{ids.worker}", ids.worker),
+        (f"/jobs/{ids.job}", ids.job),
+    ):
+        status, body = get(path)
+        if status != 200:
+            problems.append(f"GET {path} returned {status}, expected 200")
+            continue
+        try:
+            found = json.loads(body)
+        except ValueError:
+            problems.append(f"GET {path} returned a body that is not JSON")
+            continue
+        if not isinstance(found, dict) or found.get("id") != expected:
+            problems.append(f"GET {path} returned a body with a different id")
+    if problems:
+        raise RuntimeError(
+            "the new API did not serve the seeded rows: "
+            + "; ".join(problems)
+        )
+
+
+NEW_API_WAIT = 90
+
+
+def start_new_api(compose: Compose) -> int:
+    """
+    Start the API of the new release alone, on the image the run already
+    built, and return its published port. The stopped container of the
+    old release is removed first, so the start can only create a
+    container from the new release's own configuration. A database that
+    is ahead of an image still starts it (ADR 0072), so a start that
+    reused the old container could pass without the new release.
+    """
+    removed = compose(["rm", "-f", "neuromesh"])
+    if removed.returncode != 0:
+        raise RuntimeError(
+            "removing the stopped API container failed with exit code "
+            f"{removed.returncode}: {removed.stderr.strip()[-500:]}"
+        )
+    started = compose(
+        [
+            "up",
+            "-d",
+            "--no-deps",
+            "--no-build",
+            "--wait",
+            "--wait-timeout",
+            str(NEW_API_WAIT),
+            "neuromesh",
+        ]
+    )
+    if started.returncode != 0:
+        raise RuntimeError(
+            "starting the new API failed with exit code "
+            f"{started.returncode}: {started.stderr.strip()[-500:]}"
+        )
+    located = compose(["port", "neuromesh", "8000"])
+    if located.returncode != 0:
+        raise RuntimeError(
+            "finding the port of the new API failed with exit code "
+            f"{located.returncode}: {located.stderr.strip()[-500:]}"
+        )
+    return parse_published_port(located.stdout)
+
+
+def stop_new_api(
+    compose: Compose,
+    inspect: Callable[[str], str],
+) -> None:
+    """Stop the API of the new release and check how it ended."""
+    stop_old_api(compose, inspect)
 
 
 def docker_inspect(container_id: str) -> str:
@@ -1111,6 +1233,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         lines = len(schema_lines(upgraded))
         print(f"the upgraded schema matches a fresh one ({lines} lines)")
+
+        def new_api_compose(
+            arguments: Sequence[str],
+        ) -> subprocess.CompletedProcess[str]:
+            return environment.compose("new", *arguments, check=False)
+
+        stage("starting the new API on the upgraded database")
+        new_api_port = start_new_api(new_api_compose)
+        stage("reading back the seeded rows through the new API")
+        read_back(http_get(f"http://127.0.0.1:{new_api_port}", key), ids)
+        print("the new API served the seeded node, worker and job")
+        stage("stopping the new API")
+        stop_new_api(new_api_compose, docker_inspect)
     return 0
 
 

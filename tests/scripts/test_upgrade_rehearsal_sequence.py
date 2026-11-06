@@ -77,6 +77,9 @@ def wire(
         "applied_migrations": lambda compose: next(reads),
         "fresh_schema": lambda old, new: SCHEMA,
         "schema_dump": lambda compose, database: SCHEMA,
+        "start_new_api": lambda compose: 49153,
+        "read_back": lambda get, ids: None,
+        "stop_new_api": lambda compose, inspect: None,
     }
     for name, fake in patches.items():
         monkeypatch.setattr(upgrade_rehearsal, name, fake)
@@ -113,6 +116,9 @@ def test_the_old_side_is_brought_to_rest_before_it_is_exported(
         "stage: building a fresh database with the new migrations",
         "stage: dumping the schema of the upgraded database",
         "stage: comparing the two schemas",
+        "stage: starting the new API on the upgraded database",
+        "stage: reading back the seeded rows through the new API",
+        "stage: stopping the new API",
     ]
 
 
