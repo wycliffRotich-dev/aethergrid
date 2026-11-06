@@ -222,3 +222,14 @@ slide is still to be updated, as the list above says.
 
 AetherGrid on main is multi-tenant as this ADR defines it. The paragraph
 above says what that does not cover.
+
+2026-11-06. ADR 0075 is Accepted. Two sentences of the Not claimed
+paragraph above no longer hold: that no release carries migration 0005,
+and that ADR 0075 stays Proposed. v0.7.0 is the first release that
+carries 0005, and the upgrade rehearsal ran on its release commit
+against a database upgraded from v0.6.0. A database that is still on
+v0.6.0 can hold a worker or a lease with no tenant until it is upgraded,
+and migration 0005 stops with a count if it finds one. The rest of that
+paragraph is unchanged: the SQLite backends keep workers and leases in
+memory, the composite keys of point 7 exist on Postgres only, and the
+boundary does not defend against compromised database credentials.

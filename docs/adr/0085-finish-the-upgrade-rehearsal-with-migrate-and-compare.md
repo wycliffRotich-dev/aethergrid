@@ -141,3 +141,10 @@ after the migrate run and prints each version the upgrade added, and a
 real run from v0.6.0 printed 0005. The follow-up about the constraint
 changes, which a table export cannot show, is done in ADR 0087. That the new API starts and
 serves the migrated data is done in ADR 0088.
+
+2026-11-06. ADR 0075 is Accepted. The sentence in the Context that says
+it stays Proposed was true when written. v0.7.0 is an annotated tag on
+aa4eaca, and this rehearsal ran on that commit with v0.6.0 as the old
+release: migration 0005 applied, the 7 exported tables were unchanged,
+the upgraded schema matched a fresh one (452 lines), and the new API
+served the seeded node, worker and job.
