@@ -71,7 +71,7 @@ jobs:
           gistID: 4b35dff5cea5aa68433713c36c3108bb
           filename: aethergrid-test-badge.json
           label: tests
-          message: ${{ steps.pytest.outputs.count }} passed
+          message: ${{ steps.pytest.outputs.count }} passing
           color: brightgreen
       - name: Lint with ruff
         run: ruff check .
