@@ -174,3 +174,8 @@ footer.wrap{text-align:center;padding-top:20px;padding-bottom:20px}
 #how .form-title{text-align:center;margin-left:auto;margin-right:auto;width:100%;max-width:none}
 #how>.wrap>.sub{text-align:center;margin-left:auto;margin-right:auto}
 #how>.wrap>.cta{justify-content:center}
+
+/* about-proof */
+#about .form-title,#proof .form-title{text-align:center;margin-left:auto;margin-right:auto;width:100%;max-width:none}
+#about>.wrap>.sub,#proof>.wrap>.sub{text-align:center;margin-left:auto;margin-right:auto}
+.card-btn-row{display:flex;justify-content:center;margin:16px 0 0}
