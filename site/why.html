@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Why AetherGrid | AetherGrid</title>
+<title>Why AetherGrid | Reliable AI compute</title>
 <meta name="description" content="Why AetherGrid: clear to operate, built to recover from failure, and open source.">
 <meta name="theme-color" content="#04244c">
 <meta property="og:type" content="website">
@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/site.css?v=14">
+<link rel="stylesheet" href="assets/site.css?v=29">
 </head>
 <body>
 <header><div class="wrap bar">
@@ -25,25 +25,58 @@
 <a href="index.html">Home</a>
 <a href="why.html" aria-current="page">Why AetherGrid</a>
 <a href="how.html">How it holds up</a>
+<a href="architecture.html">Architecture</a>
+<a href="security.html">Security</a>
 <a href="proof.html">Source</a>
-<a href="about.html">About me</a>
-<a class="btn solid small" href="mailto:wycliffe@aethergrid.co.ke?subject=Opportunity%20for%20Wycliffe">Hire me</a>
+<a href="about.html">About</a>
+<a class="btn solid small" href="mailto:wycliffe@aethergrid.co.ke?subject=Technical%20consultation&body=Name%3A%0ACompany%3A%0AWork%20email%3A%0AMessage%3A%0A">Book a consultation</a>
 </nav></div></header>
 <main id="top">
 <section id="why">
 <div class="wrap">
-<h2>Why AetherGrid</h2>
-<p class="sub">AI jobs run for a long time on expensive machines, and machines fail. A job that stalls, runs twice or leaves processes behind wastes GPU hours and delays everything waiting on it. AetherGrid makes the system responsible for those failures, so nobody has to catch them by hand.</p>
+<h1 class="form-title">AI workloads that finish, even when machines don’t.</h1>
+<p class="sub">AI jobs run for a long time on expensive machines, and machines fail. AetherGrid makes the system responsible for those failures, so your team spends its time on the work and not on rescuing it.</p>
+<div class="cta">
+<a class="btn" href="https://aethergrid-dashboard.onrender.com">See it running</a>
+</div>
 <div class="exp pair numbered">
-<article class="exp-card"><h3>Less wasted compute</h3><p>Jobs are matched to nodes on CPU, memory and VRAM together, and a job that finishes, times out or is cancelled leaves nothing running behind it.</p></article>
-<article class="exp-card"><h3>No duplicated or lost work</h3><p>Each job has one owner, enforced by a lease. If the owner disappears, the job returns to a healthy worker without a person stepping in.</p></article>
-<article class="exp-card"><h3>Clear to operate</h3><p>A dashboard shows nodes, jobs, the event history of each job and a live cluster event feed, so an operator can see what happened and why.</p></article>
-<article class="exp-card"><h3>One platform for many customers</h3><p>Tenant isolation is enforced in the application and in the database, and the tenant is taken from the credential, never from the request.</p></article>
-<article class="exp-card"><h3>Upgrades you can trust</h3><p>Each release is rehearsed against a database from the release before it, so an upgrade is something you have already watched work.</p></article>
-<article class="exp-card"><h3>Yours to run and inspect</h3><p>Open source under the MIT licence and started with Docker Compose. Every route needs an API key, and the reasoning behind each design choice is public in the decision records.</p></article>
+<article class="exp-card"><h3>Pay for compute that is working, not waiting</h3><p>Jobs are matched to nodes on CPU, memory and VRAM together, and when a job finishes, times out, is cancelled or loses its owner, its command is stopped along with anything it left running.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0043-multi-dimensional-best-fit-scheduling.md">Best-fit scheduling (ADR 0043)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0079-kill-what-a-job-command-leaves-running.md">Kill leftovers (ADR 0079)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0083-end-a-job-when-its-supervisor-ends.md">Supervisor ends (ADR 0083)</a></div></article>
+<article class="exp-card"><h3>Sleep through the night when a machine fails</h3><p>Every job has one owner, held through a renewable lease. If the owner disappears, reconciliation returns the job to a healthy worker and a stale worker cannot overwrite the result. Nobody has to be paged for the routine case.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0005-worker-job-lease-ownership.md">Lease ownership (ADR 0005)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0036-fence-outcome-reports-by-lease-identity-for-agents.md">Fenced outcomes (ADR 0036)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0007-reconciliation-loop.md">Reconciliation (ADR 0007)</a></div></article>
+<article class="exp-card"><h3>Answer “what happened?” in seconds</h3><p>A dashboard shows nodes, jobs, each job’s event history and a live cluster feed. Requests and background loops write structured logs and errors are tracked, so your operators see what happened and why.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0008-event-repository-persistence.md">Event history (ADR 0008)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0022-structured-request-and-background-loop-logging.md">Structured logs (ADR 0022)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0023-in-process-error-tracking.md">Error tracking (ADR 0023)</a></div></article>
+<article class="exp-card"><h3>One platform, many customers, no shared data</h3><p>Tenant isolation is enforced in the application and in the database, and the tenant comes from the credential, never from the request. Teams and customers share the cluster and never see each other.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0064-isolate-resources-by-tenant.md">Isolate by tenant (ADR 0064)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0068-give-jobs-a-tenant-and-scope-job-reads.md">Tenant-scoped jobs (ADR 0068)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0074-give-events-a-tenant-and-scope-the-event-feed.md">Tenant-scoped events (ADR 0074)</a></div></article>
+<article class="exp-card"><h3>Upgrade with confidence</h3><p>Schema changes ship as versioned migrations. Each release is rehearsed against a database from the release before it, so an upgrade is something you have already watched work.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0071-apply-schema-changes-with-versioned-migrations.md">Versioned migrations (ADR 0071)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0085-finish-the-upgrade-rehearsal-with-migrate-and-compare.md">Upgrade rehearsal (ADR 0085)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0087-compare-the-upgraded-schema-with-a-fresh-one.md">Schema comparison (ADR 0087)</a></div></article>
+<article class="exp-card"><h3>Verify everything yourself</h3><p>Open source under the MIT licence and started with Docker Compose. Every route needs an API key, the architecture layers are enforced by a test, and the reasoning behind each design choice is public.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0054-scope-api-keys-and-require-jobs-execute-to-set-job-command.md">Scoped API keys (ADR 0054)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0058-harden-container-defaults-and-keep-credentials-out-of-the-repo.md">Hardened containers (ADR 0058)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0082-enforce-the-layer-dependencies-with-a-test.md">Layers enforced (ADR 0082)</a></div></article>
 </div>
 </div>
 </section>
+<section class="alt" id="audience">
+<div class="wrap">
+<h2>Built for teams like yours</h2>
+<div class="exp">
+<article class="exp-card"><h3>AI platform teams</h3><p>You run training or inference jobs on shared GPU capacity and want failures handled by the system, not by whoever is on call.</p></article>
+<article class="exp-card"><h3>Teams sharing a cluster</h3><p>Several teams or customers submit work to the same machines, and each needs its own clear boundary.</p></article>
+<article class="exp-card"><h3>Organisations that must explain their systems</h3><p>Your reviewers want to see how ownership, recovery and access control work, with the decisions written down and the code open.</p></article>
+</div>
+</div>
+</section>
+<section id="consultation">
+<div class="wrap">
+<h2>What a technical consultation gives you</h2>
+<p class="sub">A focused conversation about your infrastructure, with a clear outcome.</p>
+<div class="exp numbered">
+<article class="exp-card"><h3>A clear picture</h3><p>We walk through your workloads and identify where work can be lost, duplicated or left running.</p></article>
+<article class="exp-card"><h3>A live look</h3><p>You see AetherGrid recover from a failed worker, so the behaviour is something you have watched, not read about.</p></article>
+<article class="exp-card"><h3>A written scope</h3><p>You leave with a summary of what we found and the next steps, whether that is a review, a design or a pilot.</p></article>
+</div>
+</div>
+</section>
+<div class="band">
+<div class="wrap">
+<h2>See how it fits your workloads</h2>
+<p>Tell me where your AI jobs are fragile and we will map the way forward.</p>
+<a class="btn solid" href="mailto:wycliffe@aethergrid.co.ke?subject=Technical%20consultation&body=Name%3A%0ACompany%3A%0AWork%20email%3A%0AMessage%3A%0A">Book a technical consultation</a>
+</div>
+</div>
 </main>
 <footer class="wrap">AetherGrid is open source under the MIT licence. © 2026 Wycliffe Kipleting Rotich.</footer>
 </body>

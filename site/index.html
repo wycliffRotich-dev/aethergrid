@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/site.css?v=14">
+<link rel="stylesheet" href="assets/site.css?v=29">
 </head>
 <body>
 <header><div class="wrap bar">
@@ -25,15 +25,17 @@
 <a href="index.html" aria-current="page">Home</a>
 <a href="why.html">Why AetherGrid</a>
 <a href="how.html">How it holds up</a>
+<a href="architecture.html">Architecture</a>
+<a href="security.html">Security</a>
 <a href="proof.html">Source</a>
-<a href="about.html">About me</a>
-<a class="btn solid small" href="mailto:wycliffe@aethergrid.co.ke?subject=Opportunity%20for%20Wycliffe">Hire me</a>
+<a href="about.html">About</a>
+<a class="btn solid small" href="mailto:wycliffe@aethergrid.co.ke?subject=Technical%20consultation&body=Name%3A%0ACompany%3A%0AWork%20email%3A%0AMessage%3A%0A">Book a consultation</a>
 </nav></div></header>
 <main id="top">
 <div class="wrap hero">
 <div class="intro">
-<h1>I build systems that keep running when machines fail.</h1>
-<p class="lede">Platform engineer with 8 years in distributed systems. I built AetherGrid, an open-source orchestrator that notices a dead worker and hands its job to a healthy node.</p>
+<h1>Reliable AI compute, engineered for the day a machine fails.</h1>
+<p class="lede">AetherGrid is an open-source control plane that detects failed workers and recovers their work safely. I help teams building AI infrastructure apply the same discipline.</p>
 </div>
 <div class="showcase">
 <div class="photo-wrap"><img class="hero-photo" src="assets/datacenter.webp" width="690" height="529" alt="A data center aisle between two rows of server racks lit in blue" decoding="async"><a class="btn small photo-cta" href="https://aethergrid-dashboard.onrender.com">Open the live dashboard</a></div>
@@ -48,13 +50,29 @@
 </div>
 </div>
 <div class="cta">
+<a class="btn" href="https://aethergrid-dashboard.onrender.com">See it running</a>
 </div>
 </div>
 
-<div class="wrap note-row"><div class="note left"><p>“Every hour an AI job stalls, you pay for machines that do nothing. I built AetherGrid to stop that.”</p></div></div>
+<section id="problems">
+<div class="wrap">
+<h2>The problems your team stops having</h2>
+<p class="sub">AI workloads run for a long time on expensive machines, and machines fail. AetherGrid is built so that the failures your team would otherwise catch by hand are handled by the system.</p>
+<div class="exp pair numbered">
+<article class="exp-card"><h3>A machine dies mid-job and the work just sits there.</h3><p>Every job is held through a renewable lease. When the owner stops renewing, reconciliation detects it and returns the job to a healthy worker, with no one stepping in.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0005-worker-job-lease-ownership.md">Lease ownership (ADR 0005)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0014-continuous-lease-renewal.md">Continuous renewal (ADR 0014)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0007-reconciliation-loop.md">Reconciliation (ADR 0007)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0011-job-reclaim-and-reconciliation-repair.md">Reclaim and repair (ADR 0011)</a></div></article>
+<article class="exp-card"><h3>The same job runs twice, or a late result overwrites a good one.</h3><p>Each job has one owner at a time. Lease renewal, release and outcome reports are fenced by lease identity, so a stale worker cannot overwrite the current owner.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0034-fence-lease-release-by-lease-identity.md">Fenced release (ADR 0034)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0036-fence-outcome-reports-by-lease-identity-for-agents.md">Fenced outcomes (ADR 0036)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0038-fence-lease-renewal-by-lease-identity.md">Fenced renewal (ADR 0038)</a></div></article>
+<article class="exp-card"><h3>GPU hours burn on work that nobody needs any more.</h3><p>When a job finishes, times out, is cancelled or loses its owner, its command is stopped along with anything it left running.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0079-kill-what-a-job-command-leaves-running.md">Kill leftovers (ADR 0079)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0080-stop-a-jobs-processes-when-their-owner-dies.md">Owner dies (ADR 0080)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0083-end-a-job-when-its-supervisor-ends.md">Supervisor ends (ADR 0083)</a></div></article>
+<article class="exp-card"><h3>Jobs land on machines that cannot run them well.</h3><p>Scheduling matches each job to a node on CPU, memory and VRAM together, and a job stays on its own tenant’s nodes. The scheduling policy lives in the domain, where it is easy to read and test.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0043-multi-dimensional-best-fit-scheduling.md">Best-fit scheduling (ADR 0043)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0018-domain-owns-scheduling-policy.md">Domain owns scheduling (ADR 0018)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0069-keep-a-job-on-its-own-tenants-nodes.md">Jobs stay on own nodes (ADR 0069)</a></div></article>
+<article class="exp-card"><h3>Several teams or customers share one cluster, and their data must stay apart.</h3><p>Tenant isolation is enforced in the application and in the database, and the tenant comes from the credential, never from the request.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0064-isolate-resources-by-tenant.md">Isolate by tenant (ADR 0064)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0068-give-jobs-a-tenant-and-scope-job-reads.md">Tenant-scoped jobs (ADR 0068)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0074-give-events-a-tenant-and-scope-the-event-feed.md">Tenant-scoped events (ADR 0074)</a></div></article>
+<article class="exp-card"><h3>Upgrades feel risky on a system that has to stay up.</h3><p>Schema changes ship as versioned migrations. Each release is rehearsed against a database from the release before it, and the upgraded schema is compared with a fresh one.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0071-apply-schema-changes-with-versioned-migrations.md">Versioned migrations (ADR 0071)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0085-finish-the-upgrade-rehearsal-with-migrate-and-compare.md">Upgrade rehearsal (ADR 0085)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0087-compare-the-upgraded-schema-with-a-fresh-one.md">Schema comparison (ADR 0087)</a></div></article>
+<article class="exp-card"><h3>When something goes wrong, nobody can say what happened.</h3><p>Every job keeps its event history, requests and background loops write structured logs, and errors are tracked, so an operator can see what happened and why.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0008-event-repository-persistence.md">Event history (ADR 0008)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0022-structured-request-and-background-loop-logging.md">Structured logs (ADR 0022)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0023-in-process-error-tracking.md">Error tracking (ADR 0023)</a></div></article>
+<article class="exp-card"><h3>A job cannot start, or runs forever, and nobody finds out.</h3><p>A job whose command cannot start fails with a clear outcome. Each job carries its execution timeout, and a running job can be cancelled.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0081-fail-a-job-whose-command-cannot-start.md">Cannot start (ADR 0081)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0070-persist-a-jobs-execution-timeout.md">Execution timeout (ADR 0070)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0029-cancel-running-job-via-lease-renewal.md">Cancel running job (ADR 0029)</a></div></article>
+</div>
+</div>
+</section>
+
 <section id="why">
 <div class="wrap">
-<div class="note right"><p>“One failed job used to mean a missed deadline and a wasted bill. Now the system handles it.”</p></div>
 <h2>Why AetherGrid</h2>
 <p class="sub">AI jobs run for a long time on expensive machines, and machines fail. A job that stalls, runs twice or leaves processes behind wastes GPU hours and delays everything waiting on it. AetherGrid makes the system responsible for those failures, so nobody has to catch them by hand.</p>
 <div class="exp pair numbered">
@@ -70,7 +88,6 @@
 
 <section class="alt" id="how">
 <div class="wrap">
-<div class="note left"><p>“Machines break every week. With AetherGrid, your customers never find out.”</p></div>
 <h2>Built for the day something breaks</h2>
 <p class="sub">Machines fail, processes linger and releases get rolled out. AetherGrid is designed around those moments.</p>
 <div class="exp pair numbered">
@@ -86,7 +103,6 @@
 
 <section id="power">
 <div class="wrap">
-<div class="note right"><p>“Not technical? Skip ahead. This is the engineering that stops small failures becoming outages.”</p></div>
 <h2>Technical depth</h2>
 <p class="sub">The guarantees above rest on specific engineering decisions. Each one is written down in a decision record with the reason it was made.</p>
 <div class="exp pair numbered">
@@ -100,9 +116,20 @@
 </div>
 </section>
 
+<section id="engagements">
+<div class="wrap">
+<h2>Engagements</h2>
+<p class="sub">Three ways to work together. Each one starts with a technical consultation and a written scope.</p>
+<div class="exp numbered">
+<article class="exp-card"><h3>Reliability review</h3><p>A focused look at where your AI workloads can be lost, duplicated or stranded, with clear recommendations your team can act on.</p></article>
+<article class="exp-card"><h3>Architecture design</h3><p>Execution ownership, recovery and observability designed for your distributed compute, with the reasoning written down.</p></article>
+<article class="exp-card"><h3>Pilot deployment</h3><p>AetherGrid running against your workloads, with a defined scope, so you see the results on your own infrastructure.</p></article>
+</div>
+</div>
+</section>
+
 <section class="alt" id="proof">
 <div class="wrap">
-<div class="note left"><p>“Don’t take my word for it. The code, releases and a live demo are all public.”</p></div>
 <h2>Every claim has a link</h2>
 <p class="sub">The code, the release history and the reasoning behind each design choice are public. Read them, run them, or try the dashboard.</p>
 <div class="links">
@@ -117,7 +144,6 @@
 
 <section id="stack">
 <div class="wrap">
-<div class="note right"><p>“Proven, mainstream tools, so your team can hire for them and maintain them.”</p></div>
 <h2>Technical stack</h2>
 <div class="stack">
 <div><h3>Languages</h3><ul class="chips"><li>Python</li><li>Go</li><li>TypeScript</li><li>JavaScript</li><li>SQL</li></ul></div>
@@ -133,7 +159,6 @@
 
 <section class="alt" id="about">
 <div class="wrap">
-<div class="note left"><p>“Eight years keeping critical systems running. I treat your uptime like my reputation.”</p></div>
 <h2>Wycliffe Kipleting Rotich</h2>
 <p class="sub">Platform engineer focused on distributed systems. Based in Nairobi, open to remote roles and available to start immediately.</p>
 <div class="stats">
@@ -157,12 +182,30 @@
 </div>
 </section>
 
+<section class="alt" id="faq">
+<div class="wrap">
+<h2>Frequently asked questions</h2>
+<div class="faq">
+<details><summary>What is AetherGrid?</summary><p>An open-source control plane that keeps AI workloads running when machines fail. It schedules jobs, gives each one a clear owner and recovers work automatically.</p></details>
+<details><summary>What happens when a machine fails mid-job?</summary><p>The system notices and recovers. Every job is owned through a renewable lease, and when a worker stops renewing it, reconciliation returns the job to a healthy worker. Nobody has to be paged for the routine case.</p></details>
+<details><summary>How do you prevent duplicated work?</summary><p>Ownership is explicit. Each job has one authorized owner at a time, and recovery is designed so a reclaimed job is not left with two owners.</p></details>
+<details><summary>Can we see it working before we commit?</summary><p>Yes. A live dashboard is available today and the full source is public. A scoped pilot lets you see it on your own workloads.</p></details>
+<details><summary>Can we inspect the design and the code?</summary><p>Completely. The source, releases and written architecture decisions are open, so your engineers can verify every claim for themselves.</p></details>
+<details><summary>How is access controlled between teams?</summary><p>Scoped API keys and tenant isolation keep each team’s jobs, nodes and workers separate.</p></details>
+<details><summary>Will it fit our existing stack?</summary><p>Yes. AetherGrid focuses on execution ownership and recovery, so it is designed to work alongside tools like Kubernetes, Ray and Temporal rather than replace them.</p></details>
+<details><summary>What does an engagement look like?</summary><p>Three clear options: a reliability review, an architecture design or a scoped pilot. Each starts with a technical consultation and ends with a written scope.</p></details>
+<details><summary>Who is behind it?</summary><p>Wycliffe Kipleting Rotich, a platform engineer in Nairobi who built AetherGrid and has worked on production systems at Toyota and the Kenya Revenue Authority. Available for remote engagements.</p></details>
+<details><summary>How do we start?</summary><p>Book a technical consultation. You leave with a clear summary of scope and next steps.</p></details>
+</div>
+</div>
+</section>
+
 <div class="band">
 <div class="wrap">
-<div class="note right"><p>“Downtime or wasted compute costing you? Let’s talk. I read every message.”</p></div>
-<h2>Need an engineer who plans for failure?</h2>
-<p>Tell me about the role or the project. I read every message.</p>
-<div class="icons"><a class="ico" href="https://www.linkedin.com/in/rotichkipleting" aria-label="LinkedIn" title="LinkedIn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg></a><a class="ico" href="https://github.com/wycliffRotich-dev" aria-label="GitHub" title="GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg></a><a class="ico" href="mailto:wycliffe@aethergrid.co.ke?subject=Opportunity%20for%20Wycliffe" aria-label="Email" title="Email"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></a><a class="ico" href="https://wa.me/254745275288" aria-label="WhatsApp" title="WhatsApp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg></a><a class="ico" href="tel:+254745275288" aria-label="Call" title="Call"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></a></div>
+<h2>Planning AI infrastructure that has to keep running?</h2>
+<p>Tell me about your workloads and where they are fragile. I read every message.</p>
+<a class="btn solid" href="mailto:wycliffe@aethergrid.co.ke?subject=Technical%20consultation&body=Name%3A%0ACompany%3A%0AWork%20email%3A%0AMessage%3A%0A">Book a technical consultation</a>
+<div class="icons"><a class="ico" href="https://www.linkedin.com/in/rotichkipleting" aria-label="LinkedIn" title="LinkedIn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg></a><a class="ico" href="https://github.com/wycliffRotich-dev" aria-label="GitHub" title="GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg></a><a class="ico" href="mailto:wycliffe@aethergrid.co.ke?subject=Technical%20consultation&body=Name%3A%0ACompany%3A%0AWork%20email%3A%0AMessage%3A%0A" aria-label="Email" title="Email"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></a><a class="ico" href="https://wa.me/254745275288" aria-label="WhatsApp" title="WhatsApp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg></a><a class="ico" href="tel:+254745275288" aria-label="Call" title="Call"><svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></a></div>
 </div>
 </div>
 </main>

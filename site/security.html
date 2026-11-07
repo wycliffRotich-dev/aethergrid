@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security | AetherGrid</title>
+<meta name="description" content="AetherGrid gives every AI job one owner at a time, notices when that owner disappears, and hands the work to a healthy node. Built by Wycliffe Kipleting Rotich.">
+<meta name="theme-color" content="#04244c">
+<meta property="og:type" content="website">
+<meta property="og:title" content="AetherGrid: when a worker dies, the work moves on">
+<meta property="og:description" content="Open-source orchestration for AI workloads, with leases, reconciliation and tenant isolation.">
+<meta property="og:url" content="https://wycliffrotich-dev.github.io/aethergrid/">
+<meta property="og:image" content="https://wycliffrotich-dev.github.io/aethergrid/assets/logo.png">
+<link rel="canonical" href="https://wycliffrotich-dev.github.io/aethergrid/">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2304244c'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23fc9c04'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css?v=29">
+</head>
+<body>
+<header><div class="wrap bar">
+<a class="brand" href="#top" aria-label="AetherGrid home"><img src="assets/logo.png" alt="AetherGrid, open-source distributed AI orchestrator" height="56"></a>
+<nav>
+<a href="index.html">Home</a>
+<a href="why.html">Why AetherGrid</a>
+<a href="how.html">How it holds up</a>
+<a href="architecture.html">Architecture</a>
+<a href="security.html" aria-current="page">Security</a>
+<a href="proof.html">Source</a>
+<a href="about.html">About</a>
+<a class="btn solid small" href="mailto:wycliffe@aethergrid.co.ke?subject=Technical%20consultation&body=Name%3A%0ACompany%3A%0AWork%20email%3A%0AMessage%3A%0A">Book a consultation</a>
+</nav></div></header>
+<main id="top">
+<section>
+<div class="wrap">
+<h1 class="form-title">Security, designed in</h1>
+<p class="sub">Security in AetherGrid is part of the design. Each control below is documented in a public decision record, and the source is open, so your engineers can verify every one of them.</p>
+<div class="exp pair numbered">
+<article class="exp-card"><h3>Access control</h3><p>Every route requires an API key. Keys are scoped, so a key can do only what it was issued to do, and issuance and revocation are controlled by scope and by ownership. Each agent in a fleet uses its own key, and every key is rate limited. Interactive API docs are served only when you enable them.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0054-scope-api-keys-and-require-jobs-execute-to-set-job-command.md">Scoped keys (ADR 0054)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0056-scope-api-key-revocation-by-ownership.md">Revocation by ownership (ADR 0056)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0021-per-api-key-rate-limiting.md">Rate limiting (ADR 0021)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0077-serve-the-api-docs-only-when-enabled.md">API docs on demand (ADR 0077)</a></div></article>
+<article class="exp-card"><h3>Tenant isolation</h3><p>Customers share the platform and never share data. Isolation is enforced in the application and in the database, and the tenant comes from the credential, never from the request. It covers API keys, nodes, jobs, workers, leases and events.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0064-isolate-resources-by-tenant.md">Isolate by tenant (ADR 0064)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0068-give-jobs-a-tenant-and-scope-job-reads.md">Tenant-scoped jobs (ADR 0068)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0074-give-events-a-tenant-and-scope-the-event-feed.md">Tenant-scoped events (ADR 0074)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0075-give-workers-and-leases-a-tenant.md">Tenant-scoped workers and leases (ADR 0075)</a></div></article>
+<article class="exp-card"><h3>Execution ownership</h3><p>Each job has one owner, held through a renewable lease. Lease release, renewal and outcome reports are fenced by lease identity, and reconciliation re-checks the lease at the moment it acts, so a stale worker cannot overwrite the current owner.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0034-fence-lease-release-by-lease-identity.md">Fenced release (ADR 0034)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0036-fence-outcome-reports-by-lease-identity-for-agents.md">Fenced outcome reports (ADR 0036)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0038-fence-lease-renewal-by-lease-identity.md">Fenced renewal (ADR 0038)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0052-fence-reconciliation-lease-delete-by-expiry-at-delete-time.md">Fenced reconciliation (ADR 0052)</a></div></article>
+<article class="exp-card"><h3>Hardened containers</h3><p>The application container runs read-only with no added capabilities. Credentials stay out of the repository, the hardening checks run in CI, and they are proven able to fail, so a regression is caught before release.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0058-harden-container-defaults-and-keep-credentials-out-of-the-repo.md">Hardened defaults (ADR 0058)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0059-run-the-app-container-read-only-with-no-capabilities.md">Read-only, no capabilities (ADR 0059)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0060-enforce-container-hardening-in-ci-and-keep-pins-fresh.md">Enforced in CI (ADR 0060)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0061-prove-the-hardening-checks-can-fail.md">Checks proven to fail (ADR 0061)</a></div></article>
+<article class="exp-card"><h3>Upgrades you can rehearse</h3><p>Schema changes ship as versioned migrations, and the application checks the schema version when it starts. Each release is rehearsed against a database from the previous release, and the upgraded schema is compared with a fresh one.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0071-apply-schema-changes-with-versioned-migrations.md">Versioned migrations (ADR 0071)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0072-check-the-schema-version-when-the-application-starts.md">Startup schema check (ADR 0072)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0085-finish-the-upgrade-rehearsal-with-migrate-and-compare.md">Upgrade rehearsal (ADR 0085)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0087-compare-the-upgraded-schema-with-a-fresh-one.md">Schema comparison (ADR 0087)</a></div></article>
+<article class="exp-card"><h3>Observability and audit trail</h3><p>Every job keeps its event history. Requests and background loops write structured logs, errors are tracked, and liveness is separate from readiness, so operators can see what happened and why.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0008-event-repository-persistence.md">Event history (ADR 0008)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0022-structured-request-and-background-loop-logging.md">Structured logs (ADR 0022)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0023-in-process-error-tracking.md">Error tracking (ADR 0023)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0050-split-liveness-from-readiness-and-move-reconciliation-off-the-event-loop.md">Liveness and readiness (ADR 0050)</a></div></article>
+</div>
+<div class="policy-row"><a class="policy-btn" href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/SECURITY.md">Read the security policy (SECURITY.md)</a></div>
+</div>
+</section>
+<div class="band">
+<div class="wrap">
+<h2>Want your security team to review it?</h2>
+<p>Book a technical consultation and bring your reviewers.</p>
+<a class="btn solid" href="mailto:wycliffe@aethergrid.co.ke?subject=Technical%20consultation&body=Name%3A%0ACompany%3A%0AWork%20email%3A%0AMessage%3A%0A">Book a technical consultation</a>
+</div>
+</div>
+</main>
+<footer class="wrap">AetherGrid is open source under the MIT licence. © 2026 Wycliffe Kipleting Rotich.</footer>
+</body>
+</html>

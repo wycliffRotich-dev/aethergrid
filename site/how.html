@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/site.css?v=14">
+<link rel="stylesheet" href="assets/site.css?v=29">
 </head>
 <body>
 <header><div class="wrap bar">
@@ -25,25 +25,47 @@
 <a href="index.html">Home</a>
 <a href="why.html">Why AetherGrid</a>
 <a href="how.html" aria-current="page">How it holds up</a>
+<a href="architecture.html">Architecture</a>
+<a href="security.html">Security</a>
 <a href="proof.html">Source</a>
-<a href="about.html">About me</a>
-<a class="btn solid small" href="mailto:wycliffe@aethergrid.co.ke?subject=Opportunity%20for%20Wycliffe">Hire me</a>
+<a href="about.html">About</a>
+<a class="btn solid small" href="mailto:wycliffe@aethergrid.co.ke?subject=Technical%20consultation&body=Name%3A%0ACompany%3A%0AWork%20email%3A%0AMessage%3A%0A">Book a consultation</a>
 </nav></div></header>
 <main id="top">
 <section class="alt" id="how">
 <div class="wrap">
-<h2>Built for the day something breaks</h2>
-<p class="sub">Machines fail, processes linger and releases get rolled out. AetherGrid is designed around those moments.</p>
+<h1 class="form-title">Built for the day something breaks</h1>
+<p class="sub">Machines fail, processes linger and releases get rolled out. AetherGrid is designed around those moments, so each one ends with your work still running.</p>
+<div class="cta">
+<a class="btn" href="https://aethergrid-dashboard.onrender.com">See it running</a>
+</div>
 <div class="exp pair numbered">
-<article class="exp-card"><h3>A worker disappears</h3><p>Its lease runs out, reconciliation finds the abandoned job, and the job goes back to a healthy worker.</p></article>
-<article class="exp-card"><h3>Two workers want the same job</h3><p>Only the worker holding the lease may act on it, and a worker that loses its lease stops acting as the owner.</p></article>
-<article class="exp-card"><h3>A job leaves processes behind</h3><p>When a job ends, times out or is cancelled, its whole process tree is stopped, not only the first process.</p></article>
-<article class="exp-card"><h3>The scheduler runs in two places</h3><p>The cluster tick runs in one process at a time, so two schedulers never place the same work.</p></article>
-<article class="exp-card"><h3>Customers share one database</h3><p>Tenant isolation is enforced in the application and in the database, so a worker, a job or a lease cannot be tied to another tenant’s records.</p></article>
-<article class="exp-card"><h3>You upgrade to a new release</h3><p>Each release is rehearsed on a database from the one before it: migrate, compare every table and the schema, then start the new API and read the data back.</p></article>
+<article class="exp-card"><h3>A worker disappears</h3><p>Its lease runs out, reconciliation finds the abandoned job, and the job goes back to a healthy worker. Your work keeps moving and nobody has to step in.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0007-reconciliation-loop.md">Reconciliation (ADR 0007)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0011-job-reclaim-and-reconciliation-repair.md">Reclaim and repair (ADR 0011)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0039-fully-reclaim-abandoned-job-on-worker-reregistration.md">Full reclaim on return (ADR 0039)</a></div></article>
+<article class="exp-card"><h3>Two workers want the same job</h3><p>Only the worker holding the lease may act on it, and a worker that loses its lease stops acting as the owner. Every job has one clear owner at a time.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0034-fence-lease-release-by-lease-identity.md">Fenced release (ADR 0034)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0038-fence-lease-renewal-by-lease-identity.md">Fenced renewal (ADR 0038)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0036-fence-outcome-reports-by-lease-identity-for-agents.md">Fenced outcomes (ADR 0036)</a></div></article>
+<article class="exp-card"><h3>A job leaves processes behind</h3><p>When a job ends, times out or is cancelled, its whole process tree is stopped, not only the first process. Your GPUs go back to useful work.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0079-kill-what-a-job-command-leaves-running.md">Kill leftovers (ADR 0079)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0080-stop-a-jobs-processes-when-their-owner-dies.md">Owner dies (ADR 0080)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0083-end-a-job-when-its-supervisor-ends.md">Supervisor ends (ADR 0083)</a></div></article>
+<article class="exp-card"><h3>The scheduler runs in two places</h3><p>The cluster tick runs in one process at a time, so two schedulers never place the same work. A second replica or a rolling deploy waits its turn instead of scheduling against the same nodes.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0078-elect-one-scheduler-with-an-advisory-lock.md">Advisory lock election (ADR 0078)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0032-move-cluster-tick-execution-off-the-event-loop.md">Tick off the event loop (ADR 0032)</a></div></article>
+<article class="exp-card"><h3>Customers share one database</h3><p>Tenant isolation is enforced in the application and in the database, so a worker, a job or a lease cannot be tied to another tenant’s records. Each customer stays inside its own boundary.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0064-isolate-resources-by-tenant.md">Isolate by tenant (ADR 0064)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0075-give-workers-and-leases-a-tenant.md">Workers and leases (ADR 0075)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0069-keep-a-job-on-its-own-tenants-nodes.md">Jobs stay on own nodes (ADR 0069)</a></div></article>
+<article class="exp-card"><h3>You upgrade to a new release</h3><p>Each release is rehearsed on a database from the one before it: migrate, compare every table and the schema, then start the new API and read the data back. You upgrade something you have already watched work.</p><div class="adr-row"><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0085-finish-the-upgrade-rehearsal-with-migrate-and-compare.md">Upgrade rehearsal (ADR 0085)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0086-show-which-migrations-the-upgrade-rehearsal-applied.md">Migrations applied (ADR 0086)</a><a href="https://github.com/wycliffRotich-dev/aethergrid/blob/main/docs/adr/0088-start-the-new-api-on-the-upgraded-database.md">New API on upgraded DB (ADR 0088)</a></div></article>
 </div>
 </div>
 </section>
+<section id="see">
+<div class="wrap">
+<h2>See it for yourself</h2>
+<div class="exp numbered">
+<article class="exp-card"><h3>A live cluster view</h3><p>A dashboard shows nodes, jobs and a live cluster event feed, so you can watch the system respond.</p></article>
+<article class="exp-card"><h3>A history for every job</h3><p>Each job keeps its event history, so an operator can see what happened and why.</p></article>
+<article class="exp-card"><h3>A demo you can run yourself</h3><p>Stop the server that holds a job and watch another one take it over.</p></article>
+</div>
+</div>
+</section>
+<div class="band">
+<div class="wrap">
+<h2>Bring us your hardest failure scenario</h2>
+<p>Tell me what worries you most about your AI workloads and we will walk through how the system handles it.</p>
+<a class="btn solid" href="mailto:wycliffe@aethergrid.co.ke?subject=Technical%20consultation&body=Name%3A%0ACompany%3A%0AWork%20email%3A%0AMessage%3A%0A">Book a technical consultation</a>
+</div>
+</div>
 </main>
 <footer class="wrap">AetherGrid is open source under the MIT licence. © 2026 Wycliffe Kipleting Rotich.</footer>
 </body>
