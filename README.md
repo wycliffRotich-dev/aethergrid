@@ -188,18 +188,34 @@ the keyboard.
 
 ## Architecture
 
-The system is split into four layers, with dependencies pointing inward:
+AetherGrid is built in four layers, and dependencies point inward. A test
+enforces the layer rules, so they hold as the code changes
+([ADR 0082](docs/adr/0082-enforce-the-layer-dependencies-with-a-test.md)).
 
-**Domain**: `Job`, `Node`, `Worker`, `Lease`, `Event`, and `ApiKey` aggregates enforce their own invariants. The scheduling algorithm and job lifecycle state machine live here as plain Python, with no imports from FastAPI or psycopg. Delete the infrastructure layer entirely and the domain tests still pass.
+**Domain.** Jobs, nodes, workers, leases, events and API keys enforce their
+own rules. The scheduling algorithm and the job lifecycle live here as plain
+Python, with no web or database imports. Remove the infrastructure layer
+and the domain tests still pass.
 
-**Application**: Services such as `ScheduleJobService`/`SchedulerService`, `AssignWorkerService`, `AcquireLeaseService`, `StartJobService`, `DrainNodeService`, `ClusterHealthService`, and `AuthenticateApiKeyService` coordinate domain objects and repositories without embedding business rules that belong one layer down. A `WorkerExecutionLoop` drives a worker through executing its assigned job as a real subprocess, continuously renewing its lease on a background thread for the job's entire runtime, recording the real outcome, and releasing the lease regardless of that outcome. A renewal that fails means the lease has already been reclaimed elsewhere, and the loop discards its result rather than risk persisting it against another worker's in-progress or completed work. A `ReconciliationLoop` catches the failure modes the happy path can't: crashed workers, expired leases, state left inconsistent by infrastructure failures.
+**Application.** Services coordinate the domain and the repositories without
+holding business rules. A worker execution loop runs an assigned job as a
+subprocess, renews the lease for the job's whole runtime, records the
+outcome and releases the lease. If a renewal fails, the lease has been
+reclaimed elsewhere, and the loop discards its result instead of writing it
+against another worker's work. A reconciliation loop covers what the normal
+path cannot: crashed workers, expired leases and state left inconsistent by
+infrastructure failures.
 
-**Infrastructure**: PostgreSQL implementations exist for every repository (`Node`, `Job`, `Worker`, `Lease`, `Event`, `ApiKey`, `Tenant`), written with raw `psycopg` instead of an ORM, a deliberate choice to keep query behavior and transaction boundaries visible rather than abstracted away. `Node`, `Job`, and `Event` additionally have SQLite implementations for local development; `ApiKey` deliberately does not, since local development already runs against the same PostgreSQL backend production uses, and a SQLite path would reintroduce the environment drift that consolidation was built to remove. Every repository is validated against a shared **contract test suite** run against each backend it supports, so switching between implementations, or trusting that they behave identically, is a tested guarantee rather than an assumption.
+**Infrastructure.** Every repository has a PostgreSQL implementation, written
+with psycopg and no ORM, so query behavior and transaction boundaries stay
+explicit. A shared contract suite runs against each backend a repository
+supports, so identical behavior is tested, not assumed.
 
-**Presentation**: FastAPI endpoints for jobs, nodes, workers, events, cluster health, and API keys that validate input, call an application service, and return a response. Every route requires a valid API key except `GET /`, `GET /health` and `GET /livez`, and the interactive API docs are off unless `NEUROMESH_ENABLE_API_DOCS` is set (ADR 0077). No business logic lives in this layer. The frontend mirrors the same discipline: `api/*.ts` typed HTTP calls, `hooks/*.ts` data-fetching hooks, and page/component composition, no business logic embedded in components either.
+**Presentation.** FastAPI endpoints validate input, call an application
+service and return a response, and hold no business logic. The dashboard
+follows the same split: typed API calls, data hooks and components.
 
-Every non-obvious decision, why domain owns scheduling instead of application, why raw psycopg over an ORM, how job lifecycle transitions are enforced, why leases exist instead of a simple assignment field, why renewal is a strict update rather than an upsert, why opaque tokens were chosen over JWTs, why job commands were deliberately kept unreachable from the public API until authentication existed, then reopened narrowly, first for workers reading only their own assigned job's command ([ADR 0020](docs/adr/0020-expose-job-command-to-authenticated-agents.md)), later for the public `CreateJobRequest` API itself ([ADR 0028](docs/adr/0028-expose-job-command-through-public-create-job-api.md)), is documented as an ADR in [`/docs/adr`](docs/adr).
-
+Every non-obvious decision is documented as an ADR in [`/docs/adr`](docs/adr).
 ---
 
 ## Test Coverage
