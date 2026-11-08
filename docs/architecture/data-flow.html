@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AetherGrid data flow</title>
+<style>
+:root{--bg:#d1e0f2;--surface:#ffffff;--nf:#ffffff;--text:#031136;--accent:#0347eb;--l0:#031136;--l1:#0347eb;--l2:#1fcdfa;--l3:#fdc62a;--l4:#f27a20;--bad:#fd3802;--t0:#d1e0f2;--t1:#d1e0f2;--t2:#031136;--t3:#031136;--t4:#031136;--muted:color-mix(in srgb,var(--text) 62%,var(--bg));--line:color-mix(in srgb,var(--text) 24%,var(--bg));color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#031136;--surface:#051f4b;--nf:#031136;--text:#d1e0f2;--accent:#1fcdfa;--l0:#d1e0f2;--l1:#1561db;--t0:#031136;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#031136;--surface:#051f4b;--nf:#031136;--text:#d1e0f2;--accent:#1fcdfa;--l0:#d1e0f2;--l1:#1561db;--t0:#031136;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 "Segoe UI",system-ui,-apple-system,sans-serif}
+main{max-width:1240px;margin:0 auto;padding:16px}
+h1{text-align:center;font-size:26px;margin:4px 0 6px;letter-spacing:-.01em}
+.sub{text-align:center;margin:0 auto 14px;max-width:760px;color:var(--muted);font-size:14px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:0 0 12px}
+button{font:inherit;font-size:13px;padding:6px 11px;border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:6px;cursor:pointer}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:600}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px;overflow-x:auto}
+svg{display:block;width:100%;min-width:900px;height:auto}
+svg text{fill:var(--text);font:12px "Segoe UI",system-ui,sans-serif}
+svg .nt{font-weight:600;font-size:11.5px}
+svg .ns{fill:var(--muted);font-size:10.5px}
+svg .na{fill:var(--accent);font-size:10.5px;font-weight:600}
+.nr{fill:var(--nf);stroke-width:1.6}
+.n{cursor:pointer}
+.e{fill:none;stroke:var(--muted);stroke-width:1.4;opacity:.85}
+.e.rc{stroke:var(--bad);stroke-dasharray:5 4}
+.eh{fill:none;stroke:transparent;stroke-width:12;cursor:pointer}
+.dim{opacity:.14}
+#info{margin-top:12px;font-size:14px}
+#info b{font-size:15px}
+#info p{margin:4px 0}
+.note{font-size:12px;color:var(--muted);margin:12px 0 0;text-align:center}
+</style>
+</head>
+<body>
+<main>
+<h1>AetherGrid data flow</h1>
+<p class="sub">How requests, jobs, leases and events move through the five layers. A dot marks data moving in the direction of its arrow. Select any box or arrow to see what it carries.</p>
+<div class="bar">
+<button id="pp" aria-pressed="false">Pause</button>
+<button id="rs">Reset</button>
+<button data-sp=".5" aria-pressed="false">0.5×</button>
+<button data-sp="1" aria-pressed="true">1×</button>
+<button data-sp="2" aria-pressed="false">2×</button>
+</div>
+<div class="bar" id="sc"></div>
+<div class="card"><svg id="g" viewBox="0 0 1200 818" role="img" aria-label="Layered data flow of AetherGrid from clients through presentation, application, domain and persistence"></svg></div>
+<div class="card" id="info" style="margin-top:12px"></div>
+<p class="note">This animates the documented architecture and does not read a running cluster. Boxes, arrows and ADR numbers come from the README, the earlier diagram and recent commit titles.</p>
+</main>
+<script>
+(function () {
+var $ = function (i) { return document.getElementById(i); };
+var NS = "http://www.w3.org/2000/svg";
+var X = function (i) { return 142 + 210 * i; }, W = 186, BUS = 560;
+var LY = [[8, 84, "Clients", "external callers"], [104, 124, "Presentation", "FastAPI"], [240, 326, "Application", "services and loops"], [578, 84, "Domain", "rules, no I/O"], [674, 132, "Persistence", "raw psycopg"]];
+var LANES = ["Submit and register", "Schedule, leader only", "Execute", "Reconcile each tick", "Record events"];
+var ND = [
+["cl1",0,X(0),22,W,56,"API clients","any caller with an API key","",0],
+["cl2",0,X(1),22,W,56,"Dashboard","frontend, polls every 3s","",0],
+["cl3",0,X(2),22,W,56,"Agent","scripts/run_agent.py","",0],
+["cl5",0,X(4),22,W,56,"Probes","health and liveness checks","",0],
+["auth",1,142,114,816,44,"API key authentication","AuthenticateApiKeyService: every route except the public ones needs a key, and the key identifies the tenant","",1],
+["pub",1,X(4),114,W,44,"Public routes","GET /, /health, /livez","",0],
+["core",1,X(0),168,W,52,"Core routes","jobs, nodes, workers, liveness","0064, 0073",1],
+["agr",1,X(2),168,W,52,"Agent routes","poll, start, renew, outcomes","0019, 0038",1],
+["evr",1,X(4),168,W,52,"Events route","GET /events feed","0074",1],
+["kr",1,X(1),168,W,52,"API key routes","issue, revoke, list keys","0055, 0057",1],
+["a1",2,X(0),268,W,60,"CreateJobService","validates and queues a job","0028",1],
+["a2",2,X(0),342,W,60,"CreateNode / CreateWorker","idempotent re-registration","0030",1],
+["a3",2,X(0),416,W,60,"Heartbeat handling","node.heartbeat(), 60s timeout","0073",1],
+["a4",2,X(0),490,W,60,"ApiKey services","create, revoke, list keys","0055, 0056, 0057",1],
+["b1",2,X(1),268,W,60,"ClusterTickService","lock holder only, every 1.0s","0078",0],
+["b2",2,X(1),342,W,60,"SchedulerLoopService","best fit over free nodes","",0],
+["b3",2,X(1),416,W,60,"AssignWorkerService","node.allocate(job.resources)","",0],
+["b4",2,X(1),490,W,60,"AcquireLeaseService","30s lease, fenced by lease_id","0034, 0038",1],
+["c1",2,X(2),268,W,60,"WorkerExecutionLoop","dashboard-managed workers","0033",1],
+["c2",2,X(2),342,W,60,"JobExecutionService","stops the whole process group","0079, 0080, 0083",0],
+["c3",2,X(2),416,W,60,"RenewLeaseService","renews every ~10s, background","0038",1],
+["c4",2,X(2),490,W,60,"ReportJobOutcomeService","release lease, then save","0011, 0033, 0073",1],
+["d1",2,X(3),268,W,60,"MarkDeadWorkersService","offline if heartbeat lapsed","",0],
+["d2",2,X(3),342,W,60,"RecoverExpiredLeaseService","reads in the lease tenant","0075",1],
+["d3",2,X(3),416,W,60,"RecoverOfflineNodeService","node is no longer alive","",0],
+["d4",2,X(3),490,W,60,"reclaim_job()","delete lease, release, requeue","0039, 0075",1],
+["e1",2,X(4),490,W,60,"RecordJobEventsService","called from every service","0074",1],
+["dj",3,X(0),590,W,60,"Job","queued to terminal state","",0],
+["ds",3,X(1),590,W,60,"Scheduler","select_node(), best fit","",0],
+["dl",3,X(2),590,W,60,"Lease","30s TTL, fenced by lease_id","0034, 0038",1],
+["dn",3,X(3),590,W,60,"Node and Worker","resources, heartbeat, status","",0],
+["dt",3,X(4),590,W,60,"Tenant and ApiKey","every row carries a tenant","0074, 0075",1],
+["repos",4,142,686,838,48,"Repositories","raw psycopg, no ORM, contract-tested on every backend","0072",0],
+["mig",4,992,686,176,48,"Migrations","checked at startup","0071, 0072",0],
+["tbl",4,142,746,1026,48,"PostgreSQL","tenants, jobs, nodes, workers, leases, events, api_keys (SQLite for jobs, nodes and events in local dev)","0074, 0075",1]
+].map(function (a) { return {id:a[0],l:a[1],x:a[2],y:a[3],w:a[4],h:a[5],t:a[6],s:a[7],a:a[8],tn:a[9]}; });
+var ED = [
+["c1","cl1","auth","bt","API request carrying a key","HTTP"],
+["c2","cl2","auth","bt","dashboard request carrying a key","HTTP"],
+["c3","cl3","auth","bt","agent request carrying a key","HTTP"],
+["c4","cl5","pub","bt","health or liveness check","HTTP, no key","","n"],
+["p1","auth","core","bt","authenticated request with its tenant","FastAPI dependency"],
+["p2","auth","agr","bt","authenticated agent request","FastAPI dependency"],
+["p3","auth","evr","bl","authenticated feed request","FastAPI dependency",940],
+["s1","core","a1","bt","POST /jobs body","function call"],
+["s2","core","a2","ll","POST /nodes or /workers body","function call",130],
+["s3","core","a3","ll","node or worker heartbeat","function call",130],
+["s4","agr","c3","rr","lease renewal carrying lease_id","function call",760],
+["s5","agr","c4","rr","job outcome from the agent","function call",760],
+["t1","b1","b2","bt","tick starts the scheduling pass","in-process call"],
+["t2","b2","b3","bt","best-fit node for the job","in-process call"],
+["t3","b3","b4","bt","node with resources allocated","in-process call"],
+["t4","b4","c1","rl","job SCHEDULED, picked up in the same tick","in-process call",550],
+["x1","c1","c2","bt","worker started, job marked started","in-process call"],
+["x2","c2","c3","bt","running command, lease to keep alive","background thread"],
+["x3","c3","c4","bt","command outcome","in-process call"],
+["r1","d1","d2","bt","workers marked offline","in-process call","","r"],
+["r2","d2","d3","bt","expired leases handled","in-process call","","r"],
+["r3","d3","d4","bt","offline nodes handled","in-process call","","r"],
+["m1","a1","dj","ll","new Job in state QUEUED","object creation",130],
+["m2","b2","ds","ll","free nodes and job resources","function call",340],
+["m3","b4","dl","rl","new Lease with a 30s TTL","object creation",550],
+["m4","d4","dl","lr","expired lease removed","function call",760,"r"],
+["w1","a1","repos","ll","job row, tenant included","SQL via psycopg",130],
+["w2","a2","repos","ll","node and worker rows","SQL via psycopg",130],
+["w3","a3","repos","ll","heartbeat timestamps","SQL via psycopg",130],
+["w4","b4","repos","rt","lease and job rows","SQL via psycopg",550],
+["w5","c4","repos","rt","outcome, lease release, worker, node, job","SQL via psycopg",760],
+["w6","d4","repos","rt","job requeued or failed","SQL via psycopg",970,"r"],
+["w7","e1","repos","lt","event rows","SQL via psycopg",970],
+["w8","repos","tbl","bt","statements over pooled connections","psycopg"],
+["w9","mig","tbl","bt","versioned schema changes","SQL under a migration lock","","n"],
+["w10","tbl","evr","rr","event history for the feed","SQL read",1180],
+["v1","b4","e1","bb","lease events","in-process call"],
+["v2","c4","e1","bb","completion events","in-process call"],
+["v3","d4","e1","bb","JobReclaimed event","in-process call","","r"],
+["p4","auth","kr","bt","authenticated key request with its tenant","FastAPI dependency"],
+["s6","kr","a4","ch","issue, revoke or list request","function call",130],
+["w11","a4","repos","ll","api_keys rows","SQL via psycopg",130]
+].map(function (a, i) { return {id:a[0],f:a[1],t:a[2],m:a[3],lb:a[4],mc:a[5],c:a[6],rc:a[7]==="r",nt:a[7]==="n",i:i,o:(i*0.37)%3,p:3.2+(i%5)*0.35}; });
+var SC = [
+["all","All flows",null],
+["sub","Submit and schedule a job",["c1","p1","s1","m1","w1","w8","t1","t2","m2","t3","t4","m3","w4","v1"]],
+["run","Run on a dashboard worker",["t4","x1","x2","x3","w5","v2"]],
+["agent","Run on an agent",["c3","p2","s4","s5","w5"]],
+["rec","Recover a lost worker",["r1","r2","r3","m4","w6","v3"]],
+["ev","Follow the event history",["v1","v2","v3","w7","w8","w10"]],
+["key","Issue or revoke an API key",["c1","p4","s6","w11","w8"]]
+];
+var nm = {}, em = {}, i;
+ND.forEach(function (n) { nm[n.id] = n; });
+ED.forEach(function (e) { em[e.id] = e; });
+var cx = function (n) { return n.x + n.w / 2; }, cy = function (n) { return n.y + n.h / 2; };
+function route(e) {
+  var a = nm[e.f], b = nm[e.t], c = e.c, ay = cy(a), by = cy(b);
+  switch (e.m) {
+    case "bt":
+      var lo = Math.max(a.x, b.x) + 16, hi = Math.min(a.x + a.w, b.x + b.w) - 16;
+      if (lo <= hi) { var nar = a.w < b.w ? a : b, x = Math.min(hi, Math.max(lo, cx(nar))); return [[x, a.y + a.h], [x, b.y]]; }
+      var my = (a.y + a.h + b.y) / 2;
+      return [[cx(a), a.y + a.h], [cx(a), my], [cx(b), my], [cx(b), b.y]];
+    case "ll": return [[a.x, ay], [c, ay], [c, by], [b.x, by]];
+    case "rl": return [[a.x + a.w, ay], [c, ay], [c, by], [b.x, by]];
+    case "lr": return [[a.x, ay], [c, ay], [c, by], [b.x + b.w, by]];
+    case "rr": return [[a.x + a.w, ay], [c, ay], [c, by], [b.x + b.w, by]];
+    case "rt": return [[a.x + a.w, ay], [c, ay], [c, b.y]];
+    case "lt": return [[a.x, ay], [c, ay], [c, b.y]];
+    case "ch": return [[cx(a), a.y + a.h], [cx(a), 234], [c, 234], [c, by], [b.x, by]];
+    case "bl": return [[c, a.y + a.h], [c, by], [b.x, by]];
+    default: var bx = b.x + 40; return [[cx(a), a.y + a.h], [cx(a), BUS], [bx, BUS], [bx, b.y + b.h]];
+  }
+}
+function tag(x, y) {
+  return '<rect x="' + x + '" y="' + y + '" width="40" height="13" rx="6.5" style="fill:var(--l3)"/><text x="' + (x + 20) + '" y="' + (y + 9.5) + '" text-anchor="middle" style="fill:#031136;font-size:9px;font-weight:600">tenant</text>';
+}
+var h = '<defs><marker id="ma" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0L8,4L0,8z" style="fill:var(--muted)"/></marker><marker id="mr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0L8,4L0,8z" style="fill:var(--bad)"/></marker></defs>';
+LY.forEach(function (b, k) {
+  h += '<rect x="10" y="' + b[0] + '" width="1180" height="' + b[1] + '" rx="8" style="fill:color-mix(in srgb,var(--l' + k + ') 8%,var(--surface));stroke:var(--l' + k + ');stroke-opacity:.55"/>';
+  h += '<rect x="10" y="' + b[0] + '" width="104" height="' + b[1] + '" rx="8" style="fill:var(--l' + k + ')"/>';
+  h += '<text x="20" y="' + (b[0] + 26) + '" style="fill:var(--t' + k + ');font-weight:700;font-size:13px">' + b[2] + '</text><text x="20" y="' + (b[0] + 42) + '" style="fill:var(--t' + k + ');font-size:10px">' + b[3] + '</text>';
+});
+LANES.forEach(function (t, k) { h += '<text class="ns" x="' + X(k) + '" y="256" style="font-weight:600">' + t + '</text>'; });
+h += '<g id="eL"></g><g id="pL"></g><g id="nL">';
+ND.forEach(function (n) {
+  var lines = 2 + (n.a ? 1 : 0), t0 = (n.h - (lines - 1) * 15) / 2 + 4, last = t0 + (lines - 1) * 15;
+  h += '<g class="n" data-id="' + n.id + '"><rect class="nr" x="' + n.x + '" y="' + n.y + '" width="' + n.w + '" height="' + n.h + '" rx="6" style="stroke:var(--l' + n.l + ')"/>';
+  h += '<text class="nt" x="' + (n.x + 10) + '" y="' + (n.y + t0) + '">' + n.t + '</text><text class="ns" x="' + (n.x + 10) + '" y="' + (n.y + t0 + 15) + '">' + n.s + '</text>';
+  if (n.a) h += '<text class="na" x="' + (n.x + 10) + '" y="' + (n.y + last) + '">ADR ' + n.a + '</text>';
+  if (n.tn) h += tag(n.x + n.w - 48, n.y + last - 10);
+  h += '</g>';
+});
+h += '</g>';
+h += '<rect x="982" y="268" width="186" height="206" rx="6" style="fill:none;stroke:var(--line);stroke-dasharray:4 3"/><text class="nt" x="994" y="289">Key</text>';
+[["var(--l2)", "Tenant A data"], ["var(--l3)", "Tenant B data"], ["var(--l0)", "No tenant: probes, schema"]].forEach(function (r, k) {
+  h += '<circle cx="1000" cy="' + (310 + k * 26) + '" r="4.5" style="fill:' + r[0] + ';stroke:#031136"/><text class="ns" x="1012" y="' + (314 + k * 26) + '">' + r[1] + '</text>';
+});
+h += '<line x1="994" y1="388" x2="1008" y2="388" style="stroke:var(--bad);stroke-width:1.6;stroke-dasharray:4 3"/><text class="ns" x="1014" y="392">Recovery path</text>';
+h += tag(994, 402) + '<text class="ns" x="1040" y="412">Tenant-scoped code</text>';
+h += '<text class="ns" x="994" y="440">Dots show direction.</text><text class="ns" x="994" y="456">Select a box or arrow.</text>';
+$("g").innerHTML = h;
+var eL = $("eL"), pL = $("pL");
+ED.forEach(function (e) {
+  var p = route(e), d = "M" + p.map(function (q) { return q[0] + " " + q[1]; }).join("L");
+  var path = document.createElementNS(NS, "path");
+  path.setAttribute("d", d);
+  path.setAttribute("class", "e" + (e.rc ? " rc" : ""));
+  path.setAttribute("marker-end", "url(#" + (e.rc ? "mr" : "ma") + ")");
+  var hit = document.createElementNS(NS, "path");
+  hit.setAttribute("d", d); hit.setAttribute("class", "eh");
+  hit.addEventListener("click", function (ev) { ev.stopPropagation(); pick("edge", e.id); });
+  var dot = document.createElementNS(NS, "circle");
+  dot.setAttribute("r", "3.8"); dot.style.stroke = "#031136"; dot.style.display = "none";
+  eL.appendChild(path); eL.appendChild(hit); pL.appendChild(dot);
+  e.path = path; e.len = path.getTotalLength(); e.dot = dot;
+});
+var nEls = {};
+Array.prototype.forEach.call(document.querySelectorAll(".n"), function (g) {
+  nEls[g.getAttribute("data-id")] = g;
+  g.addEventListener("click", function (ev) { ev.stopPropagation(); pick("node", g.getAttribute("data-id")); });
+});
+var sel = {k: "all", id: "all"}, act = null, T = 0, speed = 1, last = performance.now();
+var paused = !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
+function title(id) { return nm[id].t; }
+function pick(k, id) {
+  sel = {k: k, id: id}; act = null;
+  if (k === "scn") { var s = SC.filter(function (x) { return x[0] === id; })[0]; if (s[2]) { act = {e: {}, n: {}}; s[2].forEach(function (x) { act.e[x] = 1; act.n[em[x].f] = 1; act.n[em[x].t] = 1; }); } }
+  if (k === "node") { act = {e: {}, n: {}}; act.n[id] = 1; ED.forEach(function (e) { if (e.f === id || e.t === id) { act.e[e.id] = 1; act.n[e.f] = 1; act.n[e.t] = 1; } }); }
+  if (k === "edge") { act = {e: {}, n: {}}; act.e[id] = 1; act.n[em[id].f] = 1; act.n[em[id].t] = 1; }
+  T = 0; paint(); info();
+}
+function paint() {
+  ND.forEach(function (n) { nEls[n.id].setAttribute("class", "n" + (act && !act.n[n.id] ? " dim" : "")); });
+  ED.forEach(function (e) { var d = act && !act.e[e.id]; e.path.setAttribute("class", "e" + (e.rc ? " rc" : "") + (d ? " dim" : "")); });
+  Array.prototype.forEach.call(document.querySelectorAll("#sc button"), function (b) { b.setAttribute("aria-pressed", sel.k === "scn" ? b.getAttribute("data-id") === sel.id : (sel.k === "all" && b.getAttribute("data-id") === "all")); });
+}
+function info() {
+  var o = $("info"), s = "";
+  if (sel.k === "node") {
+    var n = nm[sel.id], inn = [], out = [];
+    ED.forEach(function (e) { if (e.t === n.id) inn.push(title(e.f)); if (e.f === n.id) out.push(title(e.t)); });
+    s = "<b>" + n.t + "</b> in the " + LY[n.l][2] + " layer<p>" + n.s + "</p><p>" + (n.a ? "Recorded in ADR " + n.a + "." : "No ADR is mapped to this box yet.") + (n.tn ? " It reads or writes data scoped by tenant." : "") + "</p><p>Receives from: " + (inn.join(", ") || "nothing drawn") + "</p><p>Sends to: " + (out.join(", ") || "nothing drawn") + "</p>";
+  } else if (sel.k === "edge") {
+    var e = em[sel.id];
+    s = "<b>" + title(e.f) + " to " + title(e.t) + "</b><p>Carries: " + e.lb + "</p><p>Mechanism: " + e.mc + (e.nt ? "" : ". Every packet belongs to one tenant.") + "</p>";
+  } else if (sel.k === "scn") {
+    var sc = SC.filter(function (x) { return x[0] === sel.id; })[0];
+    s = "<b>" + sc[1] + "</b><p>" + sc[2].map(function (x, k) { return (k + 1) + ". " + title(em[x].f) + " to " + title(em[x].t) + ": " + em[x].lb; }).join("<br>") + "</p>";
+  } else s = "<b>All flows</b><p>Select a box to see what it receives and sends, an arrow to see what it carries, or a flow above to watch it step by step.</p>";
+  o.innerHTML = s;
+}
+var scb = $("sc");
+SC.forEach(function (s) {
+  var b = document.createElement("button");
+  b.textContent = s[1]; b.setAttribute("data-id", s[0]);
+  b.addEventListener("click", function () { s[0] === "all" ? pick("all", "all") : pick("scn", s[0]); });
+  scb.appendChild(b);
+});
+$("g").addEventListener("click", function () { pick("all", "all"); });
+$("pp").addEventListener("click", function (ev) { paused = !paused; ev.target.textContent = paused ? "Play" : "Pause"; ev.target.setAttribute("aria-pressed", paused); });
+$("rs").addEventListener("click", function () { T = 0; pick("all", "all"); });
+Array.prototype.forEach.call(document.querySelectorAll("button[data-sp]"), function (b) {
+  b.addEventListener("click", function () {
+    speed = +b.getAttribute("data-sp");
+    Array.prototype.forEach.call(document.querySelectorAll("button[data-sp]"), function (o) { o.setAttribute("aria-pressed", o === b); });
+  });
+});
+if (paused) { $("pp").textContent = "Play"; $("pp").setAttribute("aria-pressed", "true"); }
+function draw() {
+  var list = null;
+  if (sel.k === "scn") list = SC.filter(function (x) { return x[0] === sel.id; })[0][2];
+  ED.forEach(function (e) {
+    if (act && !act.e[e.id]) { e.dot.style.display = "none"; return; }
+    var off = e.o, P = e.p;
+    if (list) { off = list.indexOf(e.id) * 0.55; P = list.length * 0.55 + 1.2; }
+    var ph = (((T - off) % P) + P) % P;
+    if (ph >= 1.6) { e.dot.style.display = "none"; return; }
+    var pt = e.path.getPointAtLength(ph / 1.6 * e.len), k = Math.floor((T - off) / P);
+    e.dot.style.display = "";
+    e.dot.setAttribute("cx", pt.x); e.dot.setAttribute("cy", pt.y);
+    e.dot.style.fill = e.nt ? "var(--l0)" : ((k + e.i) % 2 ? "var(--l2)" : "var(--l3)");
+  });
+}
+function frame(ts) {
+  var dt = Math.min(0.1, (ts - last) / 1000); last = ts;
+  if (!paused) T += dt * speed;
+  draw(); requestAnimationFrame(frame);
+}
+paint(); info(); requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
