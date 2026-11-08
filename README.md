@@ -21,7 +21,7 @@
 AetherGrid takes workloads, matches them against available compute nodes by resource requirements and constraints, and manages the full lifecycle: queued, scheduled, running, completed, failed, retried and cancelled. It is built for teams that run AI under audit, where a job that runs twice, a tenant that reads another tenant's data, or an upgrade that loses a row is an incident and not a bug.
 
 - **Exclusive ownership.** A job runs under a time-bound lease. A release or an outcome report is checked against the identity of the lease the caller holds, so a stale owner cannot end a job it no longer owns (ADR 0034, ADR 0036).
-- **Tenant isolation.** Every tenant-owned record carries a tenant, and each caller works inside its own tenant (ADR 0064, ADR 0075).
+- **Tenant isolation.** Every tenant-owned record carries a tenant. On Postgres, the database refuses a row without one, and reads of keys, nodes, jobs, workers and events are scoped to the caller's tenant (ADR 0064, ADR 0075).
 - **Least privilege.** Every route except the root and the two health probes requires an API key, including the one that issues keys. Powers that widen reach, such as setting a job command, need an explicit scope (ADR 0054).
 - **Upgrades that are rehearsed.** The upgrade rehearsal seeds the previous release, upgrades it to the new one, and compares the rows, the schema, the API start and the stored job command (ADR 0085 to ADR 0089).
 - **A decision record you can audit.** Every non-obvious decision is an ADR that states what was decided, why, and what is not claimed.
@@ -37,11 +37,23 @@ AetherGrid takes workloads, matches them against available compute nodes by reso
 
 ---
 
-## Why This Exists
+## Why AetherGrid
 
-Most scheduler side-projects are a single `main.py` script wrapped in a `while True` loop polling an in-memory dictionary. They work fine, right up until you need to swap the persistence engine, add a new constraint type, or figure out why a job silently disappeared, or why two workers picked up the same job at once.
+AI workloads are expensive, long-running and shared. When a node drops, a
+network splits or a worker restarts, the questions are always the same:
+who owns this job, did it run twice, and can the next release be trusted
+with production data.
 
-AetherGrid was built around one rule: **the domain logic doesn't know or care where the data lives.** Jobs, nodes, workers, and the allocation algorithm are pure Python with zero infrastructure dependencies. The database is a detail, not the foundation. This project is a concrete demonstration that these architectural patterns aren't just conference-talk vocabulary; they're guardrails that keep a codebase understandable as it grows, and as its correctness requirements get harder.
+AetherGrid answers them with rules the system enforces, not habits teams
+have to remember. A job has one owner at a time. A tenant sees only its
+own work. A key carries only the powers it was issued with. An upgrade is
+rehearsed on seeded data from the previous release before it ships.
+
+For platform and infrastructure teams, one cluster serves several teams
+or customers, each inside its own tenant, and the cluster recovers from
+node and worker failures on its own. For the people who sign off on risk,
+every guarantee is written down, tied to the decision that created it,
+and checked by tests that run in CI.
 
 ---
 
@@ -53,7 +65,7 @@ Every non-obvious decision in this codebase, why a domain rule lives where it do
 - [**ADR 0011 - Job Reclaim and Reconciliation Repair**](docs/adr/0011-job-reclaim-and-reconciliation-repair.md): closing a real race condition where a dying worker's lease renewal could land after reconciliation had already started reassigning its work.
 - [**ADR 0012 - Real Job Execution**](docs/adr/0012-real-job-execution.md): building genuine subprocess execution with enforced timeouts, then deliberately keeping it unreachable from the public API until the system had authentication, and proving that absence with a test rather than a comment.
 - [**ADR 0014 - Continuous Lease Renewal**](docs/adr/0014-continuous-lease-renewal.md): why a lease is renewed continuously for a job's entire runtime instead of once at acquisition.
-- [**ADR 0015 - API Key Authentication**](docs/adr/0015-api-key-authentication.md): why opaque server-issued tokens were chosen over JWTs for a system that needs instant revocation, and why building authentication still didn't answer whether `Job.command` should be exposed, that question stayed open until [ADR 0020](docs/adr/0020-expose-job-command-to-authenticated-agents.md), which resolved it narrowly: a worker can read the one command already assigned to it, nothing broader.
+- [**ADR 0015 - API Key Authentication**](docs/adr/0015-api-key-authentication.md): opaque server-issued tokens were chosen over JWTs because the system needs instant revocation. [ADR 0020](docs/adr/0020-expose-job-command-to-authenticated-agents.md) limits reading a job's command to the worker assigned that job.
 - [**ADR 0018 - Domain Owns Scheduling Policy**](docs/adr/0018-domain-owns-scheduling-policy.md): why `list_available()` moved out of the repository entirely, since deciding which nodes are eligible for scheduling is a business rule, not a persistence concern, and letting infrastructure decide that would have made scheduling behavior dependent on which database backend was running.
 - [**ADR 0019 - Standalone Worker Agent Process**](docs/adr/0019-standalone-worker-agent-process.md): replacing in-process job execution with a real out-of-process agent that confirms its own execution start over the network, and why pull-based polling was chosen over push delivery, since it reuses reconciliation this codebase already trusts instead of introducing new failure and delivery-guarantee logic.
 - [**ADR 0029 - Cancel a Running Job by Reusing Lease Renewal**](docs/adr/0029-cancel-running-job-via-lease-renewal.md): extending an existing, already-trusted channel (lease renewal) to deliver cancellation to a running job's subprocess, instead of adding a second polling mechanism, and introducing an explicit CANCELLING status so a job caught mid-cancellation is a visible, real state rather than indistinguishable from one still running.
@@ -81,8 +93,8 @@ Every non-obvious decision in this codebase, why a domain rule lives where it do
 - [**ADR 0051 - Bound the Shared Connection Pool's Timeout**](docs/adr/0051-bound-the-shared-connection-pools-timeout.md): every Postgres repository in the application shared one `ConnectionPool` constructed with no explicit `timeout`, silently inheriting `psycopg_pool`'s 30 second default. ADR 0046 had already special-cased `/health` around this, and ADR 0050 threaded reconciliation off the event loop, but neither addressed the pool's own default, so any call during an outage, reconciliation included, still blocked a worker thread for up to 30 seconds, the concrete mechanism behind the thread-pool exhaustion risk flagged as a follow-up to ADR 0050. Fixed by passing `timeout=5.0` explicitly at construction, an order of magnitude below the library default while giving real traffic more patience than `/health`'s 2 second, fail-fast value. Verified in isolation against a non-routable address (30.36s unbounded versus 5.0s bounded) and against a real outage, where a reconciliation failure that previously logged "after 30.00 sec" now logs "after 5.00 sec", reproduced twice in one outage window. Narrows but does not eliminate thread-pool exhaustion under sustained outages; closed as issue #261.
 - [**ADR 0052 - Fence Reconciliation's Lease Delete by Expiry at Delete Time**](docs/adr/0052-fence-reconciliation-lease-delete-by-expiry-at-delete-time.md): RecoverExpiredLeaseService reclaimed a job based on a stale snapshot read: it checked whether a lease was expired once, against a list() call taken at the top of its loop, then deleted that lease unconditionally later in the same pass. A worker's background renewal thread renewing the lease in between meant a legitimately-owned, no-longer-expired lease could still be deleted and its job reclaimed out from under its current owner, the same class of bug ADR 0034 fenced for ReleaseLeaseService, but never covered for reconciliation's own delete. Fixed by adding LeaseRepository.delete_if_expired(), a conditional delete that re-checks expiry atomically at the moment of deletion rather than trusting an earlier read, on both backends, and wiring RecoverExpiredLeaseService to skip reclaiming a job entirely when the lease survives that check. Verified with new contract tests on both the in-memory and Postgres repositories, plus a service-level test that simulates the exact race by renewing a lease between construction and execute(). RecoverOfflineNodeService was not touched and is explicitly flagged as an open question, not assumed safe.
 - [**ADR 0053 - Fence Offline-Node Lease Delete by Lease Validity**](docs/adr/0053-fence-offline-node-lease-delete-by-validity.md): node heartbeat and lease renewal turned out to be structurally independent signals, confirmed by tracing both WorkerExecutionLoop (lease renewal on its own dedicated thread, no heartbeat call at all) and the standalone agent (heartbeat and renewal on two separate threads, a heartbeat failure never propagated to the renewal thread). RecoverOfflineNodeService never looked up a job's lease at all, reclaiming any job on an offline node's worker unconditionally, so a node could go offline on one missed heartbeat while that worker's lease kept renewing successfully, and its job would still be reclaimed out from under it, the same class of race ADR 0052 fixed elsewhere but explicitly left open here pending evidence. Fixed by checking the job's lease before reclaiming: no lease or an actually expired one proceeds as before, using the same delete_if_expired() from ADR 0052; a still valid lease is left entirely untouched. Verified with a test that constructs exactly that scenario, an offline node with a worker holding a still-valid lease, and asserts the job survives unreclaimed. Closes issue #267.
-- [**ADR 0054 - Scope API Keys, and Require jobs:execute to Set Job.command**](docs/adr/0054-scope-api-keys-and-require-jobs-execute-to-set-job-command.md): ADR 0028 exposed `Job.command` through the public API behind a single key tier and named its own revisit trigger, the day a second key exists. That day came with external review and an in-house deployment, and under the single tier any valid key could make a worker run an arbitrary command, with no way to let a key submit ordinary jobs without that power. `ApiKey` now carries a `scopes` set drawn from a closed vocabulary, empty by default, and setting `command` requires `jobs:execute`, checked with `is None` rather than truthiness so an empty list cannot slip past the gate. Every pre-existing key loses the ability until it is deliberately reissued with `--scope jobs:execute`, and scopes can be granted only through `scripts/issue_api_key.py`, never over HTTP, since otherwise any key could mint itself the scope. An audit of every path that can set a command found `POST /jobs` is the only one. Verified by mutation, not only by passing tests: removing the check, switching to a truthiness gate, dropping scopes in the service, and dropping them in the Postgres `save()` each fail exactly the tests written to catch them.
-- [**ADR 0055 - Scope API Key Issuance and Revocation**](docs/adr/0055-scope-api-key-issuance-and-revocation.md): ADR 0054 closed the path where any key could make a worker run an arbitrary command, and recorded a second gap as a follow-up rather than fixing it immediately: `POST /api-keys` and `POST /api-keys/{id}/revoke` had no scope check at all, so any valid key could mint a new key with any scope, or revoke any other key, including the one authenticating the request. `ApiKey` has no ownership field, so there was no notion of a key managing only keys it issued to violate; every key stood in the same flat trust relationship to every other key. A new `keys:manage` scope now gates both routes, checked by a pure `authorize_key_management` function mirroring `jobs:execute`'s gate, with no unscoped fallback since issuing and revoking are the entire surface of that router. `scripts/issue_api_key.py` needed no changes, since its `--scope` flag already validates against the shared scope registry. Ownership (a key may revoke only keys it issued) was considered and deferred to its own ADR, since it needs a schema change and a migration decision for keys issued before ownership existed; a flat `keys:manage` gate already closes the reported gap on its own.
+- [**ADR 0054 - Scope API Keys, and Require jobs:execute to Set Job.command**](docs/adr/0054-scope-api-keys-and-require-jobs-execute-to-set-job-command.md): `ApiKey` carries a `scopes` set drawn from a closed vocabulary, empty by default, and setting `command` requires `jobs:execute`. The check uses `is None` and not truthiness, so an empty list cannot pass as unset. Scopes are granted only through `scripts/issue_api_key.py`, never over HTTP, and `POST /jobs` is the only path that can set a command. Verified by mutation: removing the check, switching to a truthiness gate, dropping scopes in the service, and dropping them in the Postgres `save()` each fail the tests written to catch them.
+- [**ADR 0055 - Scope API Key Issuance and Revocation**](docs/adr/0055-scope-api-key-issuance-and-revocation.md): `POST /api-keys` and `POST /api-keys/{id}/revoke` require the `keys:manage` scope, and a key without it receives a 403 that names the missing scope. A pure `authorize_key_management` function makes the check, mirroring the `jobs:execute` gate, and no unscoped path is left, since issuing and revoking are the whole surface of that router. `scripts/issue_api_key.py` needed no change, because its `--scope` flag already validates against the shared scope registry. Which keys a caller may revoke is decided in [ADR 0056](docs/adr/0056-scope-api-key-revocation-by-ownership.md).
 - [**ADR 0056 - Allow a Key to Revoke Keys It Issued, Without keys:manage**](docs/adr/0056-scope-api-key-revocation-by-ownership.md): ADR 0055 closed the path where any key could issue or revoke any other key, but left `keys:manage` as a flat, all-or-nothing scope: a key that only needs to clean up sub-keys it issued itself had no narrower option than the same broad scope an operator uses to administer the whole fleet, a gap ADR 0055 named directly in its own Follow-ups. `ApiKey` now carries `issued_by`, set once at issuance to the authenticated caller that requested it, `None` for every key issued before this column existed or issued by `scripts/issue_api_key.py`'s bootstrap path. A key may now revoke a key it issued without holding `keys:manage`, while `keys:manage` remains a full override reaching any key regardless of ownership. The authorization decision for revocation moved from the route into `RevokeApiKeyService`, the one deliberate departure from this codebase's convention that the gate lives at the route, because deciding ownership requires the target's `issued_by`, a fact that does not exist until the target is loaded, and no route in this codebase holds its own repository access. The decision itself stays a pure domain function, `authorize_key_revocation`; only which layer calls it changed.
 - [**ADR 0057 - List the Keys a Key Has Issued**](docs/adr/0057-list-keys-issued-by-a-key.md): ADR 0056 let a key revoke the keys it issued without holding `keys:manage`, but gave no way to see which keys that was. The ownership relationship was enforceable but not visible: an operator or an owning key could not ask what a given key had created short of a direct database query, a gap ADR 0056 named in its own Follow-ups. `GET /api-keys/{id}/issued` now returns every key whose `issued_by` equals the id in the path, revoked keys included so the list is the full issuance history. Authorization mirrors ADR 0056's revocation shape: a caller holding `keys:manage` may list any key's issued keys, and a caller may list its own with no scope at all, since viewing is a strictly smaller right than revoking. The decision is a pure domain function, `authorize_key_view`, and the service loads the requested issuer before authorizing, the same not-found-before-authorization ordering `RevokeApiKeyService` uses, so a caller without rights over an id learns only whether it exists. The response never includes `key_hash` or `issued_by`. The repository gained `list_issued_by`, backed by a new `idx_api_keys_issued_by` index. Results are capped at 100 rather than paginated, with no truncation indicator in the response, a limit the ADR records as acceptable for now and lists as a follow-up.
 - [**ADR 0058 - Harden the Container Defaults and Keep Credentials Out of the Repository**](docs/adr/0058-harden-container-defaults-and-keep-credentials-out-of-the-repo.md): the image ran as root, compose hardcoded the Postgres password and published both ports on every host interface, and a shell-form `CMD` left `/bin/sh` as PID 1, so `docker stop` sent SIGTERM to a shell that never forwarded it, waited out the full 10 second grace period, and SIGKILLed the app before its lifespan teardown could close the database pool. Fixed by running as a numeric non-root user, requiring `POSTGRES_PASSWORD` from a gitignored `.env` and refusing to start without it, binding both ports to 127.0.0.1, pinning the Postgres image by digest, and using `exec` so uvicorn is PID 1. The test suite gained a guard that refuses any database whose name does not end in `_test`, since the presentation fixtures run `TRUNCATE ... CASCADE`. Verified by measurement: `docker stop` went from 10.5s to 0.9s with the full shutdown sequence in the logs, compose fails with a message naming the missing variable, and the Postgres tests fail immediately and readably when the test URL is unset. A read-only root filesystem, dropped capabilities and secrets files are recorded as follow-ups, not applied.
@@ -122,42 +134,88 @@ The index above is the fastest way to see how each part of the system was decide
 
 ---
 
-## Key Capabilities
+## Capabilities
 
-- **API key authentication on every route except three probes**: apart from three exempt probes, no endpoint in the system, including the one that issues keys, is reachable without a valid credential. The exempt probes are `GET /`, `GET /health` and `GET /livez`, and the interactive API docs are off unless `NEUROMESH_ENABLE_API_DOCS` is set (ADR 0077). The only way to mint the first key is a script run locally with direct database access, never over HTTP, closing the exact self-service-credential hole that pattern would otherwise leave open
-- **Job lifecycle management**: explicit state transitions (Queued → Scheduled → Running → Completed/Failed/Cancelled), including cancellation of a job already `RUNNING` via an explicit `CANCELLING` state, with configurable retry policies and priority-aware scheduling, plus cancel and retry actions reachable from the dashboard
-- **Per-job lifecycle history**: every job has a dedicated detail page (`/jobs/{id}`) showing its full real event timeline, `JobCreated` through completion, not just its current status
-- **Constraint-aware, multi-dimensional best-fit allocator**: matches workloads to nodes based on resource requirements and labels, skipping nodes that are draining or offline, then breaks ties among sufficient candidates by normalized tightness across every resource dimension a job actually requests, CPU, memory, and VRAM together, not CPU alone (see [ADR 0043](docs/adr/0043-multi-dimensional-best-fit-scheduling.md))
-- **Node draining**: a healthy node can be taken out of scheduling rotation for maintenance without killing it outright; the scheduler stops assigning it new work while anything already running on it continues to completion
-- **Worker registration and heartbeats**: registering a node automatically registers a worker against it, so it's immediately capable of claiming and executing work, not just existing as unused capacity
-- **Standalone worker agent with exclusive job ownership**: `scripts/run_agent.py` runs as a real, separate process, polling the API over HTTP for assigned work, executing it as a real local subprocess, and heartbeating on its own background thread for the agent's entire lifetime, independent of whatever job it's currently executing (see [ADR 0019](docs/adr/0019-standalone-worker-agent-process.md)). This replaces the dashboard's client-side heartbeat as the liveness mechanism for any worker running it; a worker with no agent process attached still falls back to node liveness alone. Every worker is tagged with an explicit `managed_by` field set at registration (`DASHBOARD` or `AGENT`); the in-process scheduler loop skips any worker marked `AGENT` entirely, so a standalone agent's jobs are executed exactly once, by the agent, never raced against the in-process path.
-- **Lease-based execution ownership**: when a worker accepts a job, it holds a renewable, expiring lease on that job, continuously renewed for the job's entire execution, so retries, reconnects, network failures, and jobs that simply run long can't result in two workers executing the same job
-- **Explicit execution-start confirmation**: `POST /workers/{worker_id}/jobs/{job_id}/start` lets whatever is actually executing a job, the in-process scheduler loop for dashboard-managed workers, a standalone agent for agent-managed ones (ADR 0019), confirm execution has genuinely begun. This is the one call that transitions a job from `Scheduled` to `Running`; assignment alone no longer does (see [ADR 0019](docs/adr/0019-standalone-worker-agent-process.md))
-- **Real subprocess execution with enforced timeouts**: jobs with a command run as real subprocesses, with a two-stage shutdown (graceful `SIGTERM`, then `SIGKILL` after a grace period) if a job overruns its execution timeout
-- **Node liveness tracking**: heartbeat-based health checks, automatic detection of offline nodes, and resource reclamation when work fails or nodes disappear
-- **Reconciliation with bounded retries**: jobs abandoned by a dead worker or an offline node are reclaimed back to the queue within their retry budget, and fail outright once that budget is exhausted, so a single unhealthy node can't cause a job to be reassigned and abandoned indefinitely, with the reclaim ordered to close a real race where a dying worker's renewal could land after reconciliation had already started reassigning its lease
-- **Domain event recording**: every lifecycle transition a job goes through, `JobCreated`, `JobScheduled`, `WorkerAssigned`, `LeaseAcquired`, `LeaseReleased`, `JobCompleted`/`JobFailed`, and `JobReclaimed`, is persisted as an immutable event at the exact point it happens
-- **Live event feed**: `GET /events` and a real-time Activity Feed on the dashboard, polling every 3 seconds, so the story an individual job tells on its own detail page is also visible as it happens for every job in the caller's tenant
-- **Worker visibility**: a dedicated Workers table showing every registered worker, its status, the node it belongs to, what it's running, and when it was last seen
-- **Idempotent worker re-registration per node**: an agent restarting after a crash reclaims its existing worker identity instead of leaving a dead row behind, using the same reclaim sequence reconciliation already trusts, lease deletion, resource release, job reclaim, so an abandoned job is fully cleaned up before the worker is recovered rather than silently discarded (see ADR 0030, ADR 0039)
-- **Multi-page dashboard**: real client-side routing (`/`, `/nodes`, `/jobs`, `/jobs/{id}`, `/workers`, `/workers/{id}`) instead of a single page, with active-route highlighting in the sidebar and a global command palette (Cmd+K / Ctrl+K) for jumping between top-level views without touching the mouse
+**One owner for every job.** A job runs under a time-bound lease that the
+worker renews for as long as the job runs. Retries, reconnects, network
+failures and long runs cannot produce two workers executing the same job.
+A worker confirms that execution has begun before the job counts as
+running, and a worker managed by a standalone agent is never raced by the
+in-process scheduler ([ADR 0019](docs/adr/0019-standalone-worker-agent-process.md),
+[ADR 0034](docs/adr/0034-fence-lease-release-by-lease-identity.md),
+[ADR 0036](docs/adr/0036-fence-outcome-reports-by-lease-identity-for-agents.md)).
+
+**Recovery without an operator.** Heartbeats detect offline nodes and dead
+workers. Their jobs return to the queue within a retry budget and fail
+outright once it is spent, so one unhealthy node cannot bounce a job
+forever. A restarted agent reclaims its own worker identity, and the job it
+abandoned is cleaned up first (ADR 0030, ADR 0039). A node can be drained
+for maintenance while its running work finishes.
+
+**Placement that fits the workload.** The scheduler matches resource
+requirements and labels, skips nodes that are draining or offline, and
+picks the tightest sufficient fit across CPU, memory and VRAM together
+([ADR 0043](docs/adr/0043-multi-dimensional-best-fit-scheduling.md)). Jobs
+carry priorities and retry policies, and a running job can be cancelled.
+
+**A complete record of every job.** Every lifecycle step is stored as an
+immutable event at the moment it happens, from creation to completion,
+failure or reclaim. Each job has its own timeline, and a live feed shows
+the same events across the caller's tenant.
+
+**Access that is controlled.** Every route except the root and the two
+health probes requires an API key, including the route that issues keys,
+and the first key is minted by a script run locally with database access,
+never over HTTP. Keys carry scopes: setting a job command needs one
+([ADR 0054](docs/adr/0054-scope-api-keys-and-require-jobs-execute-to-set-job-command.md)),
+and so does issuing or revoking keys
+([ADR 0055](docs/adr/0055-scope-api-key-issuance-and-revocation.md)).
+Each agent in a fleet holds its own key
+([ADR 0045](docs/adr/0045-fleet-agents-use-one-api-key-per-agent.md)),
+and every key is rate limited, with a 429 and a Retry-After header when
+a caller exceeds its share
+([ADR 0021](docs/adr/0021-per-api-key-rate-limiting.md)).
+
+**Execution with a bound.** A job with a command runs as a subprocess with
+an enforced timeout: a graceful stop first, then a forced kill after a
+grace period.
+
+**One console.** Nodes, jobs, workers and the activity feed sit in a
+multi-page dashboard, with a command palette for moving between views from
+the keyboard.
 
 ---
 
 ## Architecture
 
-The system is split into four layers, with dependencies pointing inward:
+AetherGrid is built in four layers, and dependencies point inward. A test
+enforces the layer rules, so they hold as the code changes
+([ADR 0082](docs/adr/0082-enforce-the-layer-dependencies-with-a-test.md)).
 
-**Domain**: `Job`, `Node`, `Worker`, `Lease`, `Event`, and `ApiKey` aggregates enforce their own invariants. The scheduling algorithm and job lifecycle state machine live here as plain Python, with no imports from FastAPI or psycopg. Delete the infrastructure layer entirely and the domain tests still pass.
+**Domain.** Jobs, nodes, workers, leases, events and API keys enforce their
+own rules. The scheduling algorithm and the job lifecycle live here as plain
+Python, with no web or database imports. Remove the infrastructure layer
+and the domain tests still pass.
 
-**Application**: Services such as `ScheduleJobService`/`SchedulerService`, `AssignWorkerService`, `AcquireLeaseService`, `StartJobService`, `DrainNodeService`, `ClusterHealthService`, and `AuthenticateApiKeyService` coordinate domain objects and repositories without embedding business rules that belong one layer down. A `WorkerExecutionLoop` drives a worker through executing its assigned job as a real subprocess, continuously renewing its lease on a background thread for the job's entire runtime, recording the real outcome, and releasing the lease regardless of that outcome. A renewal that fails means the lease has already been reclaimed elsewhere, and the loop discards its result rather than risk persisting it against another worker's in-progress or completed work. A `ReconciliationLoop` catches the failure modes the happy path can't: crashed workers, expired leases, state left inconsistent by infrastructure failures.
+**Application.** Services coordinate the domain and the repositories without
+holding business rules. A worker execution loop runs an assigned job as a
+subprocess, renews the lease for the job's whole runtime, records the
+outcome and releases the lease. If a renewal fails, the lease has been
+reclaimed elsewhere, and the loop discards its result instead of writing it
+against another worker's work. A reconciliation loop covers what the normal
+path cannot: crashed workers, expired leases and state left inconsistent by
+infrastructure failures.
 
-**Infrastructure**: PostgreSQL implementations exist for every repository (`Node`, `Job`, `Worker`, `Lease`, `Event`, `ApiKey`, `Tenant`), written with raw `psycopg` instead of an ORM, a deliberate choice to keep query behavior and transaction boundaries visible rather than abstracted away. `Node`, `Job`, and `Event` additionally have SQLite implementations for local development; `ApiKey` deliberately does not, since local development already runs against the same PostgreSQL backend production uses, and a SQLite path would reintroduce the environment drift that consolidation was built to remove. Every repository is validated against a shared **contract test suite** run against each backend it supports, so switching between implementations, or trusting that they behave identically, is a tested guarantee rather than an assumption.
+**Infrastructure.** Every repository has a PostgreSQL implementation, written
+with psycopg and no ORM, so query behavior and transaction boundaries stay
+explicit. A shared contract suite runs against each backend a repository
+supports, so identical behavior is tested, not assumed.
 
-**Presentation**: FastAPI endpoints for jobs, nodes, workers, events, cluster health, and API keys that validate input, call an application service, and return a response. Every route requires a valid API key except `GET /`, `GET /health` and `GET /livez`, and the interactive API docs are off unless `NEUROMESH_ENABLE_API_DOCS` is set (ADR 0077). No business logic lives in this layer. The frontend mirrors the same discipline: `api/*.ts` typed HTTP calls, `hooks/*.ts` data-fetching hooks, and page/component composition, no business logic embedded in components either.
+**Presentation.** FastAPI endpoints validate input, call an application
+service and return a response, and hold no business logic. The dashboard
+follows the same split: typed API calls, data hooks and components.
 
-Every non-obvious decision, why domain owns scheduling instead of application, why raw psycopg over an ORM, how job lifecycle transitions are enforced, why leases exist instead of a simple assignment field, why renewal is a strict update rather than an upsert, why opaque tokens were chosen over JWTs, why job commands were deliberately kept unreachable from the public API until authentication existed, then reopened narrowly, first for workers reading only their own assigned job's command ([ADR 0020](docs/adr/0020-expose-job-command-to-authenticated-agents.md)), later for the public `CreateJobRequest` API itself ([ADR 0028](docs/adr/0028-expose-job-command-through-public-create-job-api.md)), is documented as an ADR in [`/docs/adr`](docs/adr).
-
+Every non-obvious decision is documented as an ADR in [`/docs/adr`](docs/adr).
 ---
 
 ## Test Coverage
@@ -231,12 +289,19 @@ CI runs the full test suite against a live Postgres service on every push. See `
 
 ---
 
-## Scope
+## What AetherGrid covers
 
-This isn't trying to compete with Kubernetes or Ray at scale. It's a demonstration of how to build a system that stays understandable as it grows: layered correctly, tested honestly, and documented well enough that someone else could pick it up and know exactly why every piece is where it is, including the pieces that are deliberately half-built and marked as such.
+AetherGrid decides where a job runs, who owns it, and what happens when
+a node or a worker fails, and it keeps the record of every step. The
+machines, the network and the identity systems around it stay yours. It
+runs on compute you operate.
 
 ---
 
-<p align="right">
-<strong>Let's connect</strong>&nbsp;&nbsp;&nbsp;<a href="https://wa.me/254745275288"><img src="https://img.icons8.com/ios-filled/32/25D366/whatsapp.png" alt="WhatsApp" /></a>&nbsp;&nbsp;<a href="https://linkedin.com/in/rotichkipleting"><img src="https://img.icons8.com/ios-filled/32/0A66C2/linkedin.png" alt="LinkedIn" /></a>&nbsp;&nbsp;<a href="mailto:wycliffe@aethergrid.co.ke"><img src="https://img.icons8.com/ios-filled/32/EA4335/gmail.png" alt="Email" /></a>
+<p align="center">
+  <strong>Evaluating AetherGrid for your organization? Get in touch.</strong>
+</p>
+
+<p align="center">
+  <a href="https://wa.me/254745275288"><img src="https://img.icons8.com/ios-filled/32/25D366/whatsapp.png" alt="WhatsApp" /></a>&nbsp;&nbsp;<a href="https://linkedin.com/in/rotichkipleting"><img src="https://img.icons8.com/ios-filled/32/0A66C2/linkedin.png" alt="LinkedIn" /></a>&nbsp;&nbsp;<a href="mailto:wycliffe@aethergrid.co.ke"><img src="https://img.icons8.com/ios-filled/32/EA4335/gmail.png" alt="Email" /></a>
 </p>
