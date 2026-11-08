@@ -2,11 +2,12 @@
 
 ## Status
 
-Proposed. Written before any code. It becomes Accepted when the
-rehearsal reads the seeded job's command back from the new API, the
-tests were written first and failed for the right reason, and one real
-run from v0.6.0 has shown whether the worker still holds the job when
-the command is read (decision 4).
+Accepted. The rehearsal issues its key with the jobs:execute scope
+inside the old release, seeds the job with a command, and fails when
+the worker route returns no running job or a different command after
+the upgrade. The tests were written first and each failed for the
+right reason. One real run from v0.6.0 showed that the worker still
+holds the job when the command is read, so decision 4 holds.
 
 Related: ADR 0020, ADR 0028, ADR 0054, ADR 0088.
 
@@ -102,3 +103,21 @@ It prints a number above 0 once the rehearsal reads the command.
 
 2026-11-08. Written before any code. read_back checks the status and
 the id of three rows, and the seeded job has no command.
+
+2026-11-08. Accepted. The failing tests were written first and
+13 of 14 failed for the expected reasons, the 14th being a guard that
+the snippet does not import the scope name. Fourteen older tests
+pinned the old behavior and changed in the same commit as the code:
+the two named in decision 5, and twelve in
+test_upgrade_rehearsal_new_api.py that this ADR did not name. They
+were built on a worker body with no running job, which decision 4
+now treats as a problem, and the test that accepted a missing running
+job was rewritten to expect the held job. Five mutations each fail
+the tests: the key without the scope, a job without a command, any
+command accepted, a worker without a running job accepted, and the
+worker route not checked. A real run from v0.6.0 to main at 304177f
+seeded the job with its command through the scoped key, changed
+nothing in 7 tables, matched the fresh schema (452 lines) and read
+all three rows back with the worker still holding the job. The
+success line of the run does not mention the command, and it is
+unchanged.

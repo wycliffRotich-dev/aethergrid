@@ -51,7 +51,7 @@ def test_the_snippet_is_valid_python() -> None:
     compile(upgrade_rehearsal.ISSUE_KEY_SNIPPET, "<snippet>", "exec")
 
 
-def test_the_snippet_issues_a_default_tenant_key_without_scopes() -> None:
+def test_the_snippet_issues_a_default_tenant_key_with_scopes() -> None:
     snippet = upgrade_rehearsal.ISSUE_KEY_SNIPPET
 
     assert (
@@ -59,7 +59,7 @@ def test_the_snippet_issues_a_default_tenant_key_without_scopes() -> None:
     )
     assert "get_create_api_key_service().execute(" in snippet
     assert "tenant_id=DEFAULT_TENANT_ID" in snippet
-    assert "scopes" not in snippet
+    assert "scopes=frozenset(" in snippet
 
 
 def test_the_snippet_prints_the_key_last_on_the_marked_line() -> None:

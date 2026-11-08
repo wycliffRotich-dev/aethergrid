@@ -306,6 +306,7 @@ from app.presentation.dependencies import get_create_api_key_service
 issued = get_create_api_key_service().execute(
     label="upgrade-rehearsal",
     tenant_id=DEFAULT_TENANT_ID,
+    scopes=frozenset({{"jobs:execute"}}),
 )
 print("{KEY_MARKER}" + issued.plaintext_key)
 """
@@ -338,11 +339,18 @@ NODE_PAYLOAD: Mapping[str, object] = {
     "name": "upgrade-rehearsal-node",
 }
 
-# A job with no command, so it needs no scope and nothing runs it.
+# The command of the seeded job. Nothing runs it, because an agent
+# manages the worker and none is started. The rehearsal reads it back
+# through the worker route after the upgrade (ADR 0089).
+JOB_COMMAND: tuple[str, ...] = ("echo", "upgrade-rehearsal")
+
+# Setting a command needs the jobs:execute scope, which the rehearsal
+# key is issued with (ADR 0054, ADR 0089).
 JOB_PAYLOAD: Mapping[str, object] = {
     "cpu_cores": 1,
     "memory_mib": 512,
     "vram_mib": 0,
+    "command": list(JOB_COMMAND),
 }
 
 # An agent manages the worker, so the in-process tick never executes
@@ -769,19 +777,46 @@ def fresh_schema(old: Compose, new: Compose) -> str:
     return schema_dump(old, FRESH_DATABASE)
 
 
+def _worker_command_problem(
+    path: str,
+    found: Mapping[str, object],
+) -> str | None:
+    """
+    What is wrong with the job a worker body says it holds, or None. The
+    command is compared with the seeded one and never repeated, because
+    a command may hold data (ADR 0089).
+    """
+    running = found.get("running_job")
+    if not isinstance(running, dict):
+        return f"GET {path} returned no running job"
+    if running.get("command") != list(JOB_COMMAND):
+        return f"GET {path} returned a running job with a different command"
+    return None
+
+
 def read_back(get: Get, ids: SeedIds) -> None:
     """
     Read the seeded node, worker and job through the new API. Each must
-    answer 200 with its own id. Nothing about state is asserted, because
-    the new API may reclaim a lease on startup (ADR 0088). Every problem
-    is reported, and a body is never repeated, because it may hold data.
+    answer 200 with its own id. The worker must still hold the job with
+    the seeded command (ADR 0089), and a worker that does not is
+    reported, not accepted. No other state is asserted, because the new
+    API may reclaim a lease on startup (ADR 0088). Every problem is
+    reported, and a body or a command is never repeated, because either
+    may hold data.
     """
+    routes: list[
+        tuple[
+            str,
+            str,
+            Callable[[str, Mapping[str, object]], str | None] | None,
+        ]
+    ] = [
+        (f"/nodes/{ids.node}", ids.node, None),
+        (f"/workers/{ids.worker}", ids.worker, _worker_command_problem),
+        (f"/jobs/{ids.job}", ids.job, None),
+    ]
     problems: list[str] = []
-    for path, expected in (
-        (f"/nodes/{ids.node}", ids.node),
-        (f"/workers/{ids.worker}", ids.worker),
-        (f"/jobs/{ids.job}", ids.job),
-    ):
+    for path, expected, check in routes:
         status, body = get(path)
         if status != 200:
             problems.append(f"GET {path} returned {status}, expected 200")
@@ -793,6 +828,10 @@ def read_back(get: Get, ids: SeedIds) -> None:
             continue
         if not isinstance(found, dict) or found.get("id") != expected:
             problems.append(f"GET {path} returned a body with a different id")
+            continue
+        problem = check(path, found) if check is not None else None
+        if problem is not None:
+            problems.append(problem)
     if problems:
         raise RuntimeError(
             "the new API did not serve the seeded rows: "
