@@ -22,7 +22,7 @@ AetherGrid takes workloads, matches them against available compute nodes by reso
 
 - **Exclusive ownership.** A job runs under a time-bound lease. A release or an outcome report is checked against the identity of the lease the caller holds, so a stale owner cannot end a job it no longer owns (ADR 0034, ADR 0036).
 - **Tenant isolation.** Every tenant-owned record carries a tenant, and each caller works inside its own tenant (ADR 0064, ADR 0075).
-- **Least privilege.** Every route requires an API key, including the one that issues keys. Powers that widen reach, such as setting a job command, need an explicit scope (ADR 0054).
+- **Least privilege.** Every route except the root and the two health probes requires an API key, including the one that issues keys. Powers that widen reach, such as setting a job command, need an explicit scope (ADR 0054).
 - **Upgrades that are rehearsed.** The upgrade rehearsal seeds the previous release, upgrades it to the new one, and compares the rows, the schema, the API start and the stored job command (ADR 0085 to ADR 0089).
 - **A decision record you can audit.** Every non-obvious decision is an ADR that states what was decided, why, and what is not claimed.
 
@@ -157,20 +157,6 @@ The system is split into four layers, with dependencies pointing inward:
 **Presentation**: FastAPI endpoints for jobs, nodes, workers, events, cluster health, and API keys that validate input, call an application service, and return a response. Every route requires a valid API key except `GET /`, `GET /health` and `GET /livez`, and the interactive API docs are off unless `NEUROMESH_ENABLE_API_DOCS` is set (ADR 0077). No business logic lives in this layer. The frontend mirrors the same discipline: `api/*.ts` typed HTTP calls, `hooks/*.ts` data-fetching hooks, and page/component composition, no business logic embedded in components either.
 
 Every non-obvious decision, why domain owns scheduling instead of application, why raw psycopg over an ORM, how job lifecycle transitions are enforced, why leases exist instead of a simple assignment field, why renewal is a strict update rather than an upsert, why opaque tokens were chosen over JWTs, why job commands were deliberately kept unreachable from the public API until authentication existed, then reopened narrowly, first for workers reading only their own assigned job's command ([ADR 0020](docs/adr/0020-expose-job-command-to-authenticated-agents.md)), later for the public `CreateJobRequest` API itself ([ADR 0028](docs/adr/0028-expose-job-command-through-public-create-job-api.md)), is documented as an ADR in [`/docs/adr`](docs/adr).
-
----
-
-## A Deliberate Security Decision Worth Naming
-
-The execution engine runs real, arbitrary commands as subprocesses with real timeout enforcement. `Job.command` and `Job.exit_code` are fully tested at the service layer. Until recently, neither was exposed through the public `CreateJobRequest` API, a boundary enforced by a test asserting the field's absence, not left as a comment.
-
-Shipping the capability before exposing it was the deliberate call: build it correctly, prove it works, defer the exposure decision until it can be made deliberately rather than by default ([ADR 0012](docs/adr/0012-real-job-execution.md)).
-
-Authentication closed the first gap. Every route except `GET /`, `GET /health` and `GET /livez` now requires a valid API key, the interactive docs are off by default (ADR 0077), and the only way to mint one without already holding one is a script run locally with direct database access, never over HTTP ([ADR 0015](docs/adr/0015-api-key-authentication.md)). That left a sharper question open: what should *any* authenticated caller be trusted to do, while the system still had a single key tier with no role distinction.
-
-That question has been answered twice, narrowly each time. [ADR 0020](docs/adr/0020-expose-job-command-to-authenticated-agents.md) let an assigned worker read the one command already set for its own job, nothing broader. [ADR 0028](docs/adr/0028-expose-job-command-through-public-create-job-api.md) closed the rest: `command` is now settable through the public API, gated by the same key requirement every other authenticated route uses. No new credential tier, by design, until the risk was real. In production, that risk is scoped to whoever holds a Render Shell-issued key ([ADR 0025](docs/adr/0025-issuing-production-api-keys-via-render-shell.md)), at that time, exactly one person. ADR 0028 names the exact trigger for revisiting that: the day a second key exists. That trigger has fired. [ADR 0054](docs/adr/0054-scope-api-keys-and-require-jobs-execute-to-set-job-command.md) adds scoped API keys: setting `command` now requires a key explicitly granted `jobs:execute`, every pre-existing key loses it until deliberately re-granted, and the scope can be granted only through `scripts/issue_api_key.py`, never over HTTP.
-
-The pattern holds throughout: build it right, prove it works, name the risk before shipping the exposure, not just wait for the last blocker to clear.
 
 ---
 
