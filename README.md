@@ -37,11 +37,23 @@ AetherGrid takes workloads, matches them against available compute nodes by reso
 
 ---
 
-## Why This Exists
+## Why AetherGrid
 
-Most scheduler side-projects are a single `main.py` script wrapped in a `while True` loop polling an in-memory dictionary. They work fine, right up until you need to swap the persistence engine, add a new constraint type, or figure out why a job silently disappeared, or why two workers picked up the same job at once.
+AI workloads are expensive, long-running and shared. When a node drops, a
+network splits or a worker restarts, the questions are always the same:
+who owns this job, did it run twice, and can the next release be trusted
+with production data.
 
-AetherGrid was built around one rule: **the domain logic doesn't know or care where the data lives.** Jobs, nodes, workers, and the allocation algorithm are pure Python with zero infrastructure dependencies. The database is a detail, not the foundation. This project is a concrete demonstration that these architectural patterns aren't just conference-talk vocabulary; they're guardrails that keep a codebase understandable as it grows, and as its correctness requirements get harder.
+AetherGrid answers them with rules the system enforces, not habits teams
+have to remember. A job has one owner at a time. A tenant sees only its
+own work. A key carries only the powers it was issued with. An upgrade is
+rehearsed on seeded data from the previous release before it ships.
+
+For platform and infrastructure teams, one cluster serves several teams
+or customers, each inside its own tenant, and the cluster recovers from
+node and worker failures on its own. For the people who sign off on risk,
+every guarantee is written down, tied to the decision that created it,
+and checked by tests that run in CI.
 
 ---
 
