@@ -110,3 +110,6 @@ fresh schema (452 lines) and read all three rows back. loopback_base
 also refuses a malformed port with the same message as every other
 rejected URL, and a probe over 19968 URLs found no verdict differences
 from the check it replaced. Condition 5 of ADR 0075 is still open.
+
+2026-11-08. The follow-up to read the job's command through the
+worker route is proposed in ADR 0089.
