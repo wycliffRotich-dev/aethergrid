@@ -123,3 +123,6 @@ the migrate run, prints the versions the upgrade added and fails
 when none was added, when an applied version is missing afterwards
 and when a name or checksum changed. The Evidence section has the
 runs. Condition 5 of ADR 0075 is still open.
+
+2026-11-08. The follow-up about a catalog check after the upgrade
+is done in ADR 0087, as ADR 0085 records.
