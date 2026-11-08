@@ -12,6 +12,7 @@ from app.presentation.schemas.create_worker_request import (
     CreateWorkerRequest,
 )
 from scripts.upgrade_rehearsal import (
+    JOB_COMMAND,
     JOB_PAYLOAD,
     NODE_PAYLOAD,
     SeedIds,
@@ -59,13 +60,13 @@ def test_the_worker_is_managed_by_an_agent_so_nothing_runs_the_job() -> None:
     assert api.calls[1][1]["managed_by"] == WorkerManagement.AGENT.value
 
 
-def test_the_job_has_no_command() -> None:
+def test_the_job_has_the_seeded_command() -> None:
     api = FakeApi()
 
     seed_cluster(api.post)
 
-    assert "command" not in JOB_PAYLOAD
-    assert "command" not in api.calls[2][1]
+    assert JOB_PAYLOAD["command"] == list(JOB_COMMAND)
+    assert api.calls[2][1]["command"] == list(JOB_COMMAND)
 
 
 def test_the_payloads_are_valid_for_the_request_models_of_the_app() -> None:

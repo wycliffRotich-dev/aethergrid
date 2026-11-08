@@ -137,8 +137,17 @@ def ok(identifier: str, **extra: object) -> tuple[int, str]:
     return 200, json.dumps({"id": identifier, **extra})
 
 
+def holding_the_seeded_job() -> tuple[int, str]:
+    command = list(upgrade_rehearsal.JOB_COMMAND)
+    return ok("w-1", running_job={"id": "j-1", "command": command})
+
+
 def served() -> dict[str, tuple[int, str]]:
-    return {NODE: ok("n-1"), WORKER: ok("w-1"), JOB: ok("j-1")}
+    return {
+        NODE: ok("n-1"),
+        WORKER: holding_the_seeded_job(),
+        JOB: ok("j-1"),
+    }
 
 
 def getter(
@@ -162,10 +171,15 @@ def test_the_three_rows_are_read_in_order() -> None:
 
 
 def test_a_changed_state_is_not_a_problem() -> None:
-    # ADR 0088 decision 6: the new API may reclaim a lease on startup,
-    # so only existence and identity are asserted.
+    # ADR 0088 decision 6: the new API may change a status on startup.
+    # ADR 0089 decision 4 still requires the worker to hold the job.
     responses = served()
-    responses[WORKER] = ok("w-1", status="OFFLINE", running_job=None)
+    command = list(upgrade_rehearsal.JOB_COMMAND)
+    responses[WORKER] = ok(
+        "w-1",
+        status="OFFLINE",
+        running_job={"id": "j-1", "command": command},
+    )
     responses[JOB] = ok("j-1", status="QUEUED")
     get, _ = getter(responses)
 
