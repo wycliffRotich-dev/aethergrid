@@ -266,9 +266,12 @@ CI runs the full test suite against a live Postgres service on every push. See `
 
 ---
 
-## Scope
+## What AetherGrid covers
 
-This isn't trying to compete with Kubernetes or Ray at scale. It's a demonstration of how to build a system that stays understandable as it grows: layered correctly, tested honestly, and documented well enough that someone else could pick it up and know exactly why every piece is where it is, including the pieces that are deliberately half-built and marked as such.
+AetherGrid decides where a job runs, who owns it, and what happens when
+a node or a worker fails, and it keeps the record of every step. The
+machines, the network and the identity systems around it stay yours. It
+runs on compute you operate.
 
 ---
 
