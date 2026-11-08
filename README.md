@@ -21,7 +21,7 @@
 AetherGrid takes workloads, matches them against available compute nodes by resource requirements and constraints, and manages the full lifecycle: queued, scheduled, running, completed, failed, retried and cancelled. It is built for teams that run AI under audit, where a job that runs twice, a tenant that reads another tenant's data, or an upgrade that loses a row is an incident and not a bug.
 
 - **Exclusive ownership.** A job runs under a time-bound lease. A release or an outcome report is checked against the identity of the lease the caller holds, so a stale owner cannot end a job it no longer owns (ADR 0034, ADR 0036).
-- **Tenant isolation.** Every tenant-owned record carries a tenant, and each caller works inside its own tenant (ADR 0064, ADR 0075).
+- **Tenant isolation.** Every tenant-owned record carries a tenant. On Postgres, the database refuses a row without one, and reads of keys, nodes, jobs, workers and events are scoped to the caller's tenant (ADR 0064, ADR 0075).
 - **Least privilege.** Every route except the root and the two health probes requires an API key, including the one that issues keys. Powers that widen reach, such as setting a job command, need an explicit scope (ADR 0054).
 - **Upgrades that are rehearsed.** The upgrade rehearsal seeds the previous release, upgrades it to the new one, and compares the rows, the schema, the API start and the stored job command (ADR 0085 to ADR 0089).
 - **A decision record you can audit.** Every non-obvious decision is an ADR that states what was decided, why, and what is not claimed.
@@ -166,8 +166,15 @@ the same events across the caller's tenant.
 **Access that is controlled.** Every route except the root and the two
 health probes requires an API key, including the route that issues keys,
 and the first key is minted by a script run locally with database access,
-never over HTTP. Keys carry scopes, and setting a job command needs one
-([ADR 0054](docs/adr/0054-scope-api-keys-and-require-jobs-execute-to-set-job-command.md)).
+never over HTTP. Keys carry scopes: setting a job command needs one
+([ADR 0054](docs/adr/0054-scope-api-keys-and-require-jobs-execute-to-set-job-command.md)),
+and so does issuing or revoking keys
+([ADR 0055](docs/adr/0055-scope-api-key-issuance-and-revocation.md)).
+Each agent in a fleet holds its own key
+([ADR 0045](docs/adr/0045-fleet-agents-use-one-api-key-per-agent.md)),
+and every key is rate limited, with a 429 and a Retry-After header when
+a caller exceeds its share
+([ADR 0021](docs/adr/0021-per-api-key-rate-limiting.md)).
 
 **Execution with a bound.** A job with a command runs as a subprocess with
 an enforced timeout: a graceful stop first, then a forced kill after a
