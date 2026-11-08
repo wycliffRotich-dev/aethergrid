@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  A distributed AI workload orchestrator built around the problems that make scheduling hard at scale: exclusive execution ownership under failure, reconciliation after partial failures, and enforced resource limits. Not a CRUD tutorial with a scheduler theme.
+  AetherGrid is the control plane for AI workloads. It places work on the compute you already own, and it keeps one rule under failure: a job has one owner at a time, held through a time-bound lease.
 </p>
 
 <p align="center">
@@ -18,7 +18,13 @@
   <a href="https://aethergrid-dashboard.onrender.com"><img src="https://img.shields.io/badge/Live%20Demo-aethergrid--dashboard.onrender.com-brightgreen?logo=render&logoColor=white" alt="Live Demo"></a>
 </p>
 
-AetherGrid takes workloads, matches them against available compute nodes based on resource requirements and constraints, and manages the full lifecycle: queued, scheduled, running, completed, failed, retried, cancelled. Jobs run through workers registered against nodes, and job execution ownership is enforced through time-bound leases rather than a simple assignment flag. Every route requires API key authentication, including the endpoint that issues keys.
+AetherGrid takes workloads, matches them against available compute nodes by resource requirements and constraints, and manages the full lifecycle: queued, scheduled, running, completed, failed, retried and cancelled. It is built for teams that run AI under audit, where a job that runs twice, a tenant that reads another tenant's data, or an upgrade that loses a row is an incident and not a bug.
+
+- **Exclusive ownership.** A job runs under a time-bound lease. A release or an outcome report is checked against the identity of the lease the caller holds, so a stale owner cannot end a job it no longer owns (ADR 0034, ADR 0036).
+- **Tenant isolation.** Every tenant-owned record carries a tenant, and each caller works inside its own tenant (ADR 0064, ADR 0075).
+- **Least privilege.** Every route requires an API key, including the one that issues keys. Powers that widen reach, such as setting a job command, need an explicit scope (ADR 0054).
+- **Upgrades that are rehearsed.** The upgrade rehearsal seeds the previous release, upgrades it to the new one, and compares the rows, the schema, the API start and the stored job command (ADR 0085 to ADR 0089).
+- **A decision record you can audit.** Every non-obvious decision is an ADR that states what was decided, why, and what is not claimed.
 
 <p align="center">
   <a href="https://raw.githubusercontent.com/wycliffRotich-dev/aethergrid/main/docs/assets/aethergrid-data-flow.svg" target="_blank">
@@ -112,7 +118,7 @@ Every non-obvious decision in this codebase, why a domain rule lives where it do
 - [**ADR 0088 - Start the New API on the Upgraded Database**](docs/adr/0088-start-the-new-api-on-the-upgraded-database.md): Accepted. The rehearsal shows that an upgraded database holds the right rows and the right schema, and not that the release that upgraded it can start on it. It starts the new release's API on that database with `up --no-deps --no-build --wait`, read back the seeded node, worker and job with the key the old release issued, and fails when the API does not start, a read is not a 200 or a body carries a different id. Not claimed: that any state is preserved, since the new API may reclaim a lease on startup, or condition 5 of ADR 0075.
 - [**ADR 0089 - Read the Job Command After the Upgrade**](docs/adr/0089-read-the-job-command-after-the-upgrade.md): Accepted. The rehearsal checked the status and the id of the seeded node, worker and job, and the seeded job had no command, so a migration that lost or changed a stored command would have passed. It now issues the key with the `jobs:execute` scope inside the old release, seeds the job with a command, and fails when the worker route returns no running job or a different command. Fourteen new tests were written first, five mutations each fail them, and a real run from v0.6.0 to main at 304177f read the command back from the new API. Not claimed: that the command runs, that any other command survives, or that the lease survives startup in any run other than that one.
 
-If you're evaluating whether someone can operate at a systems level rather than a feature level, this is the fastest way to check.
+The index above is the fastest way to see how each part of the system was decided.
 
 ---
 
