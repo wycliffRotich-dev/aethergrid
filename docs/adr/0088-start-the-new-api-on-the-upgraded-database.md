@@ -113,3 +113,6 @@ from the check it replaced. Condition 5 of ADR 0075 is still open.
 
 2026-11-08. The follow-up to read the job's command through the
 worker route is proposed in ADR 0089.
+
+2026-11-08. The follow-up to read the job's command through the
+worker route is done in ADR 0089 (main c5a6639).

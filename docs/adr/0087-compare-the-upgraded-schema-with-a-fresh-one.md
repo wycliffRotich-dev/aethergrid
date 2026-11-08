@@ -145,3 +145,9 @@ migrate service, dumps both databases and compares them. The Evidence
 section has the runs. The schema of an upgraded database is shown to
 match a fresh install of the same release for one seed and one
 release pair. Condition 5 of ADR 0075 is still open.
+
+2026-11-08. The follow-up to run the comparison from a tagged
+release is done. v0.7.0 is the first release that carries 0005, and
+the rehearsal ran on its commit aa4eaca with v0.6.0 as the old
+release and matched the schema (452 lines), as ADR 0075 records on
+2026-11-06. Condition 5 of ADR 0075 is met.
