@@ -134,25 +134,48 @@ The index above is the fastest way to see how each part of the system was decide
 
 ---
 
-## Key Capabilities
+## Capabilities
 
-- **API key authentication on every route except three probes**: apart from three exempt probes, no endpoint in the system, including the one that issues keys, is reachable without a valid credential. The exempt probes are `GET /`, `GET /health` and `GET /livez`, and the interactive API docs are off unless `NEUROMESH_ENABLE_API_DOCS` is set (ADR 0077). The only way to mint the first key is a script run locally with direct database access, never over HTTP, closing the exact self-service-credential hole that pattern would otherwise leave open
-- **Job lifecycle management**: explicit state transitions (Queued → Scheduled → Running → Completed/Failed/Cancelled), including cancellation of a job already `RUNNING` via an explicit `CANCELLING` state, with configurable retry policies and priority-aware scheduling, plus cancel and retry actions reachable from the dashboard
-- **Per-job lifecycle history**: every job has a dedicated detail page (`/jobs/{id}`) showing its full real event timeline, `JobCreated` through completion, not just its current status
-- **Constraint-aware, multi-dimensional best-fit allocator**: matches workloads to nodes based on resource requirements and labels, skipping nodes that are draining or offline, then breaks ties among sufficient candidates by normalized tightness across every resource dimension a job actually requests, CPU, memory, and VRAM together, not CPU alone (see [ADR 0043](docs/adr/0043-multi-dimensional-best-fit-scheduling.md))
-- **Node draining**: a healthy node can be taken out of scheduling rotation for maintenance without killing it outright; the scheduler stops assigning it new work while anything already running on it continues to completion
-- **Worker registration and heartbeats**: registering a node automatically registers a worker against it, so it's immediately capable of claiming and executing work, not just existing as unused capacity
-- **Standalone worker agent with exclusive job ownership**: `scripts/run_agent.py` runs as a real, separate process, polling the API over HTTP for assigned work, executing it as a real local subprocess, and heartbeating on its own background thread for the agent's entire lifetime, independent of whatever job it's currently executing (see [ADR 0019](docs/adr/0019-standalone-worker-agent-process.md)). This replaces the dashboard's client-side heartbeat as the liveness mechanism for any worker running it; a worker with no agent process attached still falls back to node liveness alone. Every worker is tagged with an explicit `managed_by` field set at registration (`DASHBOARD` or `AGENT`); the in-process scheduler loop skips any worker marked `AGENT` entirely, so a standalone agent's jobs are executed exactly once, by the agent, never raced against the in-process path.
-- **Lease-based execution ownership**: when a worker accepts a job, it holds a renewable, expiring lease on that job, continuously renewed for the job's entire execution, so retries, reconnects, network failures, and jobs that simply run long can't result in two workers executing the same job
-- **Explicit execution-start confirmation**: `POST /workers/{worker_id}/jobs/{job_id}/start` lets whatever is actually executing a job, the in-process scheduler loop for dashboard-managed workers, a standalone agent for agent-managed ones (ADR 0019), confirm execution has genuinely begun. This is the one call that transitions a job from `Scheduled` to `Running`; assignment alone no longer does (see [ADR 0019](docs/adr/0019-standalone-worker-agent-process.md))
-- **Real subprocess execution with enforced timeouts**: jobs with a command run as real subprocesses, with a two-stage shutdown (graceful `SIGTERM`, then `SIGKILL` after a grace period) if a job overruns its execution timeout
-- **Node liveness tracking**: heartbeat-based health checks, automatic detection of offline nodes, and resource reclamation when work fails or nodes disappear
-- **Reconciliation with bounded retries**: jobs abandoned by a dead worker or an offline node are reclaimed back to the queue within their retry budget, and fail outright once that budget is exhausted, so a single unhealthy node can't cause a job to be reassigned and abandoned indefinitely, with the reclaim ordered to close a real race where a dying worker's renewal could land after reconciliation had already started reassigning its lease
-- **Domain event recording**: every lifecycle transition a job goes through, `JobCreated`, `JobScheduled`, `WorkerAssigned`, `LeaseAcquired`, `LeaseReleased`, `JobCompleted`/`JobFailed`, and `JobReclaimed`, is persisted as an immutable event at the exact point it happens
-- **Live event feed**: `GET /events` and a real-time Activity Feed on the dashboard, polling every 3 seconds, so the story an individual job tells on its own detail page is also visible as it happens for every job in the caller's tenant
-- **Worker visibility**: a dedicated Workers table showing every registered worker, its status, the node it belongs to, what it's running, and when it was last seen
-- **Idempotent worker re-registration per node**: an agent restarting after a crash reclaims its existing worker identity instead of leaving a dead row behind, using the same reclaim sequence reconciliation already trusts, lease deletion, resource release, job reclaim, so an abandoned job is fully cleaned up before the worker is recovered rather than silently discarded (see ADR 0030, ADR 0039)
-- **Multi-page dashboard**: real client-side routing (`/`, `/nodes`, `/jobs`, `/jobs/{id}`, `/workers`, `/workers/{id}`) instead of a single page, with active-route highlighting in the sidebar and a global command palette (Cmd+K / Ctrl+K) for jumping between top-level views without touching the mouse
+**One owner for every job.** A job runs under a time-bound lease that the
+worker renews for as long as the job runs. Retries, reconnects, network
+failures and long runs cannot produce two workers executing the same job.
+A worker confirms that execution has begun before the job counts as
+running, and a worker managed by a standalone agent is never raced by the
+in-process scheduler ([ADR 0019](docs/adr/0019-standalone-worker-agent-process.md),
+[ADR 0034](docs/adr/0034-fence-lease-release-by-lease-identity.md),
+[ADR 0036](docs/adr/0036-fence-outcome-reports-by-lease-identity-for-agents.md)).
+
+**Recovery without an operator.** Heartbeats detect offline nodes and dead
+workers. Their jobs return to the queue within a retry budget and fail
+outright once it is spent, so one unhealthy node cannot bounce a job
+forever. A restarted agent reclaims its own worker identity, and the job it
+abandoned is cleaned up first (ADR 0030, ADR 0039). A node can be drained
+for maintenance while its running work finishes.
+
+**Placement that fits the workload.** The scheduler matches resource
+requirements and labels, skips nodes that are draining or offline, and
+picks the tightest sufficient fit across CPU, memory and VRAM together
+([ADR 0043](docs/adr/0043-multi-dimensional-best-fit-scheduling.md)). Jobs
+carry priorities and retry policies, and a running job can be cancelled.
+
+**A complete record of every job.** Every lifecycle step is stored as an
+immutable event at the moment it happens, from creation to completion,
+failure or reclaim. Each job has its own timeline, and a live feed shows
+the same events across the caller's tenant.
+
+**Access that is controlled.** Every route except the root and the two
+health probes requires an API key, including the route that issues keys,
+and the first key is minted by a script run locally with database access,
+never over HTTP. Keys carry scopes, and setting a job command needs one
+([ADR 0054](docs/adr/0054-scope-api-keys-and-require-jobs-execute-to-set-job-command.md)).
+
+**Execution with a bound.** A job with a command runs as a subprocess with
+an enforced timeout: a graceful stop first, then a forced kill after a
+grace period.
+
+**One console.** Nodes, jobs, workers and the activity feed sit in a
+multi-page dashboard, with a command palette for moving between views from
+the keyboard.
 
 ---
 
