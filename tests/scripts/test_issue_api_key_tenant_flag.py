@@ -26,6 +26,7 @@ def run_script(
     args: list[str],
     *,
     backend: str | None = "memory",
+    extra_env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     env = {
         key: value
@@ -34,6 +35,7 @@ def run_script(
     }
     if backend is not None:
         env["NEUROMESH_STORAGE_BACKEND"] = backend
+    env.update(extra_env or {})
     return subprocess.run(
         [sys.executable, str(SCRIPT), *args],
         capture_output=True,
@@ -145,6 +147,22 @@ def test_an_existing_tenant_is_used_and_not_created() -> None:
     assert result.stderr.strip() == (
         f"Using tenant 'default' ({DEFAULT_ID})."
     )
+
+
+def test_the_test_database_guard_runs_before_a_tenant_is_created() -> None:
+    result = run_script(
+        ["runner", "--tenant", "acme", "--create-tenant"],
+        extra_env={
+            "NEUROMESH_DATABASE_URL": (
+                "postgresql://user:placeholder@localhost:5433/aethergrid_test"
+            )
+        },
+    )
+
+    assert result.returncode != 0
+    assert "looks like a test database" in result.stderr
+    assert "Created tenant" not in result.stderr
+    assert "Issued API key" not in result.stdout
 
 
 def test_a_blank_tenant_name_is_refused_without_a_traceback() -> None:
