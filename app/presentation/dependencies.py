@@ -127,6 +127,9 @@ from app.application.services.report_job_outcome_service import (
 from app.application.services.request_logging_service import (
     RequestLoggingService,
 )
+from app.application.services.resolve_tenant_service import (
+    ResolveTenantService,
+)
 from app.application.services.retry_job_service import (
     RetryJobService,
 )
@@ -900,6 +903,14 @@ def get_create_api_key_service() -> CreateApiKeyService:
         api_key_repository=_api_key_repository,
         tenant_repository=_tenant_repository,
     )
+
+
+def get_resolve_tenant_service() -> ResolveTenantService:
+    """
+    Return ResolveTenantService.
+    """
+
+    return ResolveTenantService(_tenant_repository)
 
 
 def get_revoke_api_key_service() -> RevokeApiKeyService:

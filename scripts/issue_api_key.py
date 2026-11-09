@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import os
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.value_objects.api_key_scope import KNOWN_SCOPES
@@ -68,11 +69,24 @@ def _confirm_not_test_database(database_url: str) -> None:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class IssueArgs:
+    """
+    The parsed command line (ADR 0090).
+
+    Immutable. A field is added only together with the option
+    that fills it.
+    """
+
+    label: str
+    scopes: frozenset[str]
+
+
 def parse_args(
     argv: Sequence[str] | None = None,
-) -> tuple[str, frozenset[str]]:
+) -> IssueArgs:
     """
-    Parse the command line into (label, scopes).
+    Parse the command line into IssueArgs.
 
     --scope is repeatable and restricted to the known scope
     vocabulary, so a typo fails here with a clear message
@@ -102,11 +116,14 @@ def parse_args(
 
     args = parser.parse_args(argv)
 
-    return args.label, frozenset(args.scopes or [])
+    return IssueArgs(
+        label=args.label,
+        scopes=frozenset(args.scopes or []),
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    label, scopes = parse_args(argv)
+    args = parse_args(argv)
 
     database_url = os.getenv("NEUROMESH_DATABASE_URL")
     if database_url is not None:
@@ -116,8 +133,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     # ADR 0064: a bootstrap key belongs to the default tenant until
     # this script takes a --tenant option.
     issued = service.execute(
-        label=label,
-        scopes=scopes,
+        label=args.label,
+        scopes=args.scopes,
         tenant_id=DEFAULT_TENANT_ID,
     )
 

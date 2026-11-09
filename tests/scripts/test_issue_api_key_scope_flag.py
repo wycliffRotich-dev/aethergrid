@@ -7,20 +7,20 @@ from scripts.issue_api_key import parse_args
 
 
 def test_no_scope_flag_means_no_scopes() -> None:
-    label, scopes = parse_args(["runner"])
+    args = parse_args(["runner"])
 
-    assert label == "runner"
-    assert scopes == frozenset()
+    assert args.label == "runner"
+    assert args.scopes == frozenset()
 
 
 def test_scope_flag_grants_the_scope() -> None:
-    _, scopes = parse_args(["runner", "--scope", JOBS_EXECUTE])
+    args = parse_args(["runner", "--scope", JOBS_EXECUTE])
 
-    assert scopes == frozenset({JOBS_EXECUTE})
+    assert args.scopes == frozenset({JOBS_EXECUTE})
 
 
 def test_scope_flag_is_repeatable_and_deduplicated() -> None:
-    _, scopes = parse_args(
+    args = parse_args(
         [
             "runner",
             "--scope",
@@ -30,7 +30,7 @@ def test_scope_flag_is_repeatable_and_deduplicated() -> None:
         ]
     )
 
-    assert scopes == frozenset({JOBS_EXECUTE})
+    assert args.scopes == frozenset({JOBS_EXECUTE})
 
 
 def test_unknown_scope_is_rejected_by_the_parser(
