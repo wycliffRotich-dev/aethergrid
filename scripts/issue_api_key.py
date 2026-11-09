@@ -12,6 +12,15 @@ decision, not an oversight.
 Usage:
     python scripts/issue_api_key.py "ci-bootstrap"
     python scripts/issue_api_key.py "runner" --scope jobs:execute
+    python scripts/issue_api_key.py "runner" --tenant acme
+    python scripts/issue_api_key.py "runner" --tenant acme --create-tenant
+
+A key belongs to the default tenant unless --tenant names another
+(ADR 0090). The name is trimmed and matched exactly, with case. A
+tenant that does not exist is an error, and --create-tenant creates
+it first. When --tenant is given, the tenant used, and whether it
+was created, is reported on standard error, so standard output
+still carries only the key.
 
 A key is issued with no scopes unless --scope is given (ADR
 0054). The jobs:execute scope is required to set a job's
@@ -32,12 +41,16 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 
 from app.domain.entities.tenant import DEFAULT_TENANT_ID
+from app.domain.exceptions.domain_error import DomainError
+from app.domain.exceptions.tenant_not_found_error import (
+    TenantNotFoundError,
+)
 from app.domain.value_objects.api_key_scope import KNOWN_SCOPES
-from app.presentation.dependencies import get_create_api_key_service
 
 
 def _confirm_not_test_database(database_url: str) -> None:
@@ -80,6 +93,8 @@ class IssueArgs:
 
     label: str
     scopes: frozenset[str]
+    tenant_name: str | None
+    create_tenant: bool
 
 
 def parse_args(
@@ -114,11 +129,31 @@ def parse_args(
         ),
     )
 
+    parser.add_argument(
+        "--tenant",
+        dest="tenant_name",
+        metavar="NAME",
+        help=(
+            "issue the key for the tenant with this name. "
+            "Default: the default tenant."
+        ),
+    )
+    parser.add_argument(
+        "--create-tenant",
+        action="store_true",
+        help="create the tenant named by --tenant if it does not exist",
+    )
+
     args = parser.parse_args(argv)
+
+    if args.create_tenant and args.tenant_name is None:
+        parser.error("--create-tenant requires --tenant")
 
     return IssueArgs(
         label=args.label,
         scopes=frozenset(args.scopes or []),
+        tenant_name=args.tenant_name,
+        create_tenant=args.create_tenant,
     )
 
 
@@ -129,13 +164,41 @@ def main(argv: Sequence[str] | None = None) -> None:
     if database_url is not None:
         _confirm_not_test_database(database_url)
 
+    # ADR 0090: the wiring builds the repositories when it is
+    # imported, so it is imported here, after the arguments are
+    # parsed and the test database guard has run. Usage text and
+    # the guard then work without a storage backend.
+    from app.presentation.dependencies import (
+        get_create_api_key_service,
+        get_resolve_tenant_service,
+    )
+
+    tenant_id = DEFAULT_TENANT_ID
+    if args.tenant_name is not None:
+        try:
+            resolved = get_resolve_tenant_service().execute(
+                args.tenant_name,
+                create_if_missing=args.create_tenant,
+            )
+        except TenantNotFoundError as error:
+            raise SystemExit(
+                f"error: {error}. Pass --create-tenant to create it."
+            ) from error
+        except (DomainError, ValueError) as error:
+            raise SystemExit(f"error: {error}") from error
+
+        tenant_id = resolved.tenant.id
+        verb = "Created" if resolved.created else "Using"
+        print(
+            f"{verb} tenant '{resolved.tenant.name}' ({tenant_id}).",
+            file=sys.stderr,
+        )
+
     service = get_create_api_key_service()
-    # ADR 0064: a bootstrap key belongs to the default tenant until
-    # this script takes a --tenant option.
     issued = service.execute(
         label=args.label,
         scopes=args.scopes,
-        tenant_id=DEFAULT_TENANT_ID,
+        tenant_id=tenant_id,
     )
 
     print(f"Issued API key for '{issued.label}':")
