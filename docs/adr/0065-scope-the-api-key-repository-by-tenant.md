@@ -105,3 +105,6 @@ true when it was written and is superseded. AetherGrid on main is now
 multi-tenant as ADR 0064 defines it. The last entry of ADR 0064 records
 what that covers and what it does not, including that no release carries
 migration 0005 yet.
+
+2026-11-09. The follow-up to add a `--tenant` option to the bootstrap
+script is proposed in ADR 0090.
