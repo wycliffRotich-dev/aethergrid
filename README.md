@@ -59,10 +59,14 @@ and checked by tests that run in CI.
 
 ## Engineering Decision Records
 
-<details>
-<summary><img src="https://img.shields.io/badge/ADR_index-Click_to_open-orange" alt="ADR index, click to open"></summary>
+<div align="center">
 
-<br>
+<details>
+<summary><b>ADR index (click to open)</b></summary>
+
+<h3 align="center">Few ADRs Worth Skimming</h3>
+
+<div align="left">
 
 Every non-obvious decision in this codebase, why a domain rule lives where it does, why an obvious-looking shortcut was rejected, what broke and how it got fixed, is written down at the moment it was made, not reconstructed afterward for a portfolio. The ADRs live in <a href="docs/adr"><img src="https://img.shields.io/github/directory-file-count/wycliffRotich-dev/aethergrid/docs/adr?type=file&extension=md&label=ADRs&color=blueviolet&cacheSeconds=3600" alt="ADR count" align="absmiddle"></a>. A few worth reading directly if you want to see the reasoning, not just the conclusion:
 
@@ -138,7 +142,11 @@ Every non-obvious decision in this codebase, why a domain rule lives where it do
 
 The index above is the fastest way to see how each part of the system was decided.
 
+</div>
+
 </details>
+
+</div>
 
 ---
 
