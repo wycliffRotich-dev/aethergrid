@@ -249,3 +249,69 @@ def test_reclaim_job_fails_outright_once_retries_exhausted() -> None:
 
     assert result is True
     assert job.is_failed()
+
+
+def test_reclaim_job_does_not_credit_node_when_job_not_reclaimable(
+    tmp_path,
+) -> None:
+    """
+    A job that can no longer be reclaimed must not give its
+    resources back to the node. The node also hosts another
+    job, so a credit for a job that already finished would make
+    the node report capacity it does not have. The persisted
+    node is read back through a fresh connection, not the same
+    object.
+    """
+    job_resources = ResourceRequirements(
+        cpu_cores=1,
+        memory_mib=512,
+        vram_mib=0,
+    )
+    node, job = _make_node_and_job(job_resources)
+    node.allocate(
+        ResourceRequirements(
+            cpu_cores=2,
+            memory_mib=1024,
+            vram_mib=0,
+        )
+    )
+    job.complete()
+
+    db_path = os.path.join(tmp_path, "test.db")
+
+    write_connection = create_connection(db_path)
+    SqliteNodeRepository(write_connection).save(node)
+    write_connection.close()
+
+    job_repository = InMemoryJobRepository([job])
+    lease_repository = InMemoryLeaseRepository()
+    lease_repository.save(
+        Lease.create(
+            worker_id=NodeId.new().value,
+            job_id=job.id,
+            tenant_id=DEFAULT_TENANT_ID,
+        )
+    )
+
+    exec_connection = create_connection(db_path)
+    result = reclaim_job(
+        job,
+        node,
+        lease_repository=lease_repository,
+        node_repository=SqliteNodeRepository(exec_connection),
+        job_repository=job_repository,
+    )
+    exec_connection.close()
+
+    assert result is False
+    assert job.status.name == "COMPLETED"
+
+    read_connection = create_connection(db_path)
+    reloaded = SqliteNodeRepository(read_connection).get_by_id(
+        node.id, DEFAULT_TENANT_ID
+    )
+    read_connection.close()
+
+    assert reloaded is not None
+    assert reloaded.available.cpu_cores == 5
+    assert reloaded.available.memory_mib == 14848

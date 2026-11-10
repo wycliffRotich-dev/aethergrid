@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import builtins
 from abc import ABC, abstractmethod
+from datetime import datetime
 
 from app.domain.entities.node import Node
 from app.domain.value_objects.node_id import NodeId
@@ -84,5 +85,23 @@ class NodeRepository(ABC):
         List nodes that are eligible for scheduling, in every
         tenant: alive (a recent heartbeat) and not draining.
         Every backend must apply both rules. System actors only.
+        """
+        ...
+
+    @abstractmethod
+    def record_heartbeat(
+        self,
+        node_id: NodeId,
+        tenant_id: TenantId,
+        seen_at: datetime,
+    ) -> bool:
+        """
+        Record that a node is alive, and nothing else.
+
+        Writes only the heartbeat time. A heartbeat must never carry
+        the node's capacity figures, because a copy read earlier
+        would write them back over an allocation made in between.
+        Returns False when no node with this id exists in this
+        tenant, which is also how a node in another tenant reads.
         """
         ...

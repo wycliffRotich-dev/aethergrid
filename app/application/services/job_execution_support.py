@@ -67,11 +67,21 @@ def reclaim_job(
        reconciliation has already decided to reclaim -- see
        RecoverExpiredLeaseService's original docstring for the
        full race this prevents.
-    2. The node's resources are released and the node is saved
-       next, while job.assigned_node_id (which Job.reclaim()
-       is about to clear) still points at the right node.
-    3. Job.reclaim() runs last, and its own job_repository.save()
-       only happens if reclaim() succeeds.
+    2. Job.reclaim() runs next, and the job is saved only if
+       reclaim() succeeds. A job that can no longer be reclaimed
+       returns False here and is not credited to the node,
+       because a job that already finished released its
+       capacity when its outcome was reported, and crediting
+       it again would make the node report capacity it does
+       not have. A CANCELLED job is the exception: cancelling
+       a job that has not started never releases its capacity,
+       so it is released here, once.
+    3. The node's resources are released and the node is saved
+       last. The node is passed in already resolved, so
+       Job.reclaim() clearing job.assigned_node_id does not
+       affect it. A crash between the job save and the node save
+       leaves capacity allocated, which under-reports free
+       capacity instead of over-reporting it, the safe direction.
 
     The lease is deleted in the job's tenant. A lease carries the
     tenant of its job (ADR 0075), so no other tenant's lease can
@@ -117,6 +127,23 @@ def reclaim_job(
             job.tenant_id,
         )
 
+    try:
+        job.reclaim()
+    except InvalidJobTransition:
+        if job.is_cancelled() and node is not None:
+            node.release(
+                job.resources,
+            )
+            node_repository.save(
+                node,
+            )
+
+        return False
+
+    job_repository.save(
+        job,
+    )
+
     if node is not None:
         node.release(
             job.resources,
@@ -124,14 +151,5 @@ def reclaim_job(
         node_repository.save(
             node,
         )
-
-    try:
-        job.reclaim()
-    except InvalidJobTransition:
-        return False
-
-    job_repository.save(
-        job,
-    )
 
     return True

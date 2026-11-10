@@ -212,6 +212,21 @@ class SqliteNodeRepository(NodeRepository):
             if node.is_alive() and not node.is_draining()
         ]
 
+    def record_heartbeat(
+        self,
+        node_id: NodeId,
+        tenant_id: TenantId,
+        seen_at: datetime,
+    ) -> bool:
+        cursor = self._connection.execute(
+            "UPDATE nodes SET last_seen_at = ? "
+            "WHERE id = ? AND tenant_id = ?",
+            (seen_at.isoformat(), str(node_id), str(tenant_id)),
+        )
+        self._connection.commit()
+
+        return cursor.rowcount > 0
+
     def _row_to_node(
         self,
         row: sqlite3.Row,
