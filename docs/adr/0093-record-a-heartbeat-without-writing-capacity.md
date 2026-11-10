@@ -91,5 +91,5 @@ heartbeat time changes and the one that makes a stale node available
 again. The file was restored and they passed. The two tests that check
 the return value for a missing node and another tenant were not checked
 this way. The node repository tests passed with 85 tests after the
-contract tests were added, and the full suite was not run again after
-them.
+contract tests were added. The full suite then passed with 1336 tests,
+with the backend set to postgres.
