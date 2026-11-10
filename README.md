@@ -59,6 +59,11 @@ and checked by tests that run in CI.
 
 ## Engineering Decision Records
 
+<details>
+<summary><img src="https://img.shields.io/badge/ADR_index-Click_to_open-orange" alt="ADR index, click to open"></summary>
+
+<br>
+
 Every non-obvious decision in this codebase, why a domain rule lives where it does, why an obvious-looking shortcut was rejected, what broke and how it got fixed, is written down at the moment it was made, not reconstructed afterward for a portfolio. The ADRs live in <a href="docs/adr"><img src="https://img.shields.io/github/directory-file-count/wycliffRotich-dev/aethergrid/docs/adr?type=file&extension=md&label=ADRs&color=blueviolet&cacheSeconds=3600" alt="ADR count" align="absmiddle"></a>. A few worth reading directly if you want to see the reasoning, not just the conclusion:
 
 - [**ADR 0007 - Reconciliation Loop**](docs/adr/0007-reconciliation-loop.md): how the system detects and repairs state left inconsistent by dead workers and expired leases, instead of assuming the happy path is the only path.
@@ -132,6 +137,8 @@ Every non-obvious decision in this codebase, why a domain rule lives where it do
 - [**ADR 0090 - Issue API Keys for a Named Tenant**](docs/adr/0090-issue-api-keys-for-a-named-tenant.md): Accepted. A key belongs to one tenant, and the application could issue one for any existing tenant, but the script that issues keys only reached the default tenant, so a deployment had one tenant unless someone edited the database. The script now issues a key for a named tenant with `--tenant`, creates the tenant only with `--create-tenant`, and prints its usage without a database. The test database guard runs before any tenant is resolved or created. Two tests pin the failure paths, a lost race on the tenant name and the guard order, and each fails against a deliberately broken script. One real run on Postgres 16 from e3304e2 showed three keys in three tenants, and through the running API the acme key created a job and read it back while the globex key got the same status and body for that job as for a random id. Not claimed: that two operators creating one new name at the same moment fail cleanly on Postgres, that response headers or timing hide a foreign job, or that isolation holds beyond jobs, which ADR 0064 and ADR 0075 decide.
 
 The index above is the fastest way to see how each part of the system was decided.
+
+</details>
 
 ---
 
