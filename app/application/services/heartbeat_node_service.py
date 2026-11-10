@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.domain.entities.node import Node
+from app.domain.entities.node import Node, utc_now
 from app.domain.repositories.node_repository import (
     NodeRepository,
 )
@@ -28,22 +28,26 @@ class HeartbeatNodeService:
         """
         Record a heartbeat for a node.
 
+        Only the heartbeat time is written. The node is not read,
+        changed and saved as a whole, because that would write its
+        capacity figures back over any allocation the scheduler
+        made in between, and the node would then offer capacity
+        that is already promised.
+
         Returns:
-            The updated node if found in this tenant,
-            otherwise None.
+            The node as stored after the heartbeat if found in
+            this tenant, otherwise None.
         """
-        node = self._node_repository.get_by_id(
+        recorded = self._node_repository.record_heartbeat(
+            node_id,
+            tenant_id,
+            utc_now(),
+        )
+
+        if not recorded:
+            return None
+
+        return self._node_repository.get_by_id(
             node_id,
             tenant_id,
         )
-
-        if node is None:
-            return None
-
-        node.heartbeat()
-
-        self._node_repository.save(
-            node,
-        )
-
-        return node

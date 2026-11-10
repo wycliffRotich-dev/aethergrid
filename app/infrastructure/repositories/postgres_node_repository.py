@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import builtins
 import json
+from datetime import datetime
 from typing import Any
 
 from psycopg.rows import dict_row
@@ -132,6 +133,21 @@ class PostgresNodeRepository(NodeRepository):
             for node in (self._to_entity(row) for row in rows)
             if node.is_alive()
         ]
+
+    def record_heartbeat(
+        self,
+        node_id: NodeId,
+        tenant_id: TenantId,
+        seen_at: datetime,
+    ) -> bool:
+        with self._pool.connection() as conn:
+            cursor = conn.execute(
+                "UPDATE nodes SET last_seen_at = %s "
+                "WHERE id = %s AND tenant_id = %s",
+                (seen_at, str(node_id), str(tenant_id)),
+            )
+
+        return cursor.rowcount > 0
 
     @staticmethod
     def _to_entity(row: dict[str, Any]) -> Node:

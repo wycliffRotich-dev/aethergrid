@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import copy
+from datetime import timedelta
 
 import pytest
 
-from app.domain.entities.node import HEARTBEAT_TIMEOUT, Node
+from app.domain.entities.node import HEARTBEAT_TIMEOUT, Node, utc_now
 from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.exceptions.node_tenant_conflict_error import (
     NodeTenantConflictError,
@@ -253,3 +254,99 @@ class NodeRepositoryContract:
         repository.delete(node.id, second_tenant_id)
 
         assert repository.get_by_id(node.id, DEFAULT_TENANT_ID) is not None
+
+    def test_record_heartbeat_changes_only_the_heartbeat_time(
+        self,
+        repository,
+    ) -> None:
+        """
+        A heartbeat carries no capacity figures, so it must not
+        touch any of them. The node holds a partial allocation, a
+        label and a name, and all of them must come back as saved.
+        """
+        node = self._make_node(labels={"zone": "nrb-1"})
+        node.allocate(
+            ResourceRequirements(
+                cpu_cores=3,
+                memory_mib=4096,
+                vram_mib=1024,
+            )
+        )
+        saved_seen_at = node.last_seen_at
+        seen_at = saved_seen_at + timedelta(minutes=10)
+        repository.save(node)
+
+        recorded = repository.record_heartbeat(
+            node.id,
+            DEFAULT_TENANT_ID,
+            seen_at,
+        )
+
+        fetched = repository.get_by_id(node.id, DEFAULT_TENANT_ID)
+
+        assert recorded is True
+        assert fetched is not None
+        assert fetched.last_seen_at == seen_at
+        assert fetched.available.cpu_cores == 5
+        assert fetched.available.memory_mib == 12288
+        assert fetched.available.vram_mib == 7168
+        assert fetched.capacity == node.capacity
+        assert fetched.labels == {"zone": "nrb-1"}
+        assert fetched.name == node.name
+        assert fetched.draining is False
+
+    def test_record_heartbeat_for_a_missing_node_returns_false(
+        self,
+        repository,
+    ) -> None:
+        recorded = repository.record_heartbeat(
+            NodeId.new(),
+            DEFAULT_TENANT_ID,
+            utc_now(),
+        )
+
+        assert recorded is False
+
+    def test_record_heartbeat_in_another_tenant_returns_false(
+        self,
+        repository,
+        second_tenant_id,
+    ) -> None:
+        node = self._make_node()
+        saved_seen_at = node.last_seen_at
+        repository.save(node)
+
+        recorded = repository.record_heartbeat(
+            node.id,
+            second_tenant_id,
+            saved_seen_at + timedelta(minutes=10),
+        )
+
+        fetched = repository.get_by_id(node.id, DEFAULT_TENANT_ID)
+
+        assert recorded is False
+        assert fetched is not None
+        assert fetched.last_seen_at == saved_seen_at
+
+    def test_record_heartbeat_makes_a_stale_node_available_again(
+        self,
+        repository,
+    ) -> None:
+        stale = self._make_node()
+        stale.last_seen_at = stale.last_seen_at - HEARTBEAT_TIMEOUT * 2
+        repository.save(stale)
+
+        assert stale.id not in {
+            node.id for node in repository.list_available_across_tenants()
+        }
+
+        recorded = repository.record_heartbeat(
+            stale.id,
+            DEFAULT_TENANT_ID,
+            utc_now(),
+        )
+
+        assert recorded is True
+        assert stale.id in {
+            node.id for node in repository.list_available_across_tenants()
+        }

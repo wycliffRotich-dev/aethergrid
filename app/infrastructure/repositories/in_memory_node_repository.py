@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import builtins
+from datetime import datetime
 
 from app.domain.entities.node import Node
 from app.domain.exceptions.node_tenant_conflict_error import (
@@ -107,3 +108,18 @@ class InMemoryNodeRepository(NodeRepository):
             if node.is_alive()
             and not node.is_draining()
         ]
+
+    def record_heartbeat(
+        self,
+        node_id: NodeId,
+        tenant_id: TenantId,
+        seen_at: datetime,
+    ) -> bool:
+        node = self._nodes.get(node_id)
+
+        if node is None or node.tenant_id != tenant_id:
+            return False
+
+        node.last_seen_at = seen_at
+
+        return True
