@@ -290,6 +290,15 @@ CI runs the full test suite against a live Postgres service on every push. See `
 
 ---
 
+## Contributing
+
+Fork the repository, create a branch, and open a pull request against
+main. Setup, the checks every change must pass, and the rules for ADRs
+are in [CONTRIBUTING.md](https://github.com/wycliffRotich-dev/aethergrid/blob/main/CONTRIBUTING.md).
+For anything larger than a small fix, open an issue first.
+
+---
+
 ## What AetherGrid covers
 
 AetherGrid decides where a job runs, who owns it, and what happens when

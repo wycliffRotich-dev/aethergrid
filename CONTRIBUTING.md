@@ -16,6 +16,10 @@ correctness under failure, not volume.
 3. For anything larger than a small fix, open an issue before writing code so
    we can agree on the problem and the boundary.
 
+Outside contributors work from a fork. Fork the repository on GitHub,
+clone your fork, create a branch for the change, and open the pull
+request from that branch against `main`.
+
 ## Local setup
 
 Requirements: Python 3.11 or 3.12, Docker with Compose, `openssl`.
