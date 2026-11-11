@@ -15,6 +15,8 @@ def _client() -> TestClient:
         {
             "AETHERGRID_PUBLIC_TENANT_ID": "11111111-1111-1111-1111-111111111111",
             "AETHERGRID_PUBLIC_ALLOWED_ORIGIN": ORIGIN,
+            "AETHERGRID_PUBLIC_DATABASE_URL": "postgresql://aethergrid_public@db.internal:5432/aethergrid",
+            "AETHERGRID_PUBLIC_DATABASE_PASSWORD_FILE": "/run/secrets/public_db_password",
         }
     )
 
