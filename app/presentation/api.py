@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
+from app.application.process_hardening import make_unreadable_through_proc
 from app.application.reconciliation.reconciliation_loop import ReconciliationLoop
 from app.application.scheduler_leadership import SchedulerLeadership
 from app.application.services.cluster_tick_service import ClusterTickService
@@ -241,6 +242,8 @@ async def _run_cluster_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    make_unreadable_through_proc()
+
     pool = get_connection_pool()
     if pool is not None:
         await asyncio.to_thread(pool.wait, timeout=30.0)

@@ -59,6 +59,7 @@ from typing import Any, TypeVar
 
 import httpx
 
+from app.application.process_hardening import make_unreadable_through_proc
 from app.application.services.job_execution_service import (
     JobExecutionResult,
     JobExecutionService,
@@ -528,6 +529,8 @@ def run_job(
 
 
 def main() -> None:
+    make_unreadable_through_proc()
+
     if len(sys.argv) != 2:
         print(
             "Usage: python scripts/run_agent.py <node-id>",
