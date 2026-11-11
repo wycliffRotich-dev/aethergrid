@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from app.presentation.api import app
 from app.presentation.auth import require_api_key, require_rate_limit
+from tests.support.api_keys import make_api_key
 
 MALFORMED = "not-a-valid-uuid"
 
@@ -27,6 +28,11 @@ ROUTES = [
     ("POST", f"/nodes/{MALFORMED}/heartbeat", "Malformed node id."),
     ("POST", f"/nodes/{MALFORMED}/drain", "Malformed node id."),
     ("DELETE", f"/nodes/{MALFORMED}", "Malformed node id."),
+]
+
+SCOPED_ROUTES = [
+    ("POST", f"/api-keys/{MALFORMED}/revoke"),
+    ("GET", f"/api-keys/{MALFORMED}/issued"),
 ]
 
 
@@ -74,3 +80,20 @@ def test_malformed_id_without_a_key_is_still_a_401(
         response = client.request(method, path)
 
     assert response.status_code == 401
+
+
+@pytest.mark.parametrize(("method", "path"), SCOPED_ROUTES)
+def test_malformed_id_without_the_scope_is_still_a_422(method: str, path: str) -> None:
+    """
+    Both routes need keys:manage, checked in the service after the id is
+    parsed. The 422 depends only on the URL text, so a caller without the
+    scope gets it too and learns nothing about any record.
+    """
+    caller, _ = make_api_key(label="plain")
+    app.dependency_overrides[require_api_key] = lambda: caller
+
+    with TestClient(app) as client:
+        response = client.request(method, path)
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Malformed API key id."}
