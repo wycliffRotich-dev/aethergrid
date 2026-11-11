@@ -27,9 +27,44 @@ import signal
 import subprocess
 import sys
 import threading
+from collections.abc import Mapping
+
+from app.application.process_hardening import make_unreadable_through_proc
 
 USAGE_EXIT_CODE = 2
 LAUNCH_FAILED_EXIT_CODE = 127
+
+
+# Names of extra variables the operator chose to pass to every job
+# (ADR 0095), comma separated. The setting is not passed itself.
+JOB_ENV_PASSTHROUGH_SETTING = "NEUROMESH_JOB_ENV_PASSTHROUGH"
+
+# The only variables a job's command receives from the executor
+# (ADR 0095). Anything else, a credential included, stays behind.
+JOB_ENVIRONMENT_ALLOWLIST = (
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "PATH",
+    "TMPDIR",
+    "TZ",
+)
+
+
+def job_environment(source: Mapping[str, str]) -> dict[str, str]:
+    """
+    The environment a job's command starts with.
+
+    Built from an allowlist and not by removing known names, so a
+    secret that nobody thought to list never reaches the command.
+    """
+    named = (
+        entry.strip()
+        for entry in source.get(JOB_ENV_PASSTHROUGH_SETTING, "").split(",")
+    )
+    allowed = {*JOB_ENVIRONMENT_ALLOWLIST, *(name for name in named if name)}
+
+    return {name: source[name] for name in sorted(allowed) if name in source}
 
 
 def _kill_own_group() -> None:
@@ -89,6 +124,8 @@ def _end_like(returncode: int) -> int:
 
 
 def main(argv: list[str]) -> int:
+    make_unreadable_through_proc()
+
     if len(argv) < 5 or argv[3] != "--":
         print(
             "usage: job_supervisor WATCH_FD STATUS_FD -- COMMAND...",
@@ -119,7 +156,7 @@ def main(argv: list[str]) -> int:
     threading.Thread(target=_watch, args=(watch_fd,), daemon=True).start()
 
     try:
-        process = subprocess.Popen(command)
+        process = subprocess.Popen(command, env=job_environment(os.environ))
     except OSError as error:
         _report_launch_failure(status_fd, error)
         return LAUNCH_FAILED_EXIT_CODE
