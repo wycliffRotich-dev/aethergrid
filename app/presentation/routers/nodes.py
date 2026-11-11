@@ -71,6 +71,21 @@ router = APIRouter(
 )
 
 
+def _parse_node_id(value: str) -> NodeId:
+    """
+    Parse an id taken from the URL. A value that is not a UUID
+    is the caller's mistake, so it answers 422 like the worker
+    routes do, not an unhandled ValueError and a 500.
+    """
+    try:
+        return NodeId.from_string(value)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Malformed node id.",
+        ) from exc
+
+
 @router.post(
     "",
     response_model=CreateNodeResponse,
@@ -195,7 +210,7 @@ def get_node(
     """
     try:
         node = service.execute(
-            NodeId.from_string(node_id),
+            _parse_node_id(node_id),
             caller.tenant_id,
         )
     except NodeNotFoundError as err:
@@ -234,7 +249,7 @@ def heartbeat_node(
     it alive so it remains eligible for scheduling.
     """
     node = service.execute(
-        NodeId.from_string(node_id),
+        _parse_node_id(node_id),
         caller.tenant_id,
     )
 
@@ -276,7 +291,7 @@ def drain_node(
     """
     try:
         node = service.execute(
-            NodeId.from_string(node_id),
+            _parse_node_id(node_id),
             caller.tenant_id,
         )
     except NodeNotFoundError as exc:
@@ -318,7 +333,7 @@ def remove_offline_node(
     """
     try:
         service.execute(
-            NodeId.from_string(node_id),
+            _parse_node_id(node_id),
             caller.tenant_id,
         )
     except NodeNotFoundError as exc:

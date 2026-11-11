@@ -84,6 +84,21 @@ router = APIRouter(
 )
 
 
+def _parse_job_id(value: str) -> JobId:
+    """
+    Parse an id taken from the URL. A value that is not a UUID
+    is the caller's mistake, so it answers 422 like the worker
+    routes do, not an unhandled ValueError and a 500.
+    """
+    try:
+        return JobId(value=UUID(value))
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Malformed job id.",
+        ) from exc
+
+
 @router.post(
     "",
     response_model=CreateJobResponse,
@@ -248,9 +263,7 @@ def get_job(
     """
     try:
         job = service.execute(
-            JobId(
-                value=UUID(job_id),
-            ),
+            _parse_job_id(job_id),
             caller.tenant_id,
         )
     except JobNotFoundError as exc:
@@ -343,9 +356,7 @@ def cancel_job(
     be cancelled -- that's a conflict with the job's current
     state, not a bad request or a missing resource.
     """
-    job_uuid = JobId(
-        value=UUID(job_id),
-    )
+    job_uuid = _parse_job_id(job_id)
 
     try:
         job = service.execute(job_uuid, caller.tenant_id)
@@ -399,9 +410,7 @@ def retry_job(
     can't accept a retry isn't a client mistake worth
     rejecting, it's a no-op worth reporting honestly.
     """
-    job_uuid = JobId(
-        value=UUID(job_id),
-    )
+    job_uuid = _parse_job_id(job_id)
 
     job = service.execute(job_uuid, caller.tenant_id)
 
