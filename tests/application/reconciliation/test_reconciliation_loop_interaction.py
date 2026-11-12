@@ -6,6 +6,9 @@ from app.application.reconciliation.reconciliation_loop import (
 from app.application.reconciliation.recover_expired_lease_service import (
     RecoverExpiredLeaseService,
 )
+from app.application.reconciliation.recover_leaseless_job_service import (
+    RecoverLeaselessJobService,
+)
 from app.application.reconciliation.recover_offline_node_service import (
     RecoverOfflineNodeService,
 )
@@ -84,6 +87,12 @@ def test_stale_jobless_worker_on_stale_node_stays_offline_across_cycles() -> (
             worker_repository=worker_repository,
             job_repository=job_repository,
             lease_repository=lease_repository,
+        ),
+        recover_leaseless_job_service=RecoverLeaselessJobService(
+            job_repository=job_repository,
+            lease_repository=lease_repository,
+            worker_repository=worker_repository,
+            node_repository=node_repository,
         ),
     )
 
