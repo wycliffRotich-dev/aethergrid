@@ -54,6 +54,21 @@ router = APIRouter(
 )
 
 
+def _parse_api_key_id(value: str) -> ApiKeyId:
+    """
+    Parse an id taken from the URL. A value that is not a UUID
+    is the caller's mistake, so it answers 422 like the worker
+    routes do, not an unhandled ValueError and a 500.
+    """
+    try:
+        return ApiKeyId(value=UUID(value))
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Malformed API key id.",
+        ) from exc
+
+
 @router.post(
     "",
     response_model=CreateApiKeyResponse,
@@ -149,9 +164,7 @@ def revoke_api_key(
     """
     try:
         service.execute(
-            ApiKeyId(
-                value=UUID(api_key_id),
-            ),
+            _parse_api_key_id(api_key_id),
             caller=caller,
         )
     except ApiKeyNotFoundError as exc:
@@ -207,9 +220,7 @@ def list_issued_api_keys(
     """
     try:
         issued = service.execute(
-            ApiKeyId(
-                value=UUID(api_key_id),
-            ),
+            _parse_api_key_id(api_key_id),
             caller=caller,
         )
     except ApiKeyNotFoundError as exc:
