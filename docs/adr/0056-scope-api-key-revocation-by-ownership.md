@@ -126,3 +126,18 @@ captured.
   response, would make the ownership relationship this ADR
   introduces actually visible to an operator rather than only
   enforceable.
+
+## Progress
+
+2026-10-02. The follow-up about seeing which keys a key has issued
+is done in ADR 0057, which adds GET /api-keys/{id}/issued.
+
+2026-11-12. A malformed key id on POST /api-keys/{id}/revoke and
+GET /api-keys/{id}/issued now answers 422 before the service runs.
+The handler parses the id first, so the keys:manage check and the
+ownership rule are not reached for it. A caller without the scope
+gets the same 422, which depends only on the URL text and says
+nothing about any key. For a well-formed id the decision above is
+unchanged: the scope decision still lives in the service, and an
+unknown id is still a 404. A test pins the 422 for a key without
+the scope.
