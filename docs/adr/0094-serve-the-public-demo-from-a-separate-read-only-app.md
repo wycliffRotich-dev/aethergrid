@@ -87,4 +87,8 @@ The guard tests arrive with the first change after this ADR.
 
 ## Progress
 
-None yet.
+2026-11-11. The public settings require a database URL and a password
+file of their own, AETHERGRID_PUBLIC_DATABASE_URL and
+AETHERGRID_PUBLIC_DATABASE_PASSWORD_FILE, with no defaults and no
+fallback to the NEUROMESH_ names. The URL must be a postgresql:// URL
+with a host and no password in it. No database access is wired yet.
