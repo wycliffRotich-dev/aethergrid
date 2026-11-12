@@ -15,7 +15,7 @@
   <a href="#tech-stack"><img src="https://img.shields.io/badge/PostgreSQL-336791?logo=postgresql&logoColor=white" alt="PostgreSQL"></a>
   <a href="#tech-stack"><img src="https://img.shields.io/badge/React-TypeScript-61DAFB?logo=react&logoColor=black" alt="React"></a>
   <a href="#tech-stack"><img src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white" alt="Docker"></a>
-  <a href="https://aethergrid-dashboard.onrender.com"><img src="https://img.shields.io/badge/Live%20Demo-aethergrid--dashboard.onrender.com-brightgreen?logo=render&logoColor=white" alt="Live Demo"></a>
+  <a href="https://aethergrid.co.ke"><img src="https://img.shields.io/badge/Website-Live%20Demo%20Under%20Active%20Development-orange" alt="Website: live demo under active development"></a>
 </p>
 
 AetherGrid takes workloads, matches them against available compute nodes by resource requirements and constraints, and manages the full lifecycle: queued, scheduled, running, completed, failed, retried and cancelled. It is built for teams that run AI under audit, where a job that runs twice, a tenant that reads another tenant's data, or an upgrade that loses a row is an incident and not a bug.
@@ -33,7 +33,7 @@ AetherGrid takes workloads, matches them against available compute nodes by reso
 </p>
 <p align="center"><sub>Click the diagram to open it full-size.</sub></p>
 
-**Try it live**: the full console is deployed and reachable at <a href="https://aethergrid-dashboard.onrender.com"><img src="https://img.shields.io/badge/Live%20Demo-aethergrid--dashboard.onrender.com-brightgreen?logo=render&logoColor=white" alt="Live Demo" align="absmiddle"></a> with real Postgres, real auth, and real API-key-gated endpoints.
+**Live demo**: a public, read-only demo is being built and is not online yet ([ADR 0094](docs/adr/0094-serve-the-public-demo-from-a-separate-read-only-app.md)). Follow progress at <a href="https://aethergrid.co.ke"><img src="https://img.shields.io/badge/Website-Live%20Demo%20Under%20Active%20Development-orange" alt="Website: live demo under active development" align="absmiddle"></a>.
 
 ---
 
