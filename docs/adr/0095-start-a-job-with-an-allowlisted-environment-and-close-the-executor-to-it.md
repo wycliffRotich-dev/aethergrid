@@ -2,8 +2,7 @@
 
 ## Status
 
-Accepted. The change and its tests are on branch
-fix/job-commands-do-not-inherit-the-environment.
+Accepted.
 
 Related: ADR 0028, ADR 0054, ADR 0058, ADR 0080 and ADR 0094.
 
@@ -76,3 +75,5 @@ before the change. A check run inside a container with the compose flags
 showed the problem without the change and its absence with it. That check
 first ran against a control that was itself faulty, and the fault was
 corrected in it and in the test before the result was accepted.
+
+2026-11-11. The change and its tests are on main.
