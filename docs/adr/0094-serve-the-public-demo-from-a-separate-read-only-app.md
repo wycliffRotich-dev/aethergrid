@@ -83,7 +83,7 @@ The existing app cannot also serve an anonymous surface:
 
 ## How to Verify
 
-The guard tests arrive with the first change after this ADR.
+    NEUROMESH_STORAGE_BACKEND=memory pytest -q tests/presentation/public
 
 ## Progress
 
@@ -92,3 +92,20 @@ file of their own, AETHERGRID_PUBLIC_DATABASE_URL and
 AETHERGRID_PUBLIC_DATABASE_PASSWORD_FILE, with no defaults and no
 fallback to the NEUROMESH_ names. The URL must be a postgresql:// URL
 with a host and no password in it. No database access is wired yet.
+
+2026-11-11. The public app exists as its own FastAPI app with one route,
+/healthz, and no docs, no startup hooks and a CORS policy that allows
+one origin and the GET method only. Its guard tests are on main: every
+route is a GET, the paths equal an allowlist, a write method is refused
+with 405, and no module in the package imports the private routers, the
+composition root or a worker loop. The tests that every route is rate
+limited and that every response model is a public schema have nothing
+to check yet and are not written.
+
+2026-11-12. The import check now resolves each import to the names
+Python would load, including relative imports and the names a from-import
+brings in, and it refuses the private response schemas. Application
+services are an allowlist that starts empty, so a service enters the
+public package only when it is named in the same change that imports it.
+The check reads source text, so an import made at run time through
+importlib is not seen.
