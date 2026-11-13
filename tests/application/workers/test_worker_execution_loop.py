@@ -1254,3 +1254,40 @@ def test_run_once_records_job_failed_event_when_the_command_cannot_start(
     assert recorded[0].event_type == "JobFailed"
     assert recorded[0].aggregate_id == str(job.id)
     assert recorded[0].aggregate_type == "Job"
+
+
+def test_run_once_saves_the_job_before_it_releases_the_node(
+    monkeypatch,
+) -> None:
+    """
+    ADR 0092 and ADR 0096: a crash between the two writes must
+    under-report free capacity, never over-report it. The node is
+    credited only after the job's terminal status is saved, so a job
+    left RUNNING with no lease by a crash still has its node allocated
+    when recovery reclaims it and releases the resources once.
+    """
+    worker, job, node = _make_worker_and_job()
+
+    loop, _, job_repository, node_repository, _ = _build_loop(
+        worker, job, node
+    )
+
+    order: list[str] = []
+    save_job = job_repository.save
+    save_node = node_repository.save
+
+    def recording_job_save(saved):  # type: ignore[no-untyped-def]
+        if saved.is_completed():
+            order.append("job completed")
+        save_job(saved)
+
+    def recording_node_save(saved):  # type: ignore[no-untyped-def]
+        order.append("node released")
+        save_node(saved)
+
+    monkeypatch.setattr(job_repository, "save", recording_job_save)
+    monkeypatch.setattr(node_repository, "save", recording_node_save)
+
+    loop.execute(worker.id)
+
+    assert order == ["job completed", "node released"]

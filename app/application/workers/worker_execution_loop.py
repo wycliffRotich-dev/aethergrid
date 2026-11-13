@@ -313,32 +313,6 @@ class WorkerExecutionLoop:
             worker,
         )
 
-        if job.assigned_node_id is not None:
-            node = self._node_repository.get_by_id(
-                job.assigned_node_id,
-                tenant_id,
-            )
-
-            if node is not None:
-                node.release(
-                    job.resources,
-                )
-
-                self._node_repository.save(
-                    node,
-                )
-            else:
-                # On Postgres a job's node is always in the job's tenant,
-                # and deleting a node clears the link, so this state means
-                # a mistake upstream (ADR 0075 decision 14).
-                logger.error(
-                    "Job %s is assigned to node %s, but that node was not "
-                    "found in tenant %s. The node release was skipped.",
-                    job.id,
-                    job.assigned_node_id,
-                    tenant_id,
-                )
-
         # The renewal thread's periodic check (keep_lease_alive)
         # is the only place this loop learns a cancellation was
         # requested. If a cancellation is persisted by a
@@ -371,3 +345,34 @@ class WorkerExecutionLoop:
         self._job_repository.save(
             job,
         )
+
+        # The node is released after the job is saved (ADR 0092, ADR
+        # 0096), the same order as ReportJobOutcomeService. A crash
+        # between the two writes under-reports free capacity. The
+        # other order credited the node first and left a RUNNING job
+        # with no lease, which recovery then credited again.
+        if job.assigned_node_id is not None:
+            node = self._node_repository.get_by_id(
+                job.assigned_node_id,
+                tenant_id,
+            )
+
+            if node is not None:
+                node.release(
+                    job.resources,
+                )
+
+                self._node_repository.save(
+                    node,
+                )
+            else:
+                # On Postgres a job's node is always in the job's tenant,
+                # and deleting a node clears the link, so this state means
+                # a mistake upstream (ADR 0075 decision 14).
+                logger.error(
+                    "Job %s is assigned to node %s, but that node was not "
+                    "found in tenant %s. The node release was skipped.",
+                    job.id,
+                    job.assigned_node_id,
+                    tenant_id,
+                )

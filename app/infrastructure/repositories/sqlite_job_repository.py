@@ -14,6 +14,9 @@ from app.domain.exceptions.job_tenant_conflict_error import (
 from app.domain.repositories.job_repository import (
     JobRepository,
 )
+from app.domain.repositories.lease_repository import (
+    LeaseRepository,
+)
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
@@ -53,8 +56,12 @@ class SqliteJobRepository(JobRepository):
     def __init__(
         self,
         connection: sqlite3.Connection,
+        lease_repository: LeaseRepository | None = None,
     ) -> None:
         self._connection = connection
+        # Needed only by save_if_leaseless: this backend keeps leases
+        # in this process, and the fence has to see them.
+        self._lease_repository = lease_repository
         self._connection.execute(_CREATE_TABLE_SQL)
         self._upgrade_tenant_column()
         self._upgrade_execution_timeout_column()
@@ -192,6 +199,31 @@ class SqliteJobRepository(JobRepository):
             )
 
         self._connection.commit()
+
+    def save_if_leaseless(
+        self,
+        job: Job,
+        expected_status: JobStatus,
+    ) -> bool:
+        if self._lease_repository is None:
+            raise RuntimeError(
+                "save_if_leaseless needs the lease repository this "
+                "repository was built without"
+            )
+
+        stored = self.get_by_id(job.id, job.tenant_id)
+
+        if stored is None or stored.status is not expected_status:
+            return False
+
+        if (
+            self._lease_repository.get_by_job_id(job.id, job.tenant_id)
+            is not None
+        ):
+            return False
+
+        self.save(job)
+        return True
 
     def get_by_id(
         self,

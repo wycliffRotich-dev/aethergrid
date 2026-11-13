@@ -336,9 +336,14 @@ def _build_repositories() -> tuple[
             db_path,
         )
 
+        # The job repository sees the lease repository so that its
+        # fenced write can check for a lease (ADR 0096).
+        sqlite_leases = InMemoryLeaseRepository()
+
         return (
             SqliteJobRepository(
                 connection,
+                lease_repository=sqlite_leases,
             ),
             SqliteNodeRepository(
                 connection,
@@ -347,17 +352,19 @@ def _build_repositories() -> tuple[
             SqliteEventRepository(
                 connection,
             ),
-            InMemoryLeaseRepository(),
+            sqlite_leases,
             InMemoryApiKeyRepository(),
             None,
         )
 
+    memory_leases = InMemoryLeaseRepository()
+
     return (
-        InMemoryJobRepository(),
+        InMemoryJobRepository(lease_repository=memory_leases),
         InMemoryNodeRepository(),
         InMemoryWorkerRepository(),
         InMemoryEventRepository(),
-        InMemoryLeaseRepository(),
+        memory_leases,
         InMemoryApiKeyRepository(),
         None,
     )

@@ -6,6 +6,7 @@ from app.domain.exceptions.job_tenant_conflict_error import (
     JobTenantConflictError,
 )
 from app.domain.repositories.job_repository import JobRepository
+from app.domain.repositories.lease_repository import LeaseRepository
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.tenant_id import TenantId
 
@@ -18,8 +19,12 @@ class InMemoryJobRepository(JobRepository):
     def __init__(
         self,
         jobs: list[Job] | None = None,
+        lease_repository: LeaseRepository | None = None,
     ) -> None:
         self._jobs: dict[str, Job] = {}
+        # Needed only by save_if_leaseless: leases live in another
+        # repository here, and the fence has to see them.
+        self._lease_repository = lease_repository
 
         if jobs is not None:
             for job in jobs:
@@ -37,6 +42,35 @@ class InMemoryJobRepository(JobRepository):
             )
 
         self._jobs[str(job.id)] = job
+
+    def save_if_leaseless(
+        self,
+        job: Job,
+        expected_status: JobStatus,
+    ) -> bool:
+        if self._lease_repository is None:
+            raise RuntimeError(
+                "save_if_leaseless needs the lease repository this "
+                "repository was built without"
+            )
+
+        existing = self._jobs.get(str(job.id))
+
+        if (
+            existing is None
+            or existing.tenant_id != job.tenant_id
+            or existing.status is not expected_status
+        ):
+            return False
+
+        if (
+            self._lease_repository.get_by_job_id(job.id, job.tenant_id)
+            is not None
+        ):
+            return False
+
+        self._jobs[str(job.id)] = job
+        return True
 
     def clear(
         self,

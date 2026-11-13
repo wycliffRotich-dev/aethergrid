@@ -20,6 +20,7 @@ from app.application.reconciliation.recover_expired_lease_service import (
     RecoverExpiredLeaseService,
 )
 from app.application.reconciliation.recover_leaseless_job_service import (
+    MIN_LEASELESS_AGE_SECONDS,
     RecoverLeaselessJobService,
 )
 from app.application.reconciliation.recover_offline_node_service import (
@@ -28,12 +29,21 @@ from app.application.reconciliation.recover_offline_node_service import (
 from app.application.services.mark_dead_workers_service import (
     MarkDeadWorkersService,
 )
+from app.application.services.release_lease_service import (
+    ReleaseLeaseService,
+)
+from app.application.services.report_job_outcome_service import (
+    ReportJobOutcomeService,
+)
 from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
 from app.domain.entities.node import Node
 from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.entities.worker import Worker
 from app.domain.enums.job_status import JobStatus
+from app.domain.value_objects.resource_requirements import (
+    ResourceRequirements,
+)
 from app.infrastructure.repositories.postgres_job_repository import (
     PostgresJobRepository,
 )
@@ -49,6 +59,11 @@ from app.infrastructure.repositories.postgres_worker_repository import (
 from tests.support.jobs import make_job
 from tests.support.nodes import make_node
 from tests.support.workers import make_worker
+
+CAPACITY = 8
+JOB_CPU = 1
+OTHER_CPU = 2
+MIN_AGE = MIN_LEASELESS_AGE_SECONDS
 
 
 @pytest.fixture
@@ -66,136 +81,303 @@ def pool(test_database_url: str):
     test_pool.close()
 
 
-class FailingOnceJobRepository(PostgresJobRepository):
+class Clock:
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+
+class LosingJobRepository(PostgresJobRepository):
     """
     Loses one write, the way a dropped connection or a killed process
     does after the lease row is already gone.
     """
 
-    fail_next_save = False
+    fail_next_write = False
 
     def save(self, job: Job) -> None:
-        if self.fail_next_save:
-            self.fail_next_save = False
+        if self.fail_next_write:
+            self.fail_next_write = False
             raise RuntimeError("the write was lost")
 
         super().save(job)
 
 
-def _running_job_with_an_expired_lease(
-    pool: ConnectionPool,
-) -> tuple[Node, Worker, Job]:
-    node = make_node(tenant_id=DEFAULT_TENANT_ID)
-    job = make_job(max_retries=3)
-    job.queue()
-    job.assign_to(node.id)
-    node.allocate(job.resources)
-    PostgresNodeRepository(pool).save(node)
-    PostgresJobRepository(pool).save(job)
+class LeaseFromAnotherConnection(PostgresLeaseRepository):
+    """
+    Inserts a live lease, through another pooled connection, at the
+    exact point between the service's check that none exists and its
+    write.
+    """
 
-    worker = make_worker(node=node)
-    worker.ready()
-    worker.accept(job)
-    worker.start()
-    PostgresJobRepository(pool).save(job)
-    PostgresWorkerRepository(pool).save(worker)
+    def __init__(self, pool: ConnectionPool) -> None:
+        super().__init__(pool)
+        self.appears: Lease | None = None
 
-    PostgresLeaseRepository(pool).save(
-        Lease.create(
-            worker_id=worker.id,
-            job_id=job.id,
-            tenant_id=worker.tenant_id,
-            duration=timedelta(seconds=-1),
+    def get_by_job_id(self, job_id, tenant_id):  # type: ignore[no-untyped-def]
+        found = super().get_by_job_id(job_id, tenant_id)
+
+        if found is None and self.appears is not None:
+            lease, self.appears = self.appears, None
+            self.save(lease)
+
+        return found
+
+
+class Fleet:
+    """One node, a running job with an expired lease, and another
+    running job holding two cores under a live lease."""
+
+    def __init__(
+        self,
+        pool: ConnectionPool,
+        *,
+        main_lease_expired: bool = True,
+    ) -> None:
+        self.pool = pool
+        self.clock = Clock()
+        self.node: Node = make_node(tenant_id=DEFAULT_TENANT_ID)
+        self.node.capacity = ResourceRequirements(
+            cpu_cores=CAPACITY, memory_mib=16384, vram_mib=0
         )
-    )
-    return node, worker, job
+        self.node.available = self.node.capacity
 
+        self.job: Job = make_job(
+            max_retries=3,
+            resources=ResourceRequirements(
+                cpu_cores=JOB_CPU, memory_mib=512, vram_mib=0
+            ),
+        )
+        self.job.queue()
+        self.job.assign_to(self.node.id)
+        self.node.allocate(self.job.resources)
 
-def _loop(pool: ConnectionPool, jobs: PostgresJobRepository) -> ReconciliationLoop:
-    leases = PostgresLeaseRepository(pool)
-    workers = PostgresWorkerRepository(pool)
-    nodes = PostgresNodeRepository(pool)
-    return ReconciliationLoop(
-        mark_dead_workers_service=MarkDeadWorkersService(
-            worker_repository=workers,
-        ),
-        recover_expired_lease_service=RecoverExpiredLeaseService(
-            worker_repository=workers,
-            job_repository=jobs,
-            lease_repository=leases,
-            node_repository=nodes,
-        ),
-        recover_offline_node_service=RecoverOfflineNodeService(
-            node_repository=nodes,
-            worker_repository=workers,
-            job_repository=jobs,
-            lease_repository=leases,
-        ),
-        recover_leaseless_job_service=RecoverLeaselessJobService(
-            job_repository=jobs,
-            lease_repository=leases,
-            worker_repository=workers,
-            node_repository=nodes,
-        ),
-    )
+        self.other: Job = make_job(
+            max_retries=3,
+            resources=ResourceRequirements(
+                cpu_cores=OTHER_CPU, memory_mib=1024, vram_mib=0
+            ),
+        )
+        self.other.queue()
+        self.other.assign_to(self.node.id)
+        self.node.allocate(self.other.resources)
+
+        self.worker: Worker = make_worker(node=self.node)
+        self.worker.ready()
+        self.worker.accept(self.job)
+        self.worker.start()
+
+        self.other_worker: Worker = make_worker(node=self.node)
+        self.other_worker.ready()
+        self.other_worker.accept(self.other)
+        self.other_worker.start()
+
+        self.jobs = LosingJobRepository(pool)
+        self.leases = LeaseFromAnotherConnection(pool)
+        self.workers = PostgresWorkerRepository(pool)
+        self.nodes = PostgresNodeRepository(pool)
+
+        self.nodes.save(self.node)
+        self.jobs.save(self.job)
+        self.jobs.save(self.other)
+        self.workers.save(self.worker)
+        self.workers.save(self.other_worker)
+
+        self.lease = Lease.create(
+            worker_id=self.worker.id,
+            job_id=self.job.id,
+            tenant_id=self.worker.tenant_id,
+            duration=(
+                timedelta(seconds=-1)
+                if main_lease_expired
+                else timedelta(hours=1)
+            ),
+        )
+        self.leases.save(self.lease)
+        self.leases.save(
+            Lease.create(
+                worker_id=self.other_worker.id,
+                job_id=self.other.id,
+                tenant_id=self.other_worker.tenant_id,
+                duration=timedelta(hours=1),
+            )
+        )
+
+        self.service = RecoverLeaselessJobService(
+            job_repository=self.jobs,
+            lease_repository=self.leases,
+            worker_repository=self.workers,
+            node_repository=self.nodes,
+            clock=self.clock,
+        )
+
+    def stored_job(self) -> Job:
+        job = self.jobs.get_by_id(self.job.id, DEFAULT_TENANT_ID)
+        assert job is not None
+        return job
+
+    def free_cpu(self) -> int:
+        node = self.nodes.get_by_id(self.node.id, DEFAULT_TENANT_ID)
+        assert node is not None
+        return node.available.cpu_cores
+
+    def loop(self) -> ReconciliationLoop:
+        return ReconciliationLoop(
+            mark_dead_workers_service=MarkDeadWorkersService(
+                worker_repository=self.workers,
+            ),
+            recover_expired_lease_service=RecoverExpiredLeaseService(
+                worker_repository=self.workers,
+                job_repository=self.jobs,
+                lease_repository=self.leases,
+                node_repository=self.nodes,
+            ),
+            recover_offline_node_service=RecoverOfflineNodeService(
+                node_repository=self.nodes,
+                worker_repository=self.workers,
+                job_repository=self.jobs,
+                lease_repository=self.leases,
+            ),
+            recover_leaseless_job_service=self.service,
+        )
+
+    def run_for(self, seconds: float, runner=None) -> None:  # type: ignore[no-untyped-def]
+        run = runner or self.service.execute
+        elapsed = 0.0
+        while elapsed < seconds:
+            self.clock.advance(10.0)
+            run()
+            elapsed += 10.0
 
 
 def test_a_job_stranded_by_a_failed_save_is_requeued_and_its_node_freed(
     pool: ConnectionPool,
 ) -> None:
-    node, worker, job = _running_job_with_an_expired_lease(pool)
-    jobs = FailingOnceJobRepository(pool)
-    leases = PostgresLeaseRepository(pool)
-    nodes = PostgresNodeRepository(pool)
-    loop = _loop(pool, jobs)
+    fleet = Fleet(pool)
+    loop = fleet.loop()
 
-    jobs.fail_next_save = True
+    fleet.jobs.fail_next_write = True
     loop.execute()
 
-    stranded = jobs.get_by_id(job.id, DEFAULT_TENANT_ID)
-    assert stranded is not None
+    stranded = fleet.stored_job()
     assert stranded.status is JobStatus.RUNNING
-    assert leases.list_across_tenants() == []
+    assert fleet.leases.get_by_job_id(fleet.job.id, DEFAULT_TENANT_ID) is None
+    assert fleet.free_cpu() == CAPACITY - JOB_CPU - OTHER_CPU
 
-    loop.execute()
-    loop.execute()
+    fleet.run_for(MIN_AGE, runner=loop.execute)
 
-    recovered = jobs.get_by_id(job.id, DEFAULT_TENANT_ID)
-    assert recovered is not None
+    recovered = fleet.stored_job()
     assert recovered.status is JobStatus.QUEUED
     assert recovered.retry_count == 1
     assert recovered.assigned_node_id is None
 
-    stored_node = nodes.get_by_id(node.id, DEFAULT_TENANT_ID)
-    assert stored_node is not None
-    assert stored_node.available == stored_node.capacity
+    assert fleet.free_cpu() == CAPACITY - OTHER_CPU
 
-    stored_worker = PostgresWorkerRepository(pool).get_by_id(
-        worker.id, worker.tenant_id
+    stored_worker = fleet.workers.get_by_id(
+        fleet.worker.id, fleet.worker.tenant_id
     )
     assert stored_worker is not None
     assert stored_worker.is_idle()
+
+    fleet.run_for(60, runner=loop.execute)
+
+    assert fleet.free_cpu() == CAPACITY - OTHER_CPU
+    assert fleet.stored_job().retry_count == 1
+
+
+def test_a_lease_inserted_before_the_write_stops_the_reclaim(
+    pool: ConnectionPool,
+) -> None:
+    """
+    Two connections: the lease is inserted by another one between the
+    service's check and its write. No live lease may end up pointing at
+    a QUEUED job.
+    """
+    fleet = Fleet(pool)
+    fleet.leases.delete(fleet.job.id, DEFAULT_TENANT_ID)
+    fleet.service.execute()
+    fleet.run_for(MIN_AGE - 10)
+
+    fleet.leases.appears = Lease.create(
+        worker_id=fleet.worker.id,
+        job_id=fleet.job.id,
+        tenant_id=fleet.worker.tenant_id,
+    )
+    fleet.run_for(10)
+
+    assert fleet.stored_job().status is JobStatus.RUNNING
+    assert (
+        fleet.leases.get_by_job_id(fleet.job.id, DEFAULT_TENANT_ID)
+        is not None
+    )
+    assert fleet.free_cpu() == CAPACITY - JOB_CPU - OTHER_CPU
+
+    with pool.connection() as conn:
+        queued_with_a_lease = conn.execute(
+            "SELECT count(*) FROM leases l JOIN jobs j ON j.id = l.job_id "
+            "WHERE j.status = 'QUEUED'"
+        ).fetchone()
+    assert queued_with_a_lease is not None
+    assert queued_with_a_lease[0] == 0
+
+
+def test_a_crash_inside_an_outcome_report_does_not_credit_the_node_twice(
+    pool: ConnectionPool,
+) -> None:
+    """
+    The report path on a real database: the job save is lost after the
+    lease is released and the worker is saved. The node is credited
+    only after the job is saved, so recovery credits the main job's
+    core once. The other job's two cores stay allocated.
+    """
+    fleet = Fleet(pool, main_lease_expired=False)
+    report = ReportJobOutcomeService(
+        worker_repository=fleet.workers,
+        job_repository=fleet.jobs,
+        node_repository=fleet.nodes,
+        lease_repository=fleet.leases,
+        release_lease_service=ReleaseLeaseService(
+            lease_repository=fleet.leases,
+            worker_repository=fleet.workers,
+        ),
+    )
+
+    fleet.jobs.fail_next_write = True
+    with pytest.raises(RuntimeError):
+        report.complete(
+            fleet.worker.id,
+            fleet.job.id,
+            fleet.worker.tenant_id,
+            fleet.lease.id,
+            exit_code=0,
+        )
+
+    assert fleet.stored_job().status is JobStatus.RUNNING
+    assert fleet.free_cpu() == CAPACITY - JOB_CPU - OTHER_CPU
+
+    fleet.service.execute()
+    fleet.run_for(MIN_AGE)
+
+    assert fleet.stored_job().status is JobStatus.QUEUED
+    assert fleet.free_cpu() == CAPACITY - OTHER_CPU
+
+    fleet.run_for(60)
+
+    assert fleet.free_cpu() == CAPACITY - OTHER_CPU
 
 
 def test_a_running_job_with_a_live_lease_is_left_alone(
     pool: ConnectionPool,
 ) -> None:
-    _, worker, job = _running_job_with_an_expired_lease(pool)
-    leases = PostgresLeaseRepository(pool)
-    leases.delete(job.id, job.tenant_id)
-    leases.save(
-        Lease.create(
-            worker_id=worker.id,
-            job_id=job.id,
-            tenant_id=worker.tenant_id,
-        )
-    )
-    jobs = PostgresJobRepository(pool)
-    loop = _loop(pool, jobs)
+    fleet = Fleet(pool, main_lease_expired=False)
 
-    for _ in range(4):
-        loop.execute()
+    fleet.service.execute()
+    fleet.run_for(MIN_AGE * 2)
 
-    stored = jobs.get_by_id(job.id, DEFAULT_TENANT_ID)
-    assert stored is not None
-    assert stored.status is JobStatus.RUNNING
+    assert fleet.stored_job().status is JobStatus.RUNNING
+    assert fleet.free_cpu() == CAPACITY - JOB_CPU - OTHER_CPU

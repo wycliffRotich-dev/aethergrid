@@ -127,6 +127,17 @@ class ReportJobOutcomeService:
             worker,
         )
 
+        self._job_repository.save(
+            job,
+        )
+
+        # The node is released after the job is saved (ADR 0092, ADR
+        # 0096). A crash between the two writes leaves capacity
+        # allocated, which under-reports free capacity. The other
+        # order returned the capacity first, and a crash before the
+        # job save left a RUNNING job with no lease on a node that
+        # was already credited, so recovering it released the same
+        # resources a second time.
         if job.assigned_node_id is not None:
             node = self._node_repository.get_by_id(
                 job.assigned_node_id,
@@ -152,10 +163,6 @@ class ReportJobOutcomeService:
                     job.assigned_node_id,
                     tenant_id,
                 )
-
-        self._job_repository.save(
-            job,
-        )
 
         if self._record_job_events_service is not None:
             self._record_job_events_service.record_for_job(

@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.domain.entities.job import Job
 from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
+from app.domain.enums.job_status import JobStatus
 from app.domain.exceptions.invalid_job_transition import (
     InvalidJobTransition,
 )
@@ -44,6 +45,7 @@ def reclaim_job(
     node_repository: NodeRepository,
     job_repository: JobRepository,
     lease_already_deleted: bool = False,
+    fence_status: JobStatus | None = None,
 ) -> bool:
     """
     Reclaim a job abandoned by infrastructure failure: delete
@@ -120,8 +122,20 @@ def reclaim_job(
     rather than this function deleting unconditionally and
     silently reclaiming a job whose lease was legitimately
     renewed in between. See RecoverExpiredLeaseService.
+
+    fence_status: pass the status the caller read when the job is
+    reclaimed because no lease holds it at all (ADR 0096). There is
+    no lease to delete then, so none is, and lease_already_deleted
+    keeps the meaning ADR 0052 gives it: a fenced delete that
+    removed a row. The job is saved through
+    JobRepository.save_if_leaseless instead of save(), so the write
+    applies only while the job still has that status and no lease
+    row exists. A refused write returns False and credits no node.
+    The job object was changed by Job.reclaim() before the write,
+    so a caller that passes fence_status must hand in a copy it does
+    not reuse.
     """
-    if not lease_already_deleted:
+    if fence_status is None and not lease_already_deleted:
         lease_repository.delete(
             job.id,
             job.tenant_id,
@@ -140,9 +154,15 @@ def reclaim_job(
 
         return False
 
-    job_repository.save(
+    if fence_status is None:
+        job_repository.save(
+            job,
+        )
+    elif not job_repository.save_if_leaseless(
         job,
-    )
+        fence_status,
+    ):
+        return False
 
     if node is not None:
         node.release(

@@ -34,6 +34,49 @@ class PostgresJobRepository(JobRepository):
         self._pool = pool
 
     def save(self, job: Job) -> None:
+        with self._pool.connection() as conn:
+            self._upsert(conn, job)
+
+    def save_if_leaseless(
+        self,
+        job: Job,
+        expected_status: JobStatus,
+    ) -> bool:
+        """
+        Lock the job row, require the status that was read and no
+        lease row, then write, in one transaction (ADR 0096).
+
+        A lease insert references the job row, and Postgres makes
+        that insert wait for a lock on the row we hold. A lease
+        inserted before we hold the lock is committed or rolled back
+        by the time the lock is ours, and the lease check below,
+        which runs after the lock, sees it. The check and the write
+        therefore cannot be split by a lease insert, and the write
+        cannot overwrite a state saved after the caller read it.
+        """
+        with self._pool.connection() as conn, conn.transaction():
+            row = conn.execute(
+                "SELECT status FROM jobs "
+                "WHERE id = %s AND tenant_id = %s FOR UPDATE",
+                (str(job.id), str(job.tenant_id)),
+            ).fetchone()
+
+            if row is None or row[0] != expected_status.value:
+                return False
+
+            lease = conn.execute(
+                "SELECT 1 FROM leases WHERE job_id = %s",
+                (str(job.id),),
+            ).fetchone()
+
+            if lease is not None:
+                return False
+
+            self._upsert(conn, job)
+            return True
+
+    @staticmethod
+    def _upsert(conn: Any, job: Job) -> None:
         assigned_node_id = (
             str(job.assigned_node_id)
             if job.assigned_node_id is not None
@@ -46,74 +89,73 @@ class PostgresJobRepository(JobRepository):
             else None
         )
 
-        with self._pool.connection() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO jobs (
-                    id, cpu_cores, memory_mib, vram_mib,
-                    priority, constraints, max_retries,
-                    retry_count, status, assigned_node_id,
-                    submitted_at, started_at, completed_at,
-                    command, exit_code, cancellation_requested_at,
-                    execution_timeout_seconds, tenant_id
-                ) VALUES (
-                    %(id)s, %(cpu_cores)s, %(memory_mib)s,
-                    %(vram_mib)s, %(priority)s, %(constraints)s,
-                    %(max_retries)s, %(retry_count)s, %(status)s,
-                    %(assigned_node_id)s, %(submitted_at)s,
-                    %(started_at)s, %(completed_at)s,
-                    %(command)s, %(exit_code)s,
-                    %(cancellation_requested_at)s,
-                    %(execution_timeout_seconds)s,
-                    %(tenant_id)s
-                )
-                ON CONFLICT (id) DO UPDATE SET
-                    cpu_cores = EXCLUDED.cpu_cores,
-                    memory_mib = EXCLUDED.memory_mib,
-                    vram_mib = EXCLUDED.vram_mib,
-                    priority = EXCLUDED.priority,
-                    constraints = EXCLUDED.constraints,
-                    max_retries = EXCLUDED.max_retries,
-                    retry_count = EXCLUDED.retry_count,
-                    status = EXCLUDED.status,
-                    assigned_node_id = EXCLUDED.assigned_node_id,
-                    submitted_at = EXCLUDED.submitted_at,
-                    started_at = EXCLUDED.started_at,
-                    completed_at = EXCLUDED.completed_at,
-                    command = EXCLUDED.command,
-                    exit_code = EXCLUDED.exit_code,
-                    cancellation_requested_at = EXCLUDED.cancellation_requested_at,
-                    execution_timeout_seconds = EXCLUDED.execution_timeout_seconds
-                WHERE jobs.tenant_id = EXCLUDED.tenant_id
-                """,
-                {
-                    "id": str(job.id),
-                    "cpu_cores": job.resources.cpu_cores,
-                    "memory_mib": job.resources.memory_mib,
-                    "vram_mib": job.resources.vram_mib,
-                    "priority": job.priority,
-                    "constraints": json.dumps(job.constraints),
-                    "max_retries": job.max_retries,
-                    "retry_count": job.retry_count,
-                    "status": job.status.value,
-                    "assigned_node_id": assigned_node_id,
-                    "submitted_at": job.submitted_at,
-                    "started_at": job.started_at,
-                    "completed_at": job.completed_at,
-                    "command": command,
-                    "exit_code": job.exit_code,
-                    "cancellation_requested_at": job.cancellation_requested_at,
-                    "execution_timeout_seconds": (
-                        job.execution_timeout.total_seconds()
-                    ),
-                    "tenant_id": str(job.tenant_id),
-                },
+        cursor = conn.execute(
+            """
+            INSERT INTO jobs (
+                id, cpu_cores, memory_mib, vram_mib,
+                priority, constraints, max_retries,
+                retry_count, status, assigned_node_id,
+                submitted_at, started_at, completed_at,
+                command, exit_code, cancellation_requested_at,
+                execution_timeout_seconds, tenant_id
+            ) VALUES (
+                %(id)s, %(cpu_cores)s, %(memory_mib)s,
+                %(vram_mib)s, %(priority)s, %(constraints)s,
+                %(max_retries)s, %(retry_count)s, %(status)s,
+                %(assigned_node_id)s, %(submitted_at)s,
+                %(started_at)s, %(completed_at)s,
+                %(command)s, %(exit_code)s,
+                %(cancellation_requested_at)s,
+                %(execution_timeout_seconds)s,
+                %(tenant_id)s
             )
+            ON CONFLICT (id) DO UPDATE SET
+                cpu_cores = EXCLUDED.cpu_cores,
+                memory_mib = EXCLUDED.memory_mib,
+                vram_mib = EXCLUDED.vram_mib,
+                priority = EXCLUDED.priority,
+                constraints = EXCLUDED.constraints,
+                max_retries = EXCLUDED.max_retries,
+                retry_count = EXCLUDED.retry_count,
+                status = EXCLUDED.status,
+                assigned_node_id = EXCLUDED.assigned_node_id,
+                submitted_at = EXCLUDED.submitted_at,
+                started_at = EXCLUDED.started_at,
+                completed_at = EXCLUDED.completed_at,
+                command = EXCLUDED.command,
+                exit_code = EXCLUDED.exit_code,
+                cancellation_requested_at = EXCLUDED.cancellation_requested_at,
+                execution_timeout_seconds = EXCLUDED.execution_timeout_seconds
+            WHERE jobs.tenant_id = EXCLUDED.tenant_id
+            """,
+            {
+                "id": str(job.id),
+                "cpu_cores": job.resources.cpu_cores,
+                "memory_mib": job.resources.memory_mib,
+                "vram_mib": job.resources.vram_mib,
+                "priority": job.priority,
+                "constraints": json.dumps(job.constraints),
+                "max_retries": job.max_retries,
+                "retry_count": job.retry_count,
+                "status": job.status.value,
+                "assigned_node_id": assigned_node_id,
+                "submitted_at": job.submitted_at,
+                "started_at": job.started_at,
+                "completed_at": job.completed_at,
+                "command": command,
+                "exit_code": job.exit_code,
+                "cancellation_requested_at": job.cancellation_requested_at,
+                "execution_timeout_seconds": (
+                    job.execution_timeout.total_seconds()
+                ),
+                "tenant_id": str(job.tenant_id),
+            },
+        )
 
-            if cursor.rowcount == 0:
-                raise JobTenantConflictError(
-                    f"job {job.id} belongs to another tenant"
-                )
+        if cursor.rowcount == 0:
+            raise JobTenantConflictError(
+                f"job {job.id} belongs to another tenant"
+            )
 
     def get_by_id(
         self,
