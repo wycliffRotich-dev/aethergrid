@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed.
+Accepted.
 
 Related: ADR 0071 and ADR 0094.
 
