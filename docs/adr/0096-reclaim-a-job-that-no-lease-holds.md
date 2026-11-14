@@ -43,14 +43,16 @@ with no lease row.
    RecoverLeaselessJobService repairs a job that has held no lease for
    longer than T and whose writer is gone.
 
-2. **Three writers produce a leased-state job with no lease row, and only
-   the first leaves it behind when it stops.**
+2. **Three writers produce a leased-state job with no lease row.** Each
+   one leaves the job behind if it stops partway, and each one can stall
+   past T while the job is in that state.
    1. Expired-lease recovery deletes the lease, then saves the worker, the
       job and the node in separate writes.
    2. The scheduler saves the job as SCHEDULED before its lease exists
       (ADR 0075).
-   3. An outcome report releases the lease, saves the worker, and then
-      saves the job and the node.
+   3. An outcome report, through ReportJobOutcomeService or
+      WorkerExecutionLoop, releases the lease, saves the worker, and then
+      saves the job and the node. Decision 10 fences its job save.
 
 3. **T is a named constant, MIN_LEASELESS_AGE_SECONDS, 180 seconds.** It
    has no exact bound, because every repository call in writers 2 and 3 can
@@ -59,18 +61,27 @@ with no lease row.
    reclaim is safe when it is wrong (decision 4).
 
 4. **The reclaim is one fenced write.** JobRepository.save_if_leaseless
-   saves the job only if it still has the status that was read and no lease
-   row exists. On Postgres it locks the job row, checks the status and the
-   lease table, and writes, in one transaction. A lease insert references
-   the job row, so an insert in flight holds a lock the write waits for,
-   and the write then finds the lease. The in-memory and SQLite backends
-   keep leases in this process and are atomic only against writers in this
-   process. A refused write changes nothing and credits no node.
+   saves the job only if its stored status is one of the expected
+   statuses and no lease row exists. On Postgres it locks the job row with
+   FOR UPDATE, checks the status and the lease table, and writes, in one
+   transaction. A lease insert takes FOR KEY SHARE on the job row through
+   its foreign key. An insert already in flight when the lock is requested
+   finishes first, and the lease check sees it. An insert that starts
+   while the lock is held waits, and succeeds after the commit, because
+   the insert does not check the job's status (see Not Claimed). The
+   in-memory and SQLite backends keep leases in this process and are
+   atomic only against writers in this process. A refused write changes
+   nothing and credits no node.
 
-5. **How the reclaim handles the lease.** There is no lease to delete, so
-   none is deleted. reclaim_job gets a fence_status argument for this case.
-   lease_already_deleted keeps the meaning ADR 0052 gives it, a fenced
-   delete that removed a row, and the service does not pass it.
+5. **The reclaim has its own helper, reclaim_leaseless_job.** There is no
+   lease to delete, so none is deleted. The helper copies the job it is
+   given, reclaims the copy, fences the write on the status the job had
+   when it was handed in, and returns the copy only if the write was
+   accepted. The caller's object is never changed, so a refused write
+   cannot leave an object behind that looks reclaimed and was never
+   saved, and a caller cannot pass a status that disagrees with its job.
+   reclaim_job is unchanged. Its four callers start from a lease and rely
+   on its bool result and on the job being changed in place.
 
 6. **The age is measured, not counted.** The service records, on a
    monotonic clock, when it first saw each job without a lease and in which
@@ -102,11 +113,40 @@ with no lease row.
 9. **The service runs last in ReconciliationLoop, and each step runs on its
    own.** A step that raises is logged, and the steps after it still run.
 
+10. **An outcome is saved with the same fenced write.** From the lease
+    release until the job save, a job that is reporting its outcome is
+    RUNNING or CANCELLING with no lease, the state this service reclaims.
+    A report that stalls longer than T there would otherwise save its
+    terminal status over the requeued job, and then credit the node the
+    reclaim had already credited. If the job had been assigned again, it
+    would be marked finished while it runs. ReportJobOutcomeService and
+    WorkerExecutionLoop therefore save the job through save_if_leaseless,
+    expecting RUNNING or CANCELLING (FINISHING_STATUSES). CANCELLING is
+    accepted because ADR 0029 lets a job that finishes before the
+    cancellation signal reaches it end COMPLETED or FAILED, and a
+    cancellation request can be saved while the report is in flight. A
+    reclaim moves the job out of both statuses, to QUEUED, FAILED or
+    CANCELLED. A refused write credits no node, records no event, and
+    raises JobReclaimedError, which the API returns as 409, as it does for
+    a lost lease.
+
+    Worker.complete(), fail() and cancel_job() change the job in place
+    before the write. On Postgres that job was read fresh with the
+    worker, and the status the write expects is the one the database
+    holds. The in-memory job repository hands out the object it stores,
+    so the services first give the worker a copy of its job
+    (take_running_job). Otherwise the stored job would show the outcome
+    before it was written, and the fence would refuse it.
+
 ## Consequences
 
 - A job stranded by a failed write returns to the queue, or fails once its
-  retries are exhausted, about three minutes after it lost its lease, and
-  its node gets the capacity back once.
+  retries are exhausted, about three minutes after it lost its lease. Its
+  node is credited at most once. A crash between the job save and the node
+  save in any of the three paths that release a node leaves the capacity
+  allocated, which nothing repairs yet (Not Claimed).
+- A worker whose outcome report arrives after its job was reclaimed gets
+  409, the same answer as for a lost lease, and its outcome is dropped.
 - A pass reads every lease and every job of the fleet, across tenants, and
   every worker only when a job is ready to reclaim. The reads are added to
   the list of fleet-wide readers pinned by test_across_tenants_callers.py.
@@ -127,17 +167,36 @@ with no lease row.
   restart or a new leader costs one more minimum age.
 - That the lease clock is shared. Expiry is still judged on each process's
   own clock.
-- That a stalled outcome report cannot save its terminal status over a job
-  that was reclaimed. Job writes are not versioned, so that report still
-  writes unconditionally. It is tracked in a separate issue.
-- That a lease inserted after the reclaim commits is refused. The lease
-  insert does not check the job's status, so a scheduler that stalled for
-  longer than T between saving a job as SCHEDULED and acquiring its lease
-  could still insert one for the QUEUED job.
+- That a lease insert is refused once the fenced write holds the row lock.
+  An insert that reaches its foreign key check while the lock is held
+  waits for it, and succeeds after the commit, because the job row still
+  exists and the insert does not look at the job's status. A writer that
+  read the job before the reclaim and stalled through it, such as a
+  scheduler that saved the job as SCHEDULED and stalled for longer than T
+  before acquiring its lease, can therefore leave a live lease on a job
+  that is now QUEUED or terminal. The age guard makes this improbable, not
+  impossible. The fix, a lease insert that locks the job row and checks
+  its status in the same transaction, is tracked in #507.
+- That every job writer is fenced. CancelJobService still saves
+  unconditionally. A cancellation that reads a RUNNING job before an
+  outcome is saved, and writes CANCELLING after it, puts the finished job
+  back into CANCELLING with no lease. This service then cancels it after
+  T and credits the node a second time. Before this change the same race
+  left the job in CANCELLING for good. It needs the cancel request's
+  read and write to straddle the whole outcome write. It is tracked in
+  #507 with the lease insert.
+- That capacity leaked by a crash is repaired. The node is released after
+  the job is saved in three paths, reclaim_job (ADR 0092),
+  ReportJobOutcomeService and WorkerExecutionLoop (decision 7). A crash
+  between the two writes leaves a finished or requeued job on a node that
+  stays allocated, and this service does not see it, because it reads
+  only leased-state jobs. ADR 0092 accepted this for reclaim_job, and this
+  change extends it to the two outcome paths. A repair that recomputes a
+  node's allocation from the jobs that hold it is tracked in
+  #506.
 - That the recovery writes of the two older services are atomic, or that
-  they record their event in the same step as the job save.
-- That the crash between the job save and the node save in reclaim_job is
-  repaired (ADR 0092).
+  they record their event in the same step as the job save. One
+  transaction per recovery is tracked in #509.
 - That a process was killed mid-recovery. The tests lose a write, and on
   Postgres they use a second connection for the competing lease.
 
@@ -147,7 +206,7 @@ with no lease row.
   services work through repository interfaces that each take their own
   connection, so it needs a unit of work across four repositories and every
   recovery path. It would also leave alone the jobs already stranded in
-  existing databases, which this repairs.
+  existing databases, which this repairs. It is tracked in #509.
 - **Reclaim at the first sighting.** Rejected. It can requeue a job in the
   window between the release of its lease and the save of its outcome, and
   a second run of a job that completed is the incident this system exists
@@ -175,9 +234,29 @@ The Postgres tests need a database whose name ends in _test (CONTRIBUTING):
 
 The regression test fails without the new step. With the step removed
 from ReconciliationLoop, test_a_failed_job_save_after_the_lease_delete_is_repaired_once
-fails, because the job stays RUNNING. Each guard was also removed by hand
-and the test that names it failed: the fenced write replaced by save(),
-the minimum age, the clearing of sightings, the lease check in the fenced
-write, the row lock on Postgres, and the order of the outcome report.
+fails, because the job stays RUNNING.
 test_without_the_new_step_the_job_stays_stranded keeps the behaviour
 before this change in the suite.
+
+Each guard was removed by hand, the full application and repository
+suites were run on Postgres, and these tests failed:
+
+- The minimum age (`now - since >= self._min_age` replaced by `True`):
+  test_a_job_is_reclaimed_only_after_the_minimum_age, among 13.
+- The fenced write in ReportJobOutcomeService replaced by save():
+  test_an_outcome_report_that_stalls_past_the_reclaim_does_not_credit_the_node_twice
+  and, on Postgres,
+  test_an_outcome_report_that_stalls_past_the_reclaim_is_refused.
+- The fenced write in WorkerExecutionLoop replaced by save():
+  test_run_once_does_not_save_an_outcome_for_a_job_reclaimed_while_it_stalled.
+- FINISHING_STATUSES without CANCELLING:
+  test_an_outcome_report_still_wins_over_a_cancel_request_saved_during_it,
+  in memory and on Postgres, and seven existing cancellation tests.
+- The copy in reclaim_leaseless_job:
+  test_reclaim_leaseless_job_refused_changes_nothing and two more.
+- The copy in take_running_job: 31 existing outcome tests on the
+  in-memory backend.
+
+The earlier round removed the clearing of sightings, the lease check in
+the fenced write, the row lock on Postgres and the order of the outcome
+report, and the test that names each one failed.

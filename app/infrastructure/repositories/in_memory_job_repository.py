@@ -46,7 +46,7 @@ class InMemoryJobRepository(JobRepository):
     def save_if_leaseless(
         self,
         job: Job,
-        expected_status: JobStatus,
+        expected_statuses: frozenset[JobStatus],
     ) -> bool:
         if self._lease_repository is None:
             raise RuntimeError(
@@ -59,7 +59,7 @@ class InMemoryJobRepository(JobRepository):
         if (
             existing is None
             or existing.tenant_id != job.tenant_id
-            or existing.status is not expected_status
+            or existing.status not in expected_statuses
         ):
             return False
 

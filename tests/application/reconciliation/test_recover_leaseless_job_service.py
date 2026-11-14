@@ -18,6 +18,7 @@ from app.application.reconciliation.recover_leaseless_job_service import (
 from app.application.reconciliation.recover_offline_node_service import (
     RecoverOfflineNodeService,
 )
+from app.application.services.cancel_job_service import CancelJobService
 from app.application.services.mark_dead_workers_service import (
     MarkDeadWorkersService,
 )
@@ -37,6 +38,7 @@ from app.domain.entities.node import Node
 from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.entities.worker import Worker
 from app.domain.enums.job_status import JobStatus
+from app.domain.exceptions.job_reclaimed_error import JobReclaimedError
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
@@ -260,6 +262,19 @@ class Cluster:
             ),
         )
 
+    def report(self) -> ReportJobOutcomeService:
+        return ReportJobOutcomeService(
+            worker_repository=self.workers,
+            job_repository=self.jobs,
+            node_repository=self.nodes,
+            lease_repository=self.leases,
+            release_lease_service=ReleaseLeaseService(
+                lease_repository=self.leases,
+                worker_repository=self.workers,
+            ),
+            record_job_events_service=RecordJobEventsService(self.events),
+        )
+
     def run_for(
         self,
         seconds: float,
@@ -376,6 +391,83 @@ def test_a_crash_inside_an_outcome_report_does_not_credit_the_node_twice() -> No
 
     assert cluster.free_cpu() == CAPACITY - OTHER_CPU
     assert cluster.stored_job().retry_count == 1
+
+
+def test_an_outcome_report_that_stalls_past_the_reclaim_does_not_credit_the_node_twice() -> (
+    None
+):
+    """
+    The review's blocking case. The report releases the lease and saves
+    the worker, then stalls before the job save for longer than the
+    minimum age. The sweep reclaims the job and credits its core. When
+    the report resumes, its write is refused, so it neither overwrites
+    the requeued job nor credits the node a second time.
+    """
+    cluster = Cluster(main_lease_expired=False)
+
+    def stall() -> None:
+        cluster.service.execute()
+        cluster.run_for(MIN_AGE)
+
+    cluster.jobs.before_fenced_write = stall
+
+    with pytest.raises(JobReclaimedError):
+        cluster.report().complete(
+            cluster.worker.id,
+            cluster.job_id,
+            cluster.worker.tenant_id,
+            cluster.lease.id,
+            exit_code=0,
+        )
+
+    job = cluster.stored_job()
+    assert job.status is JobStatus.QUEUED
+    assert job.retry_count == 1
+    assert cluster.free_cpu() == CAPACITY - OTHER_CPU
+    assert "JobCompleted" not in cluster.event_types()
+
+    cluster.run_for(60)
+
+    assert cluster.stored_job().status is JobStatus.QUEUED
+    assert cluster.free_cpu() == CAPACITY - OTHER_CPU
+
+
+def test_an_outcome_report_still_wins_over_a_cancel_request_saved_during_it() -> (
+    None
+):
+    """
+    A cancellation request is saved after the report read the job and
+    before its write. ADR 0029 lets a job that finished before the
+    signal reached it end COMPLETED, so the fence accepts CANCELLING as
+    well as RUNNING, and the report is saved and credits the node once.
+    """
+    cluster = Cluster(main_lease_expired=False)
+
+    def cancel() -> None:
+        CancelJobService(job_repository=cluster.jobs).execute(
+            cluster.job_id,
+            DEFAULT_TENANT_ID,
+        )
+        assert cluster.stored_job().status is JobStatus.CANCELLING
+
+    cluster.jobs.before_fenced_write = cancel
+
+    cluster.report().complete(
+        cluster.worker.id,
+        cluster.job_id,
+        cluster.worker.tenant_id,
+        cluster.lease.id,
+        exit_code=0,
+    )
+
+    assert cluster.stored_job().status is JobStatus.COMPLETED
+    assert cluster.free_cpu() == CAPACITY - OTHER_CPU
+
+    cluster.service.execute()
+    cluster.run_for(MIN_AGE * 2)
+
+    assert cluster.stored_job().status is JobStatus.COMPLETED
+    assert cluster.free_cpu() == CAPACITY - OTHER_CPU
 
 
 # --- the time guard ---

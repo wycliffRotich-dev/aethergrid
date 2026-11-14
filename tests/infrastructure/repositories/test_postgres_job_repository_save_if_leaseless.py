@@ -81,7 +81,7 @@ def test_it_saves_a_job_that_kept_its_status_and_has_no_lease(
     repository = PostgresJobRepository(pool)
     job, _ = _running_job_with_a_worker(pool)
 
-    assert repository.save_if_leaseless(_reclaimed(job), JobStatus.RUNNING)
+    assert repository.save_if_leaseless(_reclaimed(job), frozenset({JobStatus.RUNNING}))
 
     stored = repository.get_by_id(job.id, DEFAULT_TENANT_ID)
     assert stored is not None
@@ -99,7 +99,7 @@ def test_it_refuses_a_job_whose_status_changed(pool: ConnectionPool) -> None:
     repository.save(finished)
 
     assert not repository.save_if_leaseless(
-        _reclaimed(job), JobStatus.RUNNING
+        _reclaimed(job), frozenset({JobStatus.RUNNING})
     )
 
     stored = repository.get_by_id(job.id, DEFAULT_TENANT_ID)
@@ -119,7 +119,7 @@ def test_it_refuses_a_job_that_has_a_lease(pool: ConnectionPool) -> None:
     )
 
     assert not repository.save_if_leaseless(
-        _reclaimed(job), JobStatus.RUNNING
+        _reclaimed(job), frozenset({JobStatus.RUNNING})
     )
 
     stored = repository.get_by_id(job.id, DEFAULT_TENANT_ID)
@@ -133,7 +133,7 @@ def test_it_refuses_a_job_that_does_not_exist(pool: ConnectionPool) -> None:
     job.queue()
     job.assign_to(make_node().id)
 
-    assert not repository.save_if_leaseless(job, JobStatus.SCHEDULED)
+    assert not repository.save_if_leaseless(job, frozenset({JobStatus.SCHEDULED}))
 
 
 def test_it_does_not_reach_a_job_in_another_tenant(
@@ -154,7 +154,7 @@ def test_it_does_not_reach_a_job_in_another_tenant(
     as_other_tenant.queue()
 
     assert not repository.save_if_leaseless(
-        as_other_tenant, JobStatus.RUNNING
+        as_other_tenant, frozenset({JobStatus.RUNNING})
     )
 
     stored = repository.get_by_id(job.id, DEFAULT_TENANT_ID)
@@ -180,7 +180,7 @@ def test_it_waits_for_a_lease_insert_in_flight_and_then_refuses(
     def attempt() -> None:
         result.append(
             repository.save_if_leaseless(
-                _reclaimed(job), JobStatus.RUNNING
+                _reclaimed(job), frozenset({JobStatus.RUNNING})
             )
         )
 

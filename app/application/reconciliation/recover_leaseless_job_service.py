@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import copy
 import logging
 import time
 from collections.abc import Callable
 
 from app.application.services.job_execution_support import (
-    reclaim_job,
+    reclaim_leaseless_job,
 )
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
@@ -78,7 +77,9 @@ class RecoverLeaselessJobService:
     2. The scheduler saves the job as SCHEDULED before its lease
        exists.
     3. An outcome report releases the lease, saves the worker, and
-       then saves the job and the node.
+       then saves the job and the node. Its job save is fenced too,
+       so a report that stalls past the reclaim is refused and does
+       not credit the node a second time.
 
     The service therefore waits, and then reclaims with one fenced
     write that applies only if the job still has the status that was
@@ -237,29 +238,25 @@ class RecoverLeaselessJobService:
         ):
             return
 
-        # Job.reclaim() changes the object it is called on, and a
-        # repository may hand back the one it stores. The fenced
-        # write decides whether the change is kept.
-        job = copy.deepcopy(stored)
-        was_cancelling = job.is_cancelling()
+        was_cancelling = stored.is_cancelling()
 
         node = None
-        if job.assigned_node_id is not None:
+        if stored.assigned_node_id is not None:
             node = self._node_repository.get_by_id(
-                job.assigned_node_id,
+                stored.assigned_node_id,
                 tenant_id,
             )
 
-        reclaimed = reclaim_job(
-            job,
+        # The helper reclaims a copy, fenced on the status stored has,
+        # and leaves stored itself unchanged.
+        reclaimed = reclaim_leaseless_job(
+            stored,
             node,
-            lease_repository=self._lease_repository,
             node_repository=self._node_repository,
             job_repository=self._job_repository,
-            fence_status=status,
         )
 
-        if not reclaimed:
+        if reclaimed is None:
             logger.info(
                 "Job %s changed or got a lease while it was being "
                 "reclaimed, so it was left as it is.",
@@ -273,8 +270,8 @@ class RecoverLeaselessJobService:
             status,
         )
 
-        self._free_workers_holding(job, holders)
-        self._record(job, was_cancelling)
+        self._free_workers_holding(reclaimed, holders)
+        self._record(reclaimed, was_cancelling)
 
     def _free_workers_holding(
         self,

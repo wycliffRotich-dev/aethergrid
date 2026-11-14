@@ -8,6 +8,7 @@ longer sees it.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import timedelta
 
 import pytest
@@ -26,6 +27,7 @@ from app.application.reconciliation.recover_leaseless_job_service import (
 from app.application.reconciliation.recover_offline_node_service import (
     RecoverOfflineNodeService,
 )
+from app.application.services.cancel_job_service import CancelJobService
 from app.application.services.mark_dead_workers_service import (
     MarkDeadWorkersService,
 )
@@ -41,6 +43,7 @@ from app.domain.entities.node import Node
 from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.entities.worker import Worker
 from app.domain.enums.job_status import JobStatus
+from app.domain.exceptions.job_reclaimed_error import JobReclaimedError
 from app.domain.value_objects.resource_requirements import (
     ResourceRequirements,
 )
@@ -95,10 +98,12 @@ class Clock:
 class LosingJobRepository(PostgresJobRepository):
     """
     Loses one write, the way a dropped connection or a killed process
-    does after the lease row is already gone.
+    does after the lease row is already gone. Can also run a hook once,
+    before a fenced write, to stand for a caller that stalls there.
     """
 
     fail_next_write = False
+    before_fenced_write: Callable[[], None] | None = None
 
     def save(self, job: Job) -> None:
         if self.fail_next_write:
@@ -106,6 +111,21 @@ class LosingJobRepository(PostgresJobRepository):
             raise RuntimeError("the write was lost")
 
         super().save(job)
+
+    def save_if_leaseless(
+        self,
+        job: Job,
+        expected_statuses: frozenset[JobStatus],
+    ) -> bool:
+        if self.before_fenced_write is not None:
+            hook, self.before_fenced_write = self.before_fenced_write, None
+            hook()
+
+        if self.fail_next_write:
+            self.fail_next_write = False
+            raise RuntimeError("the write was lost")
+
+        return super().save_if_leaseless(job, expected_statuses)
 
 
 class LeaseFromAnotherConnection(PostgresLeaseRepository):
@@ -225,6 +245,18 @@ class Fleet:
         node = self.nodes.get_by_id(self.node.id, DEFAULT_TENANT_ID)
         assert node is not None
         return node.available.cpu_cores
+
+    def report(self) -> ReportJobOutcomeService:
+        return ReportJobOutcomeService(
+            worker_repository=self.workers,
+            job_repository=self.jobs,
+            node_repository=self.nodes,
+            lease_repository=self.leases,
+            release_lease_service=ReleaseLeaseService(
+                lease_repository=self.leases,
+                worker_repository=self.workers,
+            ),
+        )
 
     def loop(self) -> ReconciliationLoop:
         return ReconciliationLoop(
@@ -368,6 +400,75 @@ def test_a_crash_inside_an_outcome_report_does_not_credit_the_node_twice(
 
     fleet.run_for(60)
 
+    assert fleet.free_cpu() == CAPACITY - OTHER_CPU
+
+
+def test_an_outcome_report_that_stalls_past_the_reclaim_is_refused(
+    pool: ConnectionPool,
+) -> None:
+    """
+    The report releases the lease and saves the worker, then stalls
+    before the job save while the sweep reclaims the job and credits
+    its core. The report's fenced write is refused on the real
+    database: the job stays QUEUED and the core is credited once.
+    """
+    fleet = Fleet(pool, main_lease_expired=False)
+
+    def stall() -> None:
+        fleet.service.execute()
+        fleet.run_for(MIN_AGE)
+
+    fleet.jobs.before_fenced_write = stall
+
+    with pytest.raises(JobReclaimedError):
+        fleet.report().complete(
+            fleet.worker.id,
+            fleet.job.id,
+            fleet.worker.tenant_id,
+            fleet.lease.id,
+            exit_code=0,
+        )
+
+    stored = fleet.stored_job()
+    assert stored.status is JobStatus.QUEUED
+    assert stored.retry_count == 1
+    assert fleet.free_cpu() == CAPACITY - OTHER_CPU
+
+    fleet.run_for(60)
+
+    assert fleet.stored_job().status is JobStatus.QUEUED
+    assert fleet.free_cpu() == CAPACITY - OTHER_CPU
+
+
+def test_an_outcome_report_still_wins_over_a_cancel_request_saved_during_it(
+    pool: ConnectionPool,
+) -> None:
+    fleet = Fleet(pool, main_lease_expired=False)
+
+    def cancel() -> None:
+        CancelJobService(job_repository=fleet.jobs).execute(
+            fleet.job.id,
+            DEFAULT_TENANT_ID,
+        )
+        assert fleet.stored_job().status is JobStatus.CANCELLING
+
+    fleet.jobs.before_fenced_write = cancel
+
+    fleet.report().complete(
+        fleet.worker.id,
+        fleet.job.id,
+        fleet.worker.tenant_id,
+        fleet.lease.id,
+        exit_code=0,
+    )
+
+    assert fleet.stored_job().status is JobStatus.COMPLETED
+    assert fleet.free_cpu() == CAPACITY - OTHER_CPU
+
+    fleet.service.execute()
+    fleet.run_for(MIN_AGE * 2)
+
+    assert fleet.stored_job().status is JobStatus.COMPLETED
     assert fleet.free_cpu() == CAPACITY - OTHER_CPU
 
 

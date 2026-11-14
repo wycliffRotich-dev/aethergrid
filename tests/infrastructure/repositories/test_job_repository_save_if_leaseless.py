@@ -85,7 +85,7 @@ def test_it_saves_a_job_that_kept_its_status_and_has_no_lease(
     candidate = _copy_of(repository, job)
 
     assert repository.save_if_leaseless(
-        _reclaimed(candidate), JobStatus.RUNNING
+        _reclaimed(candidate), frozenset({JobStatus.RUNNING})
     )
 
     stored = repository.get_by_id(job.id, DEFAULT_TENANT_ID)
@@ -105,7 +105,7 @@ def test_it_refuses_a_job_whose_status_changed(
     repository.save(finished)
 
     assert not repository.save_if_leaseless(
-        _reclaimed(candidate), JobStatus.RUNNING
+        _reclaimed(candidate), frozenset({JobStatus.RUNNING})
     )
 
     stored = repository.get_by_id(job.id, DEFAULT_TENANT_ID)
@@ -128,7 +128,7 @@ def test_it_refuses_a_job_that_has_a_lease(
     candidate = _copy_of(repository, job)
 
     assert not repository.save_if_leaseless(
-        _reclaimed(candidate), JobStatus.RUNNING
+        _reclaimed(candidate), frozenset({JobStatus.RUNNING})
     )
 
     stored = repository.get_by_id(job.id, DEFAULT_TENANT_ID)
@@ -144,7 +144,7 @@ def test_it_refuses_a_job_that_does_not_exist(
     job.queue()
     job.assign_to(NodeId.new())
 
-    assert not repository.save_if_leaseless(job, JobStatus.SCHEDULED)
+    assert not repository.save_if_leaseless(job, frozenset({JobStatus.SCHEDULED}))
 
 
 def test_it_does_not_reach_a_job_in_another_tenant(
@@ -157,7 +157,7 @@ def test_it_does_not_reach_a_job_in_another_tenant(
     as_other_tenant.queue()
 
     assert not repository.save_if_leaseless(
-        as_other_tenant, JobStatus.RUNNING
+        as_other_tenant, frozenset({JobStatus.RUNNING})
     )
 
     stored = repository.get_by_id(job.id, DEFAULT_TENANT_ID)
@@ -171,4 +171,4 @@ def test_it_needs_the_lease_repository_it_checks_against() -> None:
     job.assign_to(NodeId.new())
 
     with pytest.raises(RuntimeError, match="lease repository"):
-        InMemoryJobRepository().save_if_leaseless(job, JobStatus.SCHEDULED)
+        InMemoryJobRepository().save_if_leaseless(job, frozenset({JobStatus.SCHEDULED}))

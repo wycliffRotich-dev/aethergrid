@@ -23,24 +23,29 @@ class JobRepository(ABC):
     def save_if_leaseless(
         self,
         job: Job,
-        expected_status: JobStatus,
+        expected_statuses: frozenset[JobStatus],
     ) -> bool:
         """
-        Save the job only if it is still in `expected_status` and no
-        lease row points at it, as one step that no other writer can
-        interleave with (ADR 0096).
+        Save the job only if its stored status is one of
+        `expected_statuses` and no lease row points at it, checked and
+        written in one step (ADR 0096).
 
         Return True when the job was saved. Return False, and change
         nothing, when the job is gone, has another status, or has a
-        lease. A caller that reads a job, decides to reclaim it and
-        then calls save() writes over whatever was saved in between.
-        This is the write that cannot, in the spirit of
-        LeaseRepository.delete_if_expired (ADR 0034).
+        lease. A caller that reads a job, decides to change it and then
+        calls save() writes over whatever was saved in between. This is
+        the write that does not, in the spirit of
+        LeaseRepository.delete_if_expired (ADR 0034). Reconciliation
+        uses it to reclaim a job, and an outcome report uses it to save
+        the outcome, so neither can land on a job the other changed.
 
-        Postgres locks the job row, which also holds back a lease
-        insert that references it, and then checks the lease table.
-        The in-memory and SQLite backends keep leases in this
-        process and are atomic only against writers in this process.
+        Postgres locks the job row and then checks the lease table. A
+        lease insert that is in flight when the lock is requested is
+        finished first, and the check sees it. A lease insert that
+        starts while the lock is held waits for it, and succeeds after
+        the commit, because the insert does not check the job's status.
+        The in-memory and SQLite backends keep leases in this process
+        and are atomic only against writers in this process.
         """
         ...
 

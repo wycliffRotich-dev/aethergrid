@@ -7,7 +7,9 @@ from app.application.services.job_execution_service import (
     JobExecutionService,
 )
 from app.application.services.job_execution_support import (
+    FINISHING_STATUSES,
     persist_job_started,
+    take_running_job,
 )
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
@@ -19,6 +21,7 @@ from app.application.services.renew_lease_service import (
     RenewLeaseService,
 )
 from app.domain.entities.lease import DEFAULT_LEASE_DURATION
+from app.domain.exceptions.job_reclaimed_error import JobReclaimedError
 from app.domain.exceptions.lease_not_found_error import LeaseNotFoundError
 from app.domain.exceptions.no_active_lease_error import (
     NoActiveLeaseError,
@@ -254,36 +257,27 @@ class WorkerExecutionLoop:
             # than risk stomping whoever reconciliation handed this to
             raise lost_lease[0]
 
+        # A copy, so the transition below changes this loop's job and
+        # not the one an in-memory repository stores. The fenced write
+        # further down compares against the stored status. The renewal
+        # thread has been joined, so nothing else uses job any more.
+        job = take_running_job(worker)
+
         if result.cancelled:
             worker.cancel_job(
                 exit_code=result.exit_code,
             )
-
-            if self._record_job_events_service is not None:
-                self._record_job_events_service.record_for_job(
-                    job,
-                    event_type="JobCancelled",
-                )
+            event_type = "JobCancelled"
         elif result.succeeded:
             worker.complete(
                 exit_code=result.exit_code,
             )
-
-            if self._record_job_events_service is not None:
-                self._record_job_events_service.record_for_job(
-                    job,
-                    event_type="JobCompleted",
-                )
+            event_type = "JobCompleted"
         else:
             worker.fail(
                 exit_code=result.exit_code,
             )
-
-            if self._record_job_events_service is not None:
-                self._record_job_events_service.record_for_job(
-                    job,
-                    event_type="JobFailed",
-                )
+            event_type = "JobFailed"
 
         # Release the lease and persist the worker as IDLE *before*
         # persisting the job's terminal status. Order matters here to
@@ -342,9 +336,21 @@ class WorkerExecutionLoop:
                 current.cancellation_requested_at
             )
 
-        self._job_repository.save(
+        # Fenced, the same as ReportJobOutcomeService (ADR 0096
+        # decision 10). The lease was released above, so if this loop
+        # stalled long enough for reconciliation to reclaim the job,
+        # the write is refused, the node the reclaim credited is left
+        # alone, and no outcome event is recorded.
+        if not self._job_repository.save_if_leaseless(
             job,
-        )
+            FINISHING_STATUSES,
+        ):
+            logger.warning(
+                "The outcome of job %s was not saved, because the job "
+                "was reclaimed after its lease was released.",
+                job.id,
+            )
+            raise JobReclaimedError(job.id)
 
         # The node is released after the job is saved (ADR 0092, ADR
         # 0096), the same order as ReportJobOutcomeService. A crash
@@ -376,3 +382,11 @@ class WorkerExecutionLoop:
                     job.assigned_node_id,
                     tenant_id,
                 )
+
+        # Recorded once the outcome is saved, so an outcome that was
+        # refused leaves no event behind.
+        if self._record_job_events_service is not None:
+            self._record_job_events_service.record_for_job(
+                job,
+                event_type=event_type,
+            )

@@ -34,7 +34,8 @@ from app.infrastructure.repositories.in_memory_worker_repository import (
 class CopyingJobRepository(InMemoryJobRepository):
     """
     Copies on every read and write, and can lose a write or run a
-    hook after a read, to put a competing writer at an exact point.
+    hook after a read or before a fenced write, to put a competing
+    writer at an exact point.
     """
 
     def __init__(
@@ -46,6 +47,7 @@ class CopyingJobRepository(InMemoryJobRepository):
         self.fail_next_write = False
         self.fail_write_of: JobId | None = None
         self.after_read: Callable[[], None] | None = None
+        self.before_fenced_write: Callable[[], None] | None = None
         self.writes: list[str] = []
         super().__init__(
             [copy.deepcopy(job) for job in jobs],
@@ -70,12 +72,16 @@ class CopyingJobRepository(InMemoryJobRepository):
     def save_if_leaseless(
         self,
         job: Job,
-        expected_status: JobStatus,
+        expected_statuses: frozenset[JobStatus],
     ) -> bool:
+        if self.before_fenced_write is not None:
+            hook, self.before_fenced_write = self.before_fenced_write, None
+            hook()
+
         self._maybe_lose(job)
         saved = super().save_if_leaseless(
             copy.deepcopy(job),
-            expected_status,
+            expected_statuses,
         )
         if saved:
             self.writes.append("job")

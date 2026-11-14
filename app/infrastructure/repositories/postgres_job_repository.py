@@ -40,19 +40,28 @@ class PostgresJobRepository(JobRepository):
     def save_if_leaseless(
         self,
         job: Job,
-        expected_status: JobStatus,
+        expected_statuses: frozenset[JobStatus],
     ) -> bool:
         """
-        Lock the job row, require the status that was read and no
+        Lock the job row, require one of the expected statuses and no
         lease row, then write, in one transaction (ADR 0096).
 
-        A lease insert references the job row, and Postgres makes
-        that insert wait for a lock on the row we hold. A lease
-        inserted before we hold the lock is committed or rolled back
-        by the time the lock is ours, and the lease check below,
-        which runs after the lock, sees it. The check and the write
-        therefore cannot be split by a lease insert, and the write
-        cannot overwrite a state saved after the caller read it.
+        A lease insert takes a FOR KEY SHARE lock on the job row through
+        its foreign key, and that lock conflicts with FOR UPDATE. An
+        insert that is in flight when this select runs is committed or
+        rolled back before the lock is granted, and the lease check
+        below, which runs after the lock, sees it. No writer can change
+        the job row between the status check and the write.
+
+        This does not refuse a lease inserted after the lock is taken.
+        That insert waits for the lock, and once this transaction
+        commits it succeeds, because the job row still exists and the
+        insert does not look at the job's status. It can leave a lease
+        on a job this write made QUEUED or terminal. Only a writer that
+        read the job before this write and stalled through it can do
+        that, and the age guard in RecoverLeaselessJobService makes it
+        improbable, not impossible. Issue #507 tracks the fix, a lease
+        insert that locks the job row and checks its status.
         """
         with self._pool.connection() as conn, conn.transaction():
             row = conn.execute(
@@ -61,7 +70,7 @@ class PostgresJobRepository(JobRepository):
                 (str(job.id), str(job.tenant_id)),
             ).fetchone()
 
-            if row is None or row[0] != expected_status.value:
+            if row is None or JobStatus(row[0]) not in expected_statuses:
                 return False
 
             lease = conn.execute(

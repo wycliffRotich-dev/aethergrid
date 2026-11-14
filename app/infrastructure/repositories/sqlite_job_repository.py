@@ -203,7 +203,7 @@ class SqliteJobRepository(JobRepository):
     def save_if_leaseless(
         self,
         job: Job,
-        expected_status: JobStatus,
+        expected_statuses: frozenset[JobStatus],
     ) -> bool:
         if self._lease_repository is None:
             raise RuntimeError(
@@ -213,7 +213,7 @@ class SqliteJobRepository(JobRepository):
 
         stored = self.get_by_id(job.id, job.tenant_id)
 
-        if stored is None or stored.status is not expected_status:
+        if stored is None or stored.status not in expected_statuses:
             return False
 
         if (
