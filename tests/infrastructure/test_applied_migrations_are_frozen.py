@@ -38,6 +38,9 @@ EXPECTED_CHECKSUMS = {
     "0006_create_the_public_read_role.sql": (
         "11da66fc446ac31cf634b3fdd417289e52addcb40e6fde3d072fa2edf395b5f7"
     ),
+    "0007_create_the_public_views.sql": (
+        "4000b55bb0fe7de6051374b20751f79c5ad400fffaf3c911c01b0ed5f6216e34"
+    ),
 }
 
 

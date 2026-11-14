@@ -62,6 +62,12 @@ form event payloads, node labels and API key hashes.
 - The filter in the views costs a join and limits the planner because of
   decision 5. The demo reads small tables.
 - A new public field is a migration, a test and a review.
+- The grant script grants in the schema its session is in. An operator on
+  a database with one schema, as every database has today, gets the right
+  result. With several schemas the operator sets the search path first.
+- The script stops without granting anything when a view is missing or
+  when the role already holds a privilege on any other relation. Tests
+  cover both refusals.
 - The grant script is tested by running it in a scratch schema and checking
   that the role can read each view and nothing else.
 
