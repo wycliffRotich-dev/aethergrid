@@ -13,11 +13,15 @@ is proven able to fail.
 
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import psycopg
 import pytest
@@ -482,3 +486,133 @@ def test_the_grant_script_refuses_when_the_role_holds_another_privilege(
         "SELECT has_schema_privilege(%s::name, %s::text, 'USAGE')", (ROLE, schema)
     ).fetchone()
     assert row == (False,)
+
+
+SCOPE_SCRIPT = (
+    Path(__file__).resolve().parents[2] / "scripts" / "set_public_demo_tenant.sql"
+)
+
+
+def _run_scope_script(db: Db, tenant_name: str) -> None:
+    """Run the script with psql's :tenant_name variable filled in."""
+    quoted = "'" + tenant_name.replace("'", "''") + "'"
+    db.conn.execute(SCOPE_SCRIPT.read_text().replace(":'tenant_name'", quoted))
+
+
+def _scoped_tenants(db: Db) -> list[str]:
+    rows = db.conn.execute(
+        "SELECT tenant_id::text FROM public_demo_scope"
+    ).fetchall()
+    return [row[0] for row in rows]
+
+
+def test_the_scope_script_points_the_views_at_the_named_tenant(db: Db) -> None:
+    schema = _migrated(db)
+    tenant = _tenant(db, "demo")
+    ids = _seed(db, tenant)
+    _allow_views(db, schema)
+
+    _run_scope_script(db, "demo")
+
+    assert _scoped_tenants(db) == [tenant]
+    assert _as_role(db, "SELECT id::text FROM public_jobs") == [(ids["job"],)]
+
+
+def test_running_the_scope_script_twice_for_the_same_tenant_changes_nothing(
+    db: Db,
+) -> None:
+    _migrated(db)
+    tenant = _tenant(db, "demo")
+    _run_scope_script(db, "demo")
+
+    _run_scope_script(db, "demo")
+
+    assert _scoped_tenants(db) == [tenant]
+
+
+def test_the_scope_script_refuses_an_unknown_tenant_name_and_changes_nothing(
+    db: Db,
+) -> None:
+    _migrated(db)
+
+    with pytest.raises(psycopg.Error) as refused:
+        _run_scope_script(db, "no-such-tenant")
+
+    assert "no-such-tenant" in str(refused.value)
+    assert _scoped_tenants(db) == []
+
+
+def test_the_scope_script_refuses_to_move_the_views_to_another_tenant(
+    db: Db,
+) -> None:
+    _migrated(db)
+    first = _tenant(db, "first")
+    _tenant(db, "second")
+    _run_scope_script(db, "first")
+
+    with pytest.raises(psycopg.Error) as refused:
+        _run_scope_script(db, "second")
+
+    assert "the views already show first" in str(refused.value)
+    assert _scoped_tenants(db) == [first]
+
+
+def test_the_scope_script_grants_the_role_nothing(db: Db) -> None:
+    schema = _migrated(db)
+    _tenant(db, "demo")
+
+    _run_scope_script(db, "demo")
+
+    assert _held_by_the_role(db, schema) == []
+
+
+def _run_scope_script_with_psql(
+    db: Db, schema: str, tenant_name: str
+) -> subprocess.CompletedProcess[str]:
+    """The path an operator takes: the real psql, one statement at a time."""
+    parts = urlparse(db.url)
+    options = f"-c search_path={schema}"
+    variables = [
+        "-v", "ON_ERROR_STOP=1", "-v", f"tenant_name={tenant_name}", "-f", "-",
+    ]
+    if shutil.which("psql"):
+        command = ["psql", db.url, *variables]
+        env = {**os.environ, "PGOPTIONS": options}
+    elif shutil.which("docker"):
+        command = [
+            "docker", "compose", "exec", "-T", "-e", f"PGOPTIONS={options}",
+            "postgres", "psql", "-U", parts.username or "neuromesh",
+            "-d", parts.path.lstrip("/"), *variables,
+        ]
+        env = dict(os.environ)
+    else:
+        pytest.skip("neither psql nor docker is available")
+    return subprocess.run(
+        command,
+        input=SCOPE_SCRIPT.read_text(),
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=SCOPE_SCRIPT.parents[1],
+        check=False,
+    )
+
+
+def test_the_scope_script_works_through_psql(db: Db) -> None:
+    schema = _migrated(db)
+    tenant = _tenant(db, "demo")
+
+    done = _run_scope_script_with_psql(db, schema, "demo")
+
+    assert done.returncode == 0, done.stderr
+    assert _scoped_tenants(db) == [tenant]
+
+
+def test_the_scope_script_refuses_an_unknown_name_through_psql(db: Db) -> None:
+    schema = _migrated(db)
+
+    done = _run_scope_script_with_psql(db, schema, "no-such-tenant")
+
+    assert done.returncode != 0
+    assert "no tenant is named no-such-tenant" in done.stderr
+    assert _scoped_tenants(db) == []
