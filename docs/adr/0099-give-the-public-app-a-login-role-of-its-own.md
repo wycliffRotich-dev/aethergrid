@@ -25,11 +25,14 @@ that serves the public.
 2. A script, scripts/create_public_app_role.sql, creates it on the demo
    database. An operator runs it. It is not a migration and must never be
    placed in the migrations folder.
-3. The password comes from a file that the operator names. The script reads
-   it with psql and never takes it from the command line, so it does not
-   appear in a process list or in shell history. The script never prints it.
-   psql reads the file through a backtick command, so the script depends on a
-   shell and trusts the file's path.
+3. The password comes from the file that AETHERGRID_PUBLIC_APP_PASSWORD_FILE
+   names. The script reads it with psql and never takes it from the command
+   line, so it does not appear in a process list or in shell history. The
+   script never prints it. psql reads the file through a backtick command, so
+   the script depends on a shell and trusts the file's path. The shell reads
+   the path from the environment, so it is never part of the SQL text. The
+   script refuses an empty file, because an empty password in ALTER ROLE
+   removes the password.
 4. The role has none of the power attributes: NOSUPERUSER, NOCREATEDB,
    NOCREATEROLE, NOREPLICATION and NOBYPASSRLS.
 5. The role has a connection limit and a statement timeout, both set on the
@@ -56,6 +59,9 @@ that serves the public.
   and public_demo_scope. Neither can be changed by a request. They can
   disagree, so the next change makes the app refuse to start when they do.
 - The password file is trusted by its path. The operator controls it.
+- ALTER ROLE sends the password to the server as text. A server with
+  log_statement turned on can write it to its log. The script cannot
+  prevent that, so the operator keeps log_statement at none.
 - The script runs a shell command to read that file. An operator who can
   change the path or the file can change the password the role gets, and
   that operator can already run the script as the owner of the database.
@@ -77,6 +83,24 @@ that serves the public.
   migrates.
 - **Pass the password on the command line.** Rejected. A command line shows
   in a process list and in shell history.
+
+## Progress
+
+2026-11-14. The first version of the script left the role with no
+password. psql does not expand a variable inside a backtick command, so cat
+received a literal name, the file read as empty, and ALTER ROLE with an
+empty password removes the password. A test that reads the stored hash
+failed, and the other tests passed. The script now reads the path from the
+environment and refuses an empty file.
+
+2026-11-14. The first fix printed the password. The statement that carries
+it into a setting returns it as a result, and psql prints results. A test
+that searches the output for the password failed. The statement now runs
+with its output sent nowhere.
+
+2026-11-14. Each refusal in the script was disabled by hand and a test failed
+every time except for the one about members, which had no test. Two tests
+were added, and the refusal was disabled again.
 
 ## How to Verify
 
