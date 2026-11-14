@@ -4,11 +4,13 @@ import os
 
 from app.application.services.job_execution_support import (
     reclaim_job,
+    reclaim_leaseless_job,
 )
 from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
 from app.domain.entities.node import Node
 from app.domain.entities.tenant import DEFAULT_TENANT_ID
+from app.domain.enums.job_status import JobStatus
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
@@ -19,6 +21,9 @@ from app.infrastructure.repositories.in_memory_job_repository import (
 )
 from app.infrastructure.repositories.in_memory_lease_repository import (
     InMemoryLeaseRepository,
+)
+from app.infrastructure.repositories.in_memory_node_repository import (
+    InMemoryNodeRepository,
 )
 from app.infrastructure.repositories.sqlite_connection import (
     create_connection,
@@ -315,3 +320,123 @@ def test_reclaim_job_does_not_credit_node_when_job_not_reclaimable(
     assert reloaded is not None
     assert reloaded.available.cpu_cores == 5
     assert reloaded.available.memory_mib == 14848
+
+
+# --- reclaim_leaseless_job (ADR 0096) ---
+
+
+_ONE_CORE = ResourceRequirements(cpu_cores=1, memory_mib=512, vram_mib=0)
+
+
+def _leaseless_setup() -> tuple[
+    Node, Job, InMemoryJobRepository, InMemoryLeaseRepository, InMemoryNodeRepository
+]:
+    node, job = _make_node_and_job(_ONE_CORE, max_retries=3)
+    leases = InMemoryLeaseRepository()
+    jobs = InMemoryJobRepository([job], lease_repository=leases)
+    nodes = InMemoryNodeRepository([node])
+    return node, job, jobs, leases, nodes
+
+
+def test_reclaim_leaseless_job_returns_a_reclaimed_copy_and_leaves_the_job_alone() -> (
+    None
+):
+    node, job, jobs, _, nodes = _leaseless_setup()
+
+    reclaimed = reclaim_leaseless_job(
+        job,
+        node,
+        node_repository=nodes,
+        job_repository=jobs,
+    )
+
+    assert reclaimed is not None
+    assert reclaimed is not job
+    assert reclaimed.is_queued()
+    assert reclaimed.retry_count == 1
+    assert job.is_running()
+    assert job.retry_count == 0
+
+    stored = jobs.get_by_id(job.id, DEFAULT_TENANT_ID)
+    assert stored is not None
+    assert stored.is_queued()
+    assert node.available.cpu_cores == 8
+
+
+def test_reclaim_leaseless_job_refused_changes_nothing() -> None:
+    """
+    A lease exists, so the fenced write is refused. The caller's job
+    is not left looking reclaimed, and the node is not credited.
+    """
+    node, job, jobs, leases, nodes = _leaseless_setup()
+    leases.save(
+        Lease.create(
+            worker_id=NodeId.new().value,
+            job_id=job.id,
+            tenant_id=DEFAULT_TENANT_ID,
+        )
+    )
+
+    reclaimed = reclaim_leaseless_job(
+        job,
+        node,
+        node_repository=nodes,
+        job_repository=jobs,
+    )
+
+    assert reclaimed is None
+    assert job.is_running()
+    assert job.retry_count == 0
+    assert job.assigned_node_id == node.id
+    assert node.available.cpu_cores == 7
+
+
+def test_reclaim_leaseless_job_is_fenced_on_the_status_of_the_job_handed_in() -> (
+    None
+):
+    """
+    The caller read the job as RUNNING. A cancellation request was
+    saved after that, so the stored job is CANCELLING, and the write
+    fenced on RUNNING is refused.
+    """
+    node, job, _, leases, nodes = _leaseless_setup()
+    jobs = InMemoryJobRepository(lease_repository=leases)
+    cancelling = make_job(
+        id=job.id,
+        resources=_ONE_CORE,
+    )
+    cancelling.queue()
+    cancelling.assign_to(node.id)
+    cancelling.start()
+    cancelling.request_cancellation()
+    jobs.save(cancelling)
+
+    reclaimed = reclaim_leaseless_job(
+        job,
+        node,
+        node_repository=nodes,
+        job_repository=jobs,
+    )
+
+    assert reclaimed is None
+    stored = jobs.get_by_id(job.id, DEFAULT_TENANT_ID)
+    assert stored is not None
+    assert stored.status is JobStatus.CANCELLING
+    assert node.available.cpu_cores == 7
+
+
+def test_reclaim_leaseless_job_skips_a_job_that_cannot_be_reclaimed() -> None:
+    node, job, jobs, _, nodes = _leaseless_setup()
+    job.complete(exit_code=0)
+    jobs.save(job)
+
+    assert (
+        reclaim_leaseless_job(
+            job,
+            node,
+            node_repository=nodes,
+            job_repository=jobs,
+        )
+        is None
+    )
+    assert node.available.cpu_cores == 7

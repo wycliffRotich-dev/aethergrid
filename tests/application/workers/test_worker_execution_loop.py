@@ -5,8 +5,13 @@ import time
 from datetime import timedelta
 from pathlib import Path
 
+import pytest
+
 from app.application.services.job_execution_service import (
     JobExecutionService,
+)
+from app.application.services.job_execution_support import (
+    reclaim_leaseless_job,
 )
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
@@ -25,6 +30,8 @@ from app.domain.entities.lease import Lease
 from app.domain.entities.node import Node
 from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.entities.worker import Worker
+from app.domain.enums.job_status import JobStatus
+from app.domain.exceptions.job_reclaimed_error import JobReclaimedError
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
 from app.domain.value_objects.resource_requirements import (
@@ -115,7 +122,9 @@ def _build_loop(
     lease_repository.save(lease)
 
     worker_repository = InMemoryWorkerRepository([worker])
-    job_repository = InMemoryJobRepository([job])
+    job_repository = InMemoryJobRepository(
+        [job], lease_repository=lease_repository
+    )
     node_repository = InMemoryNodeRepository([node])
 
     renew_lease_service = RenewLeaseService(
@@ -151,7 +160,9 @@ def _build_loop(
     lease_repository.save(lease)
 
     worker_repository = InMemoryWorkerRepository([worker])
-    job_repository = InMemoryJobRepository([job])
+    job_repository = InMemoryJobRepository(
+        [job], lease_repository=lease_repository
+    )
     node_repository = InMemoryNodeRepository([node])
 
     renew_lease_service = RenewLeaseService(
@@ -337,9 +348,11 @@ def test_run_once_returns_early_when_worker_has_no_running_job() -> None:
     worker.ready()
 
     worker_repository = InMemoryWorkerRepository([worker])
-    job_repository = InMemoryJobRepository()
-    node_repository = InMemoryNodeRepository([node])
     lease_repository = InMemoryLeaseRepository()
+    job_repository = InMemoryJobRepository(
+        lease_repository=lease_repository
+    )
+    node_repository = InMemoryNodeRepository([node])
 
     loop = WorkerExecutionLoop(
         worker_repository=worker_repository,
@@ -472,7 +485,9 @@ def test_run_once_cancels_job_requested_to_cancel_during_execution() -> None:
     lease_repository.save(lease)
 
     worker_repository = InMemoryWorkerRepository([worker])
-    job_repository = InMemoryJobRepository([job])
+    job_repository = InMemoryJobRepository(
+        [job], lease_repository=lease_repository
+    )
     node_repository = InMemoryNodeRepository([node])
 
     renew_lease_service = RenewLeaseService(
@@ -549,7 +564,9 @@ def test_run_once_records_job_cancelled_event() -> None:
     lease_repository.save(lease)
 
     worker_repository = InMemoryWorkerRepository([worker])
-    job_repository = InMemoryJobRepository([job])
+    job_repository = InMemoryJobRepository(
+        [job], lease_repository=lease_repository
+    )
     node_repository = InMemoryNodeRepository([node])
 
     events = InMemoryEventRepository()
@@ -646,7 +663,9 @@ def test_run_once_preserves_cancellation_request_lost_by_renewal_thread() -> (
     lease_repository.save(lease)
 
     worker_repository = InMemoryWorkerRepository([worker])
-    job_repository = InMemoryJobRepository([job])
+    job_repository = InMemoryJobRepository(
+        [job], lease_repository=lease_repository
+    )
     node_repository = InMemoryNodeRepository([node])
 
     renew_lease_service = RenewLeaseService(
@@ -779,7 +798,9 @@ def test_run_once_preserves_cancellation_request_against_sqlite_repository() -> 
         node_repository = InMemoryNodeRepository([node])
 
         loop_connection = create_connection(db_path)
-        loop_job_repository = SqliteJobRepository(loop_connection)
+        loop_job_repository = SqliteJobRepository(
+            loop_connection, lease_repository=lease_repository
+        )
 
         renew_lease_service = RenewLeaseService(
             lease_repository=lease_repository,
@@ -930,7 +951,9 @@ def _build_recording_loop(worker, job, node, **loop_kwargs):
     lease_repository.save(lease)
 
     worker_repository = InMemoryWorkerRepository([worker])
-    job_repository = _RecordingJobRepository([job])
+    job_repository = _RecordingJobRepository(
+        [job], lease_repository=lease_repository
+    )
     node_repository = _RecordingNodeRepository([node])
 
     loop = WorkerExecutionLoop(
@@ -1158,7 +1181,9 @@ def test_run_once_persists_the_released_node_resources_in_sqlite(
     lease_repository.save(lease)
 
     worker_repository = InMemoryWorkerRepository([worker])
-    job_repository = InMemoryJobRepository([job])
+    job_repository = InMemoryJobRepository(
+        [job], lease_repository=lease_repository
+    )
 
     exec_connection = create_connection(db_path)
     loop = WorkerExecutionLoop(
@@ -1254,3 +1279,111 @@ def test_run_once_records_job_failed_event_when_the_command_cannot_start(
     assert recorded[0].event_type == "JobFailed"
     assert recorded[0].aggregate_id == str(job.id)
     assert recorded[0].aggregate_type == "Job"
+
+
+def test_run_once_saves_the_job_before_it_releases_the_node(
+    monkeypatch,
+) -> None:
+    """
+    ADR 0092 and ADR 0096: a crash between the two writes must
+    under-report free capacity, never over-report it. The node is
+    credited only after the job's terminal status is saved, so a job
+    left RUNNING with no lease by a crash still has its node allocated
+    when recovery reclaims it and releases the resources once.
+    """
+    worker, job, node = _make_worker_and_job()
+
+    loop, _, job_repository, node_repository, _ = _build_loop(
+        worker, job, node
+    )
+
+    order: list[str] = []
+    save_job = job_repository.save_if_leaseless
+    save_node = node_repository.save
+
+    def recording_job_save(saved, expected):  # type: ignore[no-untyped-def]
+        if saved.is_completed():
+            order.append("job completed")
+        return save_job(saved, expected)
+
+    def recording_node_save(saved):  # type: ignore[no-untyped-def]
+        order.append("node released")
+        save_node(saved)
+
+    monkeypatch.setattr(
+        job_repository, "save_if_leaseless", recording_job_save
+    )
+    monkeypatch.setattr(node_repository, "save", recording_node_save)
+
+    loop.execute(worker.id)
+
+    assert order == ["job completed", "node released"]
+
+
+def test_run_once_does_not_save_an_outcome_for_a_job_reclaimed_while_it_stalled(
+    monkeypatch,
+) -> None:
+    """
+    ADR 0096 decision 10. The loop released the lease and saved the
+    worker, then stalled before saving the job, and reconciliation
+    reclaimed the job in between and credited its core. The outcome
+    write is refused: the job stays requeued, the node is not credited
+    a second time, and no outcome event is recorded. Another job holds
+    two cores, so a second credit would show and not be hidden by the
+    node clamping at capacity.
+    """
+    events = InMemoryEventRepository()
+    worker, job, node = _make_worker_and_job()
+    node.allocate(
+        ResourceRequirements(cpu_cores=2, memory_mib=1024, vram_mib=0)
+    )
+
+    loop, _, job_repository, node_repository, _ = _build_loop(
+        worker,
+        job,
+        node,
+        record_job_events_service=RecordJobEventsService(events),
+    )
+
+    fenced = job_repository.save_if_leaseless
+    stalled: list[bool] = []
+
+    def reclaimed_during_the_stall(saved, expected):  # type: ignore[no-untyped-def]
+        if not stalled:
+            stalled.append(True)
+            stored = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
+            stored_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
+            assert stored is not None
+            assert stored.status is JobStatus.RUNNING
+            assert (
+                reclaim_leaseless_job(
+                    stored,
+                    stored_node,
+                    node_repository=node_repository,
+                    job_repository=job_repository,
+                )
+                is not None
+            )
+        return fenced(saved, expected)
+
+    monkeypatch.setattr(
+        job_repository, "save_if_leaseless", reclaimed_during_the_stall
+    )
+
+    with pytest.raises(JobReclaimedError):
+        loop.execute(worker.id)
+
+    # The job has no retries left, so the reclaim failed it. What is
+    # stored is the reclaim's write, not the loop's COMPLETED.
+    stored = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
+    assert stored is not None
+    assert stored.status is JobStatus.FAILED
+    assert stored.exit_code is None
+
+    stored_node = node_repository.get_by_id(node.id, DEFAULT_TENANT_ID)
+    assert stored_node is not None
+    assert stored_node.available.cpu_cores == 8 - 2
+
+    assert "JobCompleted" not in [
+        event.event_type for event in events.list(DEFAULT_TENANT_ID)
+    ]
