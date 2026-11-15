@@ -1,16 +1,15 @@
-FROM python:3.11-slim AS base
+FROM python:3.11-slim@sha256:07d4824036af339fa1b6ef769cc99d9c10a141769538b52b3b597c84f7a7b535 AS base
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
+COPY requirements-build.lock requirements.lock ./
+RUN python -m pip install --no-cache-dir --require-hashes --only-binary=:all: -r requirements-build.lock \
+    && python -m pip install --no-cache-dir --require-hashes --only-binary=:all: -r requirements.lock
 
 COPY pyproject.toml ./
 COPY app ./app
 
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir .
+RUN python -m pip install --no-cache-dir --no-deps --no-build-isolation .
 
 RUN groupadd --system --gid 10001 neuromesh \
     && useradd --system --uid 10001 --gid neuromesh --no-create-home neuromesh \
