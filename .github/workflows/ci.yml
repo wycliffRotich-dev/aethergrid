@@ -39,15 +39,16 @@ jobs:
       NEUROMESH_STORAGE_BACKEND: postgres
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          python -m pip install --require-hashes --only-binary=:all: -r requirements-build.lock
+          python -m pip install --require-hashes --only-binary=:all: -r requirements-dev.lock
+          python -m pip install --no-deps --no-build-isolation -e .
       - name: Apply database migrations
         run: python -m app.infrastructure.migrations
       - name: Run tests
@@ -65,7 +66,7 @@ jobs:
       - name: Update live test count badge
         continue-on-error: true
         if: matrix.python-version == '3.11' && ((github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch')
-        uses: schneegans/dynamic-badges-action@v1.9.0
+        uses: schneegans/dynamic-badges-action@28b0fa8bdeb46170ac397105ece0c1fe58f68910 # v1.9.0
         with:
           auth: ${{ secrets.GIST_SECRET }}
           gistID: 4b35dff5cea5aa68433713c36c3108bb
@@ -85,9 +86,9 @@ jobs:
         working-directory: frontend
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Set up Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "22"
           cache: "npm"
@@ -110,7 +111,7 @@ jobs:
       frontend: ${{ steps.diff.outputs.frontend }}
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
       - name: Detect frontend changes
@@ -164,17 +165,18 @@ jobs:
       NEUROMESH_STORAGE_BACKEND: postgres
     steps:
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: "3.11"
 
       - name: Install backend dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          python -m pip install --require-hashes --only-binary=:all: -r requirements-build.lock
+          python -m pip install --require-hashes --only-binary=:all: -r requirements-dev.lock
+          python -m pip install --no-deps --no-build-isolation -e .
 
       - name: Apply database migrations
         run: python -m app.infrastructure.migrations
@@ -208,7 +210,7 @@ jobs:
           echo "api_key=$KEY" >> "$GITHUB_OUTPUT"
 
       - name: Set up Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "22"
           cache: "npm"
@@ -249,7 +251,7 @@ jobs:
 
       - name: Upload Playwright report on failure
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: playwright-test-results
           path: frontend/test-results/
