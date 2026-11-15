@@ -15,6 +15,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -81,6 +82,7 @@ jobs:
 
   frontend:
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: frontend
@@ -107,6 +109,7 @@ jobs:
     # this workflow, so the slow browser suite runs where it earns its
     # cost and docs-only or Python-only pull requests keep fast feedback.
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     outputs:
       frontend: ${{ steps.diff.outputs.frontend }}
     steps:
@@ -138,6 +141,7 @@ jobs:
     # verifying this job itself before it can run on main.
     if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && needs.changes.outputs.frontend == 'true')
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     needs: [test, frontend, changes]
     services:
       postgres:
