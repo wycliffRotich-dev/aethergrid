@@ -250,7 +250,7 @@ The suite spans domain, application, infrastructure, and API layers (see badge a
 
 Separately, a Playwright end-to-end test drives the real dashboard against the real API and Postgres, not mocked, reproducing the ADR 0041/0042 worker-recovery incident through an actual browser (`frontend/e2e`). It is verified locally and in this PR's own CI run, not yet part of the standing CI workflow on every push, that wiring is a deliberate, separate follow-up.
 
-These commands assume the setup in [Running It](#running-it) is done first: the secret file, the virtualenv and `pip install -e ".[dev]"`. The Postgres-backed tests need a separate `neuromesh_test` database. The suite refuses to run against any database whose name does not end in `_test`, because some fixtures truncate tables. With the compose Postgres running:
+These commands assume the setup in [Running It](#running-it) is done first: the secret file, the virtualenv and the hashed installs. The Postgres-backed tests need a separate `neuromesh_test` database. The suite refuses to run against any database whose name does not end in `_test`, because some fixtures truncate tables. With the compose Postgres running:
 
 <!-- ci:readme step=3 name=tests -->
 ```bash
@@ -283,7 +283,9 @@ This starts Postgres, applies the database migrations in a one-shot `migrate` co
 <!-- ci:readme step=2 name=key -->
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
-pip install -e ".[dev]"
+pip install --require-hashes --only-binary=:all: -r requirements-build.lock
+pip install --require-hashes --only-binary=:all: -r requirements-dev.lock
+pip install --no-deps --no-build-isolation -e .
 export NEUROMESH_DATABASE_URL="postgresql://neuromesh@127.0.0.1:5433/neuromesh"
 export NEUROMESH_DATABASE_PASSWORD_FILE=./secrets/postgres_password.local
 export NEUROMESH_STORAGE_BACKEND=postgres
