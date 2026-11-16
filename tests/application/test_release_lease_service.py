@@ -453,3 +453,41 @@ def test_execute_raises_and_preserves_an_unrelated_lease_after_reclaim_and_reacq
     surviving = lease_repository.get_by_worker_id(worker.id, worker.tenant_id)
     assert surviving is not None
     assert surviving.id == replacement_lease.id
+
+
+def test_execute_raises_and_keeps_the_lease_when_the_delete_is_fenced() -> None:
+    """
+    ADR 0096: the release's delete is fenced by lease identity at
+    delete time, not only at read time. When delete_if_matches reports
+    that the caller's lease is no longer current (the job was re-leased
+    between the read and the delete), execute() raises LeaseNotFoundError
+    and nothing is deleted or recorded.
+    """
+    worker, job = _make_worker_with_running_job()
+
+    lease = Lease.create(
+        worker_id=worker.id,
+        job_id=job.id,
+        tenant_id=worker.tenant_id,
+    )
+
+    class _RefusingLeaseRepository(InMemoryLeaseRepository):
+        def delete_if_matches(self, job_id, tenant_id, expected_lease_id):
+            return False
+
+    lease_repository = _RefusingLeaseRepository()
+    lease_repository.save(lease)
+
+    service = ReleaseLeaseService(
+        lease_repository=lease_repository,
+        worker_repository=InMemoryWorkerRepository([worker]),
+    )
+
+    with pytest.raises(LeaseNotFoundError):
+        service.execute(worker.id, lease.id, worker.tenant_id)
+
+    # The fenced delete refused, so the lease is still present.
+    assert (
+        lease_repository.get_by_worker_id(worker.id, worker.tenant_id)
+        is not None
+    )
