@@ -1,4 +1,4 @@
-# ADR-0004: Worker Registration API
+# ADR 0004: Worker Registration API
 
 **Status:** Accepted
 
@@ -131,7 +131,7 @@ The Domain creates identity.
 
 ## Alternatives Considered
 
-### Alternative A — Client Generates WorkerId
+### Alternative A: Client Generates WorkerId
 
 Rejected.
 
@@ -144,7 +144,7 @@ Reasons:
 
 ---
 
-### Alternative B — Sequential Database IDs
+### Alternative B: Sequential Database IDs
 
 Rejected.
 
@@ -156,7 +156,7 @@ Reasons:
 
 ---
 
-### Alternative C — Server Generates UUID (Accepted)
+### Alternative C: Server Generates UUID (Accepted)
 
 Accepted.
 
@@ -209,7 +209,7 @@ AetherGrid:
 
 ## References
 
-- Eric Evans — *Domain-Driven Design: Tackling Complexity in the Heart of Software*
-- Vaughn Vernon — *Implementing Domain-Driven Design*
-- Robert C. Martin — *Clean Architecture*
-- Martin Fowler — *Patterns of Enterprise Application Architecture*
+- Eric Evans - *Domain-Driven Design: Tackling Complexity in the Heart of Software*
+- Vaughn Vernon - *Implementing Domain-Driven Design*
+- Robert C. Martin - *Clean Architecture*
+- Martin Fowler - *Patterns of Enterprise Application Architecture*
