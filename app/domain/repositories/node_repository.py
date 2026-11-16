@@ -6,6 +6,9 @@ from datetime import datetime
 
 from app.domain.entities.node import Node
 from app.domain.value_objects.node_id import NodeId
+from app.domain.value_objects.resource_requirements import (
+    ResourceRequirements,
+)
 from app.domain.value_objects.tenant_id import TenantId
 
 
@@ -103,5 +106,36 @@ class NodeRepository(ABC):
         would write them back over an allocation made in between.
         Returns False when no node with this id exists in this
         tenant, which is also how a node in another tenant reads.
+        """
+        ...
+
+    @abstractmethod
+    def allocate(
+        self,
+        node_id: NodeId,
+        tenant_id: TenantId,
+        requirements: ResourceRequirements,
+    ) -> bool:
+        """
+        Atomically subtract requirements from the node's available
+        capacity, but only when it still has enough of every
+        dimension. Returns True when the allocation was applied, and
+        False when the node does not exist, belongs to another
+        tenant, or no longer has enough capacity.
+        """
+        ...
+
+    @abstractmethod
+    def release(
+        self,
+        node_id: NodeId,
+        tenant_id: TenantId,
+        requirements: ResourceRequirements,
+    ) -> bool:
+        """
+        Atomically add requirements back to the node's available
+        capacity, capped at its total capacity. Returns True when
+        the release was applied, and False when the node does not
+        exist or belongs to another tenant.
         """
         ...

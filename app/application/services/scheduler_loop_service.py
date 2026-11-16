@@ -66,16 +66,21 @@ class SchedulerLoopService:
             if node is None:
                 continue
 
-            node.allocate(
+            allocated = self._node_repository.allocate(
+                node.id,
+                node.tenant_id,
                 job.resources,
             )
 
+            if not allocated:
+                # The node's available capacity changed after the
+                # snapshot above (another writer allocated), so this
+                # node can no longer host the job. Leave it QUEUED;
+                # the next tick re-selects it (ADR 0097).
+                continue
+
             job.assign_to(
                 node.id,
-            )
-
-            self._node_repository.save(
-                node,
             )
 
             self._job_repository.save(
@@ -106,11 +111,10 @@ class SchedulerLoopService:
                     # capacity back so the job is retried on the
                     # very next tick instead of being stranded.
                     job.unschedule()
-                    node.release(
+                    self._node_repository.release(
+                        node.id,
+                        node.tenant_id,
                         job.resources,
-                    )
-                    self._node_repository.save(
-                        node,
                     )
                     self._job_repository.save(
                         job,

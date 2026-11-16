@@ -11,6 +11,9 @@ from app.domain.repositories.node_repository import (
     NodeRepository,
 )
 from app.domain.value_objects.node_id import NodeId
+from app.domain.value_objects.resource_requirements import (
+    ResourceRequirements,
+)
 from app.domain.value_objects.tenant_id import TenantId
 
 
@@ -121,5 +124,39 @@ class InMemoryNodeRepository(NodeRepository):
             return False
 
         node.last_seen_at = seen_at
+
+        return True
+
+    def allocate(
+        self,
+        node_id: NodeId,
+        tenant_id: TenantId,
+        requirements: ResourceRequirements,
+    ) -> bool:
+        node = self._nodes.get(node_id)
+
+        if (
+            node is None
+            or node.tenant_id != tenant_id
+            or not node.can_host(requirements)
+        ):
+            return False
+
+        node.allocate(requirements)
+
+        return True
+
+    def release(
+        self,
+        node_id: NodeId,
+        tenant_id: TenantId,
+        requirements: ResourceRequirements,
+    ) -> bool:
+        node = self._nodes.get(node_id)
+
+        if node is None or node.tenant_id != tenant_id:
+            return False
+
+        node.release(requirements)
 
         return True

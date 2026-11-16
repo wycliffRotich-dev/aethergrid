@@ -350,3 +350,194 @@ class NodeRepositoryContract:
         assert stale.id in {
             node.id for node in repository.list_available_across_tenants()
         }
+
+    def test_allocate_reduces_available(self, repository):
+        node = self._make_node()
+        repository.save(node)
+
+        allocated = repository.allocate(
+            node.id,
+            DEFAULT_TENANT_ID,
+            ResourceRequirements(
+                cpu_cores=3,
+                memory_mib=4096,
+                vram_mib=1024,
+            ),
+        )
+
+        fetched = repository.get_by_id(node.id, DEFAULT_TENANT_ID)
+
+        assert allocated is True
+        assert fetched is not None
+        assert fetched.available.cpu_cores == 5
+        assert fetched.available.memory_mib == 12288
+        assert fetched.available.vram_mib == 7168
+
+    def test_allocate_returns_false_when_capacity_is_insufficient(
+        self,
+        repository,
+    ) -> None:
+        # The fence that prevents over-commit: a request that no
+        # longer fits the node's real, current available capacity is
+        # refused and changes nothing (ADR 0097).
+        node = self._make_node()
+        repository.save(node)
+
+        allocated = repository.allocate(
+            node.id,
+            DEFAULT_TENANT_ID,
+            ResourceRequirements(
+                cpu_cores=9,
+                memory_mib=1,
+                vram_mib=0,
+            ),
+        )
+
+        fetched = repository.get_by_id(node.id, DEFAULT_TENANT_ID)
+
+        assert allocated is False
+        assert fetched is not None
+        assert fetched.available.cpu_cores == 8
+        assert fetched.available.memory_mib == 16384
+
+    def test_allocate_in_another_tenant_returns_false_and_changes_nothing(
+        self,
+        repository,
+        second_tenant_id,
+    ) -> None:
+        node = self._make_node()
+        repository.save(node)
+
+        allocated = repository.allocate(
+            node.id,
+            second_tenant_id,
+            ResourceRequirements(
+                cpu_cores=1,
+                memory_mib=512,
+                vram_mib=0,
+            ),
+        )
+
+        fetched = repository.get_by_id(node.id, DEFAULT_TENANT_ID)
+
+        assert allocated is False
+        assert fetched is not None
+        assert fetched.available.cpu_cores == 8
+
+    def test_allocate_for_a_missing_node_returns_false(
+        self,
+        repository,
+    ) -> None:
+        allocated = repository.allocate(
+            NodeId.new(),
+            DEFAULT_TENANT_ID,
+            ResourceRequirements(
+                cpu_cores=1,
+                memory_mib=512,
+                vram_mib=0,
+            ),
+        )
+
+        assert allocated is False
+
+    def test_release_returns_capacity_up_to_the_ceiling(
+        self,
+        repository,
+    ) -> None:
+        node = self._make_node()
+        repository.save(node)
+        repository.allocate(
+            node.id,
+            DEFAULT_TENANT_ID,
+            ResourceRequirements(
+                cpu_cores=3,
+                memory_mib=4096,
+                vram_mib=1024,
+            ),
+        )
+
+        released = repository.release(
+            node.id,
+            DEFAULT_TENANT_ID,
+            ResourceRequirements(
+                cpu_cores=1,
+                memory_mib=1024,
+                vram_mib=512,
+            ),
+        )
+
+        fetched = repository.get_by_id(node.id, DEFAULT_TENANT_ID)
+
+        assert released is True
+        assert fetched is not None
+        assert fetched.available.cpu_cores == 6
+        assert fetched.available.memory_mib == 13312
+        assert fetched.available.vram_mib == 7680
+
+    def test_release_caps_available_at_capacity(
+        self,
+        repository,
+    ) -> None:
+        # Releasing more than was allocated, or releasing against a
+        # full node, must never report more capacity than the node
+        # has. The add is capped at the capacity ceiling (ADR 0097).
+        node = self._make_node()
+        repository.save(node)
+
+        released = repository.release(
+            node.id,
+            DEFAULT_TENANT_ID,
+            ResourceRequirements(
+                cpu_cores=3,
+                memory_mib=4096,
+                vram_mib=1024,
+            ),
+        )
+
+        fetched = repository.get_by_id(node.id, DEFAULT_TENANT_ID)
+
+        assert released is True
+        assert fetched is not None
+        assert fetched.available.cpu_cores == 8
+        assert fetched.available.memory_mib == 16384
+        assert fetched.available.vram_mib == 8192
+
+    def test_release_in_another_tenant_returns_false_and_changes_nothing(
+        self,
+        repository,
+        second_tenant_id,
+    ) -> None:
+        node = self._make_node()
+        repository.save(node)
+
+        released = repository.release(
+            node.id,
+            second_tenant_id,
+            ResourceRequirements(
+                cpu_cores=1,
+                memory_mib=512,
+                vram_mib=0,
+            ),
+        )
+
+        fetched = repository.get_by_id(node.id, DEFAULT_TENANT_ID)
+
+        assert released is False
+        assert fetched is not None
+        assert fetched.available.cpu_cores == 8
+
+    def test_release_for_a_missing_node_returns_false(
+        self,
+        repository,
+    ) -> None:
+        released = repository.release(
+            NodeId.new(),
+            DEFAULT_TENANT_ID,
+            ResourceRequirements(
+                cpu_cores=1,
+                memory_mib=512,
+                vram_mib=0,
+            ),
+        )
+
+        assert released is False
