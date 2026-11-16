@@ -1,4 +1,4 @@
-# 0048. Generalize GovAPIClient into ResilientAPIClient for Reuse Beyond One Integration
+# ADR 0048: Generalize GovAPIClient into ResilientAPIClient for Reuse Beyond One Integration
 
 ## Status
 

@@ -1,4 +1,4 @@
-# 0047. Resilient Client Architecture for Government API Integration
+# ADR 0047: Resilient Client Architecture for Government API Integration
 
 ## Status
 

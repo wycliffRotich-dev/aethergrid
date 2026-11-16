@@ -1,4 +1,4 @@
-# ADR-0007: Reconciliation Loop
+# ADR 0007: Reconciliation Loop
 
 ## Status
 

@@ -1,4 +1,4 @@
-# 0049. Resilient Client Replays Only Requests That Are Safe to Replay
+# ADR 0049: Resilient Client Replays Only Requests That Are Safe to Replay
 
 ## Status
 

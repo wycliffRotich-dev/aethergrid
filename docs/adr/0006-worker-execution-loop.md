@@ -1,4 +1,4 @@
-# ADR-0006: Introduce Worker Execution Loop
+# ADR 0006: Introduce Worker Execution Loop
 
 ## Status
 
