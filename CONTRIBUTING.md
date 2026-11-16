@@ -22,7 +22,7 @@ request from that branch against `main`.
 
 ## Local setup
 
-Requirements: Python 3.11 or 3.12, Docker with Compose, `openssl`.
+Requirements: Python 3.11 or 3.12, Docker with Compose, `openssl`. Frontend work additionally needs Node 22.x, pinned in `frontend/.nvmrc`.
 
 These steps mirror the README, which CI executes on a clean runner. If they
 drift from the README, the README is right.

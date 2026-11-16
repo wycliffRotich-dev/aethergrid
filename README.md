@@ -294,7 +294,7 @@ python scripts/issue_api_key.py "local-dev" --scope jobs:execute --scope keys:ma
 
 The image defaults to SQLite and stores its database in `/data`, owned by uid 10001. A named volume works as is. If you bind-mount a host directory at `/data` instead, give it to that user first (`sudo chown 10001:10001 <dir>`). A root-owned directory fails at startup with `sqlite3.OperationalError: unable to open database file`.
 
-Run the frontend separately. It needs Node 22, the version CI uses (see `frontend/.nvmrc`):
+Run the frontend separately. It needs Node 22.x, the version CI uses, pinned in `frontend/.nvmrc`. Match the pin with `nvm use` (or your version manager): several frontend dependencies declare an `engines` range of `^22.22.2 || ^24.15.0 || >=26.0.0`, so a Node outside it (for example 23 or 25) installs with an `EBADENGINE` warning and is not what CI runs:
 
 <!-- ci:readme skip name=frontend reason=long-running-dev-server -->
 ```bash
