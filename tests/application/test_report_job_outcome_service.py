@@ -116,7 +116,9 @@ def _build_service(
     lease_repository.save(lease)
 
     worker_repository = InMemoryWorkerRepository([worker])
-    job_repository = InMemoryJobRepository([job])
+    job_repository = InMemoryJobRepository(
+        [job], lease_repository=lease_repository
+    )
     node_repository = InMemoryNodeRepository([node])
 
     release_lease_service = ReleaseLeaseService(
@@ -316,9 +318,11 @@ def test_complete_raises_worker_job_mismatch_when_worker_holds_no_job() -> None:
     worker.ready()
 
     worker_repository = InMemoryWorkerRepository([worker])
-    job_repository = InMemoryJobRepository()
-    node_repository = InMemoryNodeRepository([node])
     lease_repository = InMemoryLeaseRepository()
+    job_repository = InMemoryJobRepository(
+        lease_repository=lease_repository
+    )
+    node_repository = InMemoryNodeRepository([node])
 
     service = ReportJobOutcomeService(
         worker_repository=worker_repository,
@@ -724,7 +728,9 @@ def test_complete_persists_the_released_node_resources_in_sqlite(
     lease_repository.save(lease)
 
     worker_repository = InMemoryWorkerRepository([worker])
-    job_repository = InMemoryJobRepository([job])
+    job_repository = InMemoryJobRepository(
+        [job], lease_repository=lease_repository
+    )
 
     exec_connection = create_connection(db_path)
     service = ReportJobOutcomeService(
@@ -757,3 +763,52 @@ def test_complete_persists_the_released_node_resources_in_sqlite(
 
     assert reloaded is not None
     assert reloaded.available == reloaded.capacity
+
+
+def test_complete_saves_the_job_before_it_releases_the_node(
+    monkeypatch,
+) -> None:
+    """
+    ADR 0092 and ADR 0096: the node is credited only after the job's
+    terminal status is saved. A crash between the two writes then
+    under-reports free capacity. In the other order it left a RUNNING
+    job with no lease on a node that was already credited, and
+    recovery released the same resources a second time.
+    """
+    worker, job, node = _make_running_worker_and_job()
+    (
+        service,
+        _,
+        job_repository,
+        node_repository,
+        lease_repository,
+        lease,
+    ) = _build_service(worker, job, node)
+
+    order: list[str] = []
+    save_job = job_repository.save_if_leaseless
+    save_node = node_repository.save
+
+    def recording_job_save(saved, expected):  # type: ignore[no-untyped-def]
+        order.append("job saved")
+        return save_job(saved, expected)
+
+    def recording_node_save(saved):  # type: ignore[no-untyped-def]
+        order.append("node released")
+        save_node(saved)
+
+    monkeypatch.setattr(
+        job_repository, "save_if_leaseless", recording_job_save
+    )
+    monkeypatch.setattr(node_repository, "save", recording_node_save)
+
+    service.complete(
+        worker.id,
+        job.id,
+        worker.tenant_id,
+        lease.id,
+        exit_code=0,
+    )
+
+    assert order == ["job saved", "node released"]
+    assert lease_repository.get_by_job_id(job.id, job.tenant_id) is None

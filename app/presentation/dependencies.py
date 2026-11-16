@@ -10,6 +10,9 @@ from app.application.reconciliation.reconciliation_loop import (
 from app.application.reconciliation.recover_expired_lease_service import (
     RecoverExpiredLeaseService,
 )
+from app.application.reconciliation.recover_leaseless_job_service import (
+    RecoverLeaselessJobService,
+)
 from app.application.reconciliation.recover_offline_node_service import (
     RecoverOfflineNodeService,
 )
@@ -333,9 +336,14 @@ def _build_repositories() -> tuple[
             db_path,
         )
 
+        # The job repository sees the lease repository so that its
+        # fenced write can check for a lease (ADR 0096).
+        sqlite_leases = InMemoryLeaseRepository()
+
         return (
             SqliteJobRepository(
                 connection,
+                lease_repository=sqlite_leases,
             ),
             SqliteNodeRepository(
                 connection,
@@ -344,17 +352,19 @@ def _build_repositories() -> tuple[
             SqliteEventRepository(
                 connection,
             ),
-            InMemoryLeaseRepository(),
+            sqlite_leases,
             InMemoryApiKeyRepository(),
             None,
         )
 
+    memory_leases = InMemoryLeaseRepository()
+
     return (
-        InMemoryJobRepository(),
+        InMemoryJobRepository(lease_repository=memory_leases),
         InMemoryNodeRepository(),
         InMemoryWorkerRepository(),
         InMemoryEventRepository(),
-        InMemoryLeaseRepository(),
+        memory_leases,
         InMemoryApiKeyRepository(),
         None,
     )
@@ -495,10 +505,18 @@ _recover_offline_node_service = RecoverOfflineNodeService(
     lease_repository=_lease_repository,
     record_job_events_service=_record_job_events_service,
 )
+_recover_leaseless_job_service = RecoverLeaselessJobService(
+    job_repository=_job_repository,
+    lease_repository=_lease_repository,
+    worker_repository=_worker_repository,
+    node_repository=_node_repository,
+    record_job_events_service=_record_job_events_service,
+)
 _reconciliation_loop = ReconciliationLoop(
     mark_dead_workers_service=_mark_dead_workers_service,
     recover_expired_lease_service=_recover_expired_lease_service,
     recover_offline_node_service=_recover_offline_node_service,
+    recover_leaseless_job_service=_recover_leaseless_job_service,
 )
 
 

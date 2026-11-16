@@ -37,6 +37,7 @@ from app.domain.entities.api_key import ApiKey
 from app.domain.entities.lease import Lease
 from app.domain.entities.worker import Worker
 from app.domain.enums.worker_management import WorkerManagement
+from app.domain.exceptions.job_reclaimed_error import JobReclaimedError
 from app.domain.exceptions.lease_not_found_error import (
     LeaseNotFoundError,
 )
@@ -392,7 +393,9 @@ def complete_job(
 
     409 covers both WorkerJobMismatchError (worker does not
     hold this job) and NoActiveLeaseError/LeaseNotFoundError
-    (reconciliation already reclaimed the lease), the same
+    (reconciliation already reclaimed the lease), and
+    JobReclaimedError (reconciliation reclaimed the job after
+    the lease was released, ADR 0096), the same
     way renew_lease folds its own lease failures into 409:
     both mean the caller's view of who owns this job is
     stale, not that the request itself was malformed.
@@ -435,7 +438,11 @@ def complete_job(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
-    except (NoActiveLeaseError, LeaseNotFoundError) as exc:
+    except (
+        NoActiveLeaseError,
+        LeaseNotFoundError,
+        JobReclaimedError,
+    ) as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
@@ -504,7 +511,11 @@ def fail_job(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
-    except (NoActiveLeaseError, LeaseNotFoundError) as exc:
+    except (
+        NoActiveLeaseError,
+        LeaseNotFoundError,
+        JobReclaimedError,
+    ) as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
@@ -580,7 +591,11 @@ def confirm_job_cancellation(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
-    except (NoActiveLeaseError, LeaseNotFoundError) as exc:
+    except (
+        NoActiveLeaseError,
+        LeaseNotFoundError,
+        JobReclaimedError,
+    ) as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),

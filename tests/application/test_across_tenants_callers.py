@@ -31,6 +31,11 @@ EXPECTED_CALLS = {
     "application/reconciliation/recover_expired_lease_service.py": {
         "list_across_tenants": 1,
     },
+    # Starts from the jobs, not from a lease, so it reads every lease,
+    # every job and every worker of the fleet once per pass (ADR 0096).
+    "application/reconciliation/recover_leaseless_job_service.py": {
+        "list_across_tenants": 3,
+    },
     # Fleet-wide sweeps with no caller tenant: the cluster tick and
     # the dead-worker sweep visit every worker (ADR 0075 decision 10).
     "application/services/cluster_tick_service.py": {

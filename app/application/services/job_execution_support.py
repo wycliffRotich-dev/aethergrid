@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import copy
+
 from app.domain.entities.job import Job
 from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
+from app.domain.enums.job_status import JobStatus
 from app.domain.exceptions.invalid_job_transition import (
     InvalidJobTransition,
 )
@@ -153,3 +156,97 @@ def reclaim_job(
         )
 
     return True
+
+
+FINISHING_STATUSES: frozenset[JobStatus] = frozenset(
+    {JobStatus.RUNNING, JobStatus.CANCELLING}
+)
+"""
+The statuses a job may still have in storage when its outcome is
+saved (ADR 0096 decision 10). RUNNING, or CANCELLING when a
+cancellation request was saved while it ran, because ADR 0029 lets a
+job that finishes before the signal reaches it end COMPLETED or
+FAILED. A reclaim moves a job out of both, to QUEUED, FAILED or
+CANCELLED, so an outcome saved against this set cannot land on a job
+that was reclaimed while the outcome was on its way.
+"""
+
+
+def take_running_job(
+    worker: Worker,
+) -> Job:
+    """
+    Give the worker its own copy of its running job, and return it.
+
+    Call it before worker.complete(), worker.fail() or
+    worker.cancel_job(), which change the job in place. The in-memory
+    job repository hands out the object it stores, so without the copy
+    the stored job would show the outcome before it was written, and
+    the fenced write that compares against the stored status would
+    refuse it. On Postgres the job was read fresh and the copy changes
+    nothing.
+    """
+    if worker.running_job is None:
+        raise ValueError(
+            "No running job."
+        )
+
+    job = copy.deepcopy(worker.running_job)
+    worker.running_job = job
+    return job
+
+
+def reclaim_leaseless_job(
+    job: Job,
+    node: Node | None,
+    *,
+    node_repository: NodeRepository,
+    job_repository: JobRepository,
+) -> Job | None:
+    """
+    Reclaim a job that no lease holds, as one fenced write (ADR 0096).
+
+    The caller's job is never changed. It is copied, the copy is
+    reclaimed, and the copy is returned only if its write was
+    accepted, so a refused write leaves no object behind that looks
+    reclaimed and was never saved. The write is fenced on the status
+    the job had when it was handed in, taken from the job itself, so
+    a caller cannot pass a status that disagrees with it.
+
+    There is no lease to delete, so none is. The job is saved through
+    JobRepository.save_if_leaseless, which applies only while the
+    stored job still has that status and no lease row points at it.
+    The node is credited only after the write was accepted, and is
+    saved after the job (ADR 0092).
+
+    reclaim_job stays the helper for the paths that start from a
+    lease. Its result is a bool that its callers rely on, and its job
+    is changed in place.
+
+    Returns the reclaimed copy, or None when the job was not in a
+    status Job.reclaim() accepts or the write was refused. None means
+    nothing was written.
+    """
+    candidate = copy.deepcopy(job)
+    read_status = candidate.status
+
+    try:
+        candidate.reclaim()
+    except InvalidJobTransition:
+        return None
+
+    if not job_repository.save_if_leaseless(
+        candidate,
+        frozenset({read_status}),
+    ):
+        return None
+
+    if node is not None:
+        node.release(
+            candidate.resources,
+        )
+        node_repository.save(
+            node,
+        )
+
+    return candidate

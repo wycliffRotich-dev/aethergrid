@@ -3,6 +3,10 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
+from app.application.services.job_execution_support import (
+    FINISHING_STATUSES,
+    take_running_job,
+)
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
@@ -11,6 +15,7 @@ from app.application.services.release_lease_service import (
 )
 from app.domain.entities.job import Job
 from app.domain.entities.worker import Worker
+from app.domain.exceptions.job_reclaimed_error import JobReclaimedError
 from app.domain.exceptions.worker_job_mismatch_error import (
     WorkerJobMismatchError,
 )
@@ -48,6 +53,12 @@ class ReportJobOutcomeService:
     floor" principle WorkerExecutionLoop already applies to a
     lost lease during renewal. Nothing here is saved unless
     lease release succeeds first.
+
+    The job is saved with a fenced write (ADR 0096 decision 10).
+    Once the lease is released the job has none, and reconciliation
+    reclaims a job that stays that way long enough. If that happens
+    while this report is stalled, the write is refused, the node is
+    not credited a second time, and JobReclaimedError is raised.
     """
 
     def __init__(
@@ -87,13 +98,19 @@ class ReportJobOutcomeService:
         # The job is read here, before the caller changes the
         # worker's state, because complete(), fail() and
         # cancel_job() all clear running_job.
-        job = worker.running_job
-
-        if job is None or job.id != job_id:
+        if (
+            worker.running_job is None
+            or worker.running_job.id != job_id
+        ):
             raise WorkerJobMismatchError(
                 f"Worker '{worker_id}' does not currently "
                 f"hold job '{job_id}'."
             )
+
+        # A copy, so the transition the caller makes next changes this
+        # report's job and not the one a repository stores. The fenced
+        # write below compares against the stored status.
+        job = take_running_job(worker)
 
         return worker, job
 
@@ -127,6 +144,30 @@ class ReportJobOutcomeService:
             worker,
         )
 
+        # Fenced (ADR 0096 decision 10). From the lease release until
+        # this write, the job is RUNNING or CANCELLING with no lease,
+        # the state reconciliation reclaims. If this report stalled
+        # long enough for that, the stored job is now QUEUED, FAILED or
+        # CANCELLED, the write is refused, and the node, which the
+        # reclaim already credited, is left alone.
+        if not self._job_repository.save_if_leaseless(
+            job,
+            FINISHING_STATUSES,
+        ):
+            logger.warning(
+                "The outcome of job %s was not saved, because the job "
+                "was reclaimed after its lease was released.",
+                job.id,
+            )
+            raise JobReclaimedError(job.id)
+
+        # The node is released after the job is saved (ADR 0092, ADR
+        # 0096). A crash between the two writes leaves capacity
+        # allocated, which under-reports free capacity. The other
+        # order returned the capacity first, and a crash before the
+        # job save left a RUNNING job with no lease on a node that
+        # was already credited, so recovering it released the same
+        # resources a second time.
         if job.assigned_node_id is not None:
             node = self._node_repository.get_by_id(
                 job.assigned_node_id,
@@ -152,10 +193,6 @@ class ReportJobOutcomeService:
                     job.assigned_node_id,
                     tenant_id,
                 )
-
-        self._job_repository.save(
-            job,
-        )
 
         if self._record_job_events_service is not None:
             self._record_job_events_service.record_for_job(
