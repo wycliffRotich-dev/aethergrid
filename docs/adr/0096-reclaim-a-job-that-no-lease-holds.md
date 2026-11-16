@@ -68,10 +68,10 @@ with no lease row.
    its foreign key. An insert already in flight when the lock is requested
    finishes first, and the lease check sees it. An insert that starts
    while the lock is held waits, and succeeds after the commit, because
-   the insert does not check the job's status (see Not Claimed). The
-   in-memory and SQLite backends keep leases in this process and are
-   atomic only against writers in this process. A refused write changes
-   nothing and credits no node.
+   the insert does not check the job's status (see Not Claimed). Only
+   Postgres makes the check and the write one step. The in-memory and
+   SQLite backends check and then write (see Not Claimed). A refused
+   write changes nothing and credits no node.
 
 5. **The reclaim has its own helper, reclaim_leaseless_job.** There is no
    lease to delete, so none is deleted. The helper copies the job it is
@@ -177,6 +177,20 @@ with no lease row.
   that is now QUEUED or terminal. The age guard makes this improbable, not
   impossible. The fix, a lease insert that locks the job row and checks
   its status in the same transaction, is tracked in #507.
+- That the fence is atomic on the in-memory and SQLite backends. There,
+  save_if_leaseless reads the job, looks up the lease and saves, as three
+  steps with no lock and no transaction. Both backends keep leases in
+  memory, and the SQLite one shares one connection, opened with
+  check_same_thread=False, between the request thread pool and the
+  cluster tick thread, and serializes none of its writes. That was true
+  of every write on these backends before this change. A thread that
+  writes the job or its lease between the check and the save is not
+  seen. The age guard is what protects these backends. On SQLite a
+  restart also loses every worker and lease while the jobs stay, so every
+  job that was active is reclaimed once, T after the restart, and uses a
+  retry. Before this change those jobs stayed RUNNING for good, because
+  nothing that could run them survived the restart. Serializing the writes on these backends is tracked in
+  #522.
 - That every job writer is fenced. CancelJobService still saves
   unconditionally. A cancellation that reads a RUNNING job before an
   outcome is saved, and writes CANCELLING after it, puts the finished job

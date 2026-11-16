@@ -44,8 +44,13 @@ class JobRepository(ABC):
         finished first, and the check sees it. A lease insert that
         starts while the lock is held waits for it, and succeeds after
         the commit, because the insert does not check the job's status.
-        The in-memory and SQLite backends keep leases in this process
-        and are atomic only against writers in this process.
+        Only Postgres makes the check and the write one step. The
+        in-memory and SQLite backends check and then write, with no
+        lock and no transaction around the two, so another thread
+        that writes the job or a lease in between is not seen. Both
+        backends are shared by the request threads and the cluster
+        tick thread, and neither serializes any write, this one or
+        the plain ones (ADR 0096 Not Claimed).
         """
         ...
 

@@ -1,9 +1,10 @@
 """JobRepository.save_if_leaseless on the in-memory and SQLite backends
 (ADR 0096).
 
-Both keep leases in this process, so the fence is atomic only against
-writers in this process. Postgres has its own tests, with real
-transactions.
+Both check and then write, with no lock, so these tests run one writer
+at a time and say nothing about concurrent threads. The atomic fence is
+Postgres only (ADR 0096 Not Claimed). Postgres has its own tests, with
+real transactions.
 """
 
 from __future__ import annotations

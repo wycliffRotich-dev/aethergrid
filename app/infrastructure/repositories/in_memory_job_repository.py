@@ -48,6 +48,11 @@ class InMemoryJobRepository(JobRepository):
         job: Job,
         expected_statuses: frozenset[JobStatus],
     ) -> bool:
+        """
+        Check, then write, with no lock, so it is not atomic against
+        another thread. The guarantee is Postgres only (ADR 0096 Not
+        Claimed).
+        """
         if self._lease_repository is None:
             raise RuntimeError(
                 "save_if_leaseless needs the lease repository this "

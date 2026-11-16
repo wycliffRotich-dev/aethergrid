@@ -205,6 +205,13 @@ class SqliteJobRepository(JobRepository):
         job: Job,
         expected_statuses: frozenset[JobStatus],
     ) -> bool:
+        """
+        Check, then write. Not atomic: the read, the lease lookup and
+        the save are separate steps on a connection that the request
+        threads and the cluster tick thread share without a lock, as
+        every write on this backend does. The guarantee is Postgres
+        only (ADR 0096 Not Claimed).
+        """
         if self._lease_repository is None:
             raise RuntimeError(
                 "save_if_leaseless needs the lease repository this "
