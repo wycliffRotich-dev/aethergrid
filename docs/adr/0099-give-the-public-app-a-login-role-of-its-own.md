@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed.
+Accepted.
 
 Related: ADR 0094, ADR 0097 and ADR 0098.
 
@@ -101,6 +101,12 @@ with its output sent nowhere.
 2026-11-14. Each refusal in the script was disabled by hand and a test failed
 every time except for the one about members, which had no test. Two tests
 were added, and the refusal was disabled again.
+
+2026-11-16. Status changed to Accepted. The 25 tests for the script
+passed in CI on Python 3.11 and 3.12 on the merge of PR 514. A manual
+run against a test database showed the role reading a view and refused
+on a base table. Using the role from the app is not done, and is listed
+above.
 
 ## How to Verify
 

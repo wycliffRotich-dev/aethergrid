@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed.
+Accepted.
 
 Related: ADR 0071, ADR 0094 and ADR 0097.
 
@@ -91,6 +91,13 @@ form event payloads, node labels and API key hashes.
   of that database.
 - **Views with security_invoker.** Rejected. The role would then need
   SELECT on the base tables, which is what this change avoids.
+
+2026-11-16. Status changed to Accepted. All 45 tests in
+tests/infrastructure/test_public_read_views_migration.py pass, and each
+decision maps to a named test. Adding tenant_id to public_jobs in a copy
+of migration 0007 failed the exact columns test for that view and the
+private column test. The migration was restored and its hash compared.
+Decisions 4 and 5 were not broken the same way.
 
 ## How to Verify
 

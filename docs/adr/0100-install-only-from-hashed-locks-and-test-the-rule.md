@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed.
+Accepted.
 
 Related: ADR 0058, ADR 0059, ADR 0060, ADR 0076 and ADR 0082.
 
@@ -75,8 +75,8 @@ GIST_SECRET.
 
 - That the image is free of known vulnerabilities. The OS packages of
   the base image are not scanned.
-- That CI works with the locks. The workflow changes had not run in
-  GitHub Actions when this was written.
+- That the install rule sees every installer. The scanner matches the
+  text pip install, so pip3 install or uv sync would not be seen.
 
 ## Alternatives Considered
 
@@ -132,6 +132,12 @@ Removing the hash check from the dev install in ci.yml, and the
 --no-deps flag from the Dockerfile, failed one install test each, and
 putting the old install back into the README failed the test for step
 2. The files were restored and their hashes compared.
+
+2026-11-16. Status changed to Accepted. The merged change passed CI
+run 43711947511 on Python 3.11 and 3.12 with the hashed installs, and
+the container hardening and README clean clone workflows passed on the
+same commit. The install scanner gap is now listed as not claimed,
+because the README check showed it.
 
 ## How to Verify
 
