@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import builtins
+import threading
 from datetime import datetime
 
 from app.domain.entities.node import Node
@@ -27,6 +28,10 @@ class InMemoryNodeRepository(NodeRepository):
         nodes: list[Node] | None = None,
     ) -> None:
         self._nodes: dict[NodeId, Node] = {}
+        # allocate() and release() are check-then-mutate. A lock keeps
+        # them atomic under the concurrent contract test, the same way
+        # the SQL backends are atomic in one UPDATE (ADR 0105).
+        self._lock = threading.Lock()
 
         if nodes is not None:
             for node in nodes:
@@ -133,18 +138,19 @@ class InMemoryNodeRepository(NodeRepository):
         tenant_id: TenantId,
         requirements: ResourceRequirements,
     ) -> bool:
-        node = self._nodes.get(node_id)
+        with self._lock:
+            node = self._nodes.get(node_id)
 
-        if (
-            node is None
-            or node.tenant_id != tenant_id
-            or not node.can_host(requirements)
-        ):
-            return False
+            if (
+                node is None
+                or node.tenant_id != tenant_id
+                or not node.can_host(requirements)
+            ):
+                return False
 
-        node.allocate(requirements)
+            node.allocate(requirements)
 
-        return True
+            return True
 
     def release(
         self,
@@ -152,11 +158,12 @@ class InMemoryNodeRepository(NodeRepository):
         tenant_id: TenantId,
         requirements: ResourceRequirements,
     ) -> bool:
-        node = self._nodes.get(node_id)
+        with self._lock:
+            node = self._nodes.get(node_id)
 
-        if node is None or node.tenant_id != tenant_id:
-            return False
+            if node is None or node.tenant_id != tenant_id:
+                return False
 
-        node.release(requirements)
+            node.release(requirements)
 
-        return True
+            return True

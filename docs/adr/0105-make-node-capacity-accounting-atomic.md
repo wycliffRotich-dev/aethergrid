@@ -1,4 +1,4 @@
-# ADR 0097: Make Node Capacity Accounting Atomic
+# ADR 0105: Make Node Capacity Accounting Atomic
 
 ## Status
 
@@ -75,18 +75,22 @@ a delta. It was deferred for its own ADR, which this is.
 ## How to Verify
 
 ```bash
-pytest -q tests/infrastructure/repositories -k "allocate or release"
+pytest -q tests/infrastructure/repositories/test_in_memory_node_repository_contract.py tests/infrastructure/repositories/test_postgres_node_repository_contract.py tests/application/test_scheduler_loop_service.py
 ```
 
-All of them pass.
+All of them pass. The concurrent test runs on Postgres and in-memory and
+skips on SQLite, whose one shared connection corrupts under concurrent
+writes.
 
 ## Progress
 
 2026-11-16. The contract tests for allocate and release were written to
-specify the two deltas. The scheduler's allocate was then changed to use
-the repository method, and outcome reporting, the worker loop and
-reclaim_job now release through it. The in-memory and SQLite node
-contract tests pass (54 tests), the Postgres node contract and heartbeat
-tests pass (28 tests), the scheduler, outcome, worker-loop and reclaim
-suites pass (67 tests), and the full suite passes against Postgres
-(1411 passed, 2 skipped). ruff and mypy are clean.
+specify the two deltas, then the review asked for a concurrent proof, a
+scheduler refused-allocate test, a snapshot test and a rule-parity test.
+The concurrent test starts eight threads against a node with room for
+four and asserts exactly four succeed on Postgres and in-memory; the
+in-memory repository now holds a lock so its check-then-allocate is
+atomic too. The scheduler refreshes the node it allocated into the
+in-tick snapshot, and the rule-parity test checks allocate and release
+against the domain methods. The full suite passes against Postgres (see
+the run note). ruff and mypy are clean.

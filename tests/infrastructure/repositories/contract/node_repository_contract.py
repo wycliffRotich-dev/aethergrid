@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import threading
 from datetime import timedelta
 
 import pytest
@@ -30,6 +31,10 @@ class NodeRepositoryContract:
     PostgresNodeRepository, proving the abstraction holds
     across persistence backends.
     """
+
+    # A backend whose single connection is not safe for concurrent
+    # writes overrides this to False, and the concurrent test skips.
+    concurrent_safe = True
 
     @pytest.fixture
     def repository(self):
@@ -379,7 +384,7 @@ class NodeRepositoryContract:
     ) -> None:
         # The fence that prevents over-commit: a request that no
         # longer fits the node's real, current available capacity is
-        # refused and changes nothing (ADR 0097).
+        # refused and changes nothing (ADR 0105).
         node = self._make_node()
         repository.save(node)
 
@@ -480,7 +485,7 @@ class NodeRepositoryContract:
     ) -> None:
         # Releasing more than was allocated, or releasing against a
         # full node, must never report more capacity than the node
-        # has. The add is capped at the capacity ceiling (ADR 0097).
+        # has. The add is capped at the capacity ceiling (ADR 0105).
         node = self._make_node()
         repository.save(node)
 
@@ -541,3 +546,120 @@ class NodeRepositoryContract:
         )
 
         assert released is False
+
+    def test_concurrent_allocate_never_over_commits(
+        self,
+        repository,
+    ) -> None:
+        # ADR 0105: allocate is one atomic operation. Threads racing to
+        # allocate against a node with room for exactly K must produce
+        # exactly K successful allocations, never more.
+        if not self.concurrent_safe:
+            pytest.skip("backend does not support concurrent writes")
+
+        node = self._make_node(
+            capacity=ResourceRequirements(
+                cpu_cores=4,
+                memory_mib=4096,
+                vram_mib=0,
+            ),
+        )
+        repository.save(node)
+
+        threads = 8
+        request = ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=1024,
+            vram_mib=0,
+        )
+
+        barrier = threading.Barrier(threads)
+        results: list[bool] = [False] * threads
+
+        def allocate_one(index: int) -> None:
+            barrier.wait()
+            results[index] = repository.allocate(
+                node.id,
+                DEFAULT_TENANT_ID,
+                request,
+            )
+
+        workers = [
+            threading.Thread(target=allocate_one, args=(index,))
+            for index in range(threads)
+        ]
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join()
+
+        assert sum(results) == 4
+        fetched = repository.get_by_id(node.id, DEFAULT_TENANT_ID)
+        assert fetched is not None
+        assert fetched.available.cpu_cores == 0
+        assert fetched.available.memory_mib == 0
+
+    def test_allocate_and_release_agree_with_the_domain_rule(
+        self,
+        repository,
+    ) -> None:
+        # The capacity rule lives in Node (can_host, allocate, release)
+        # and again as SQL in the repositories. Both must agree on exact
+        # fit, one-short and release-over-capacity (ADR 0105).
+        exact = ResourceRequirements(
+            cpu_cores=8,
+            memory_mib=16384,
+            vram_mib=8192,
+        )
+        short_cpu = ResourceRequirements(
+            cpu_cores=9,
+            memory_mib=1,
+            vram_mib=0,
+        )
+        short_mem = ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=16385,
+            vram_mib=0,
+        )
+
+        for request, expected in (
+            (exact, True),
+            (short_cpu, False),
+            (short_mem, False),
+        ):
+            node = self._make_node()
+            repository.save(node)
+
+            allocated = repository.allocate(
+                node.id,
+                DEFAULT_TENANT_ID,
+                request,
+            )
+
+            domain = self._make_node()
+            if domain.can_host(request):
+                domain.allocate(request)
+
+            fetched = repository.get_by_id(node.id, DEFAULT_TENANT_ID)
+
+            assert allocated is expected
+            assert fetched is not None
+            assert fetched.available == domain.available
+
+        # Release over capacity caps at capacity in both places.
+        node = self._make_node()
+        repository.save(node)
+        over = ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=1024,
+            vram_mib=512,
+        )
+
+        released = repository.release(node.id, DEFAULT_TENANT_ID, over)
+        domain = self._make_node()
+        domain.release(over)
+        fetched = repository.get_by_id(node.id, DEFAULT_TENANT_ID)
+
+        assert released is True
+        assert fetched is not None
+        assert fetched.available == domain.available

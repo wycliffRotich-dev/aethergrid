@@ -76,8 +76,25 @@ class SchedulerLoopService:
                 # The node's available capacity changed after the
                 # snapshot above (another writer allocated), so this
                 # node can no longer host the job. Leave it QUEUED;
-                # the next tick re-selects it (ADR 0097).
+                # the next tick re-selects it (ADR 0105).
                 continue
+
+            # Refresh this node in the snapshot so later jobs in this
+            # tick see its remaining capacity. The snapshot was read
+            # before this allocation, so on backends that reconstruct
+            # nodes on read (Postgres, SQLite) it is stale here, and a
+            # later job would otherwise be matched to a node this one
+            # just filled (ADR 0105).
+            refreshed = self._node_repository.get_by_id(
+                node.id,
+                node.tenant_id,
+            )
+
+            if refreshed is not None:
+                for index, candidate in enumerate(nodes):
+                    if candidate.id == node.id:
+                        nodes[index] = refreshed
+                        break
 
             job.assign_to(
                 node.id,
