@@ -1,6 +1,15 @@
 from fastapi.testclient import TestClient
 
+from app.application.services.cancel_job_service import (
+    CancelJobService,
+)
+from app.domain.entities.job import Job
+from app.infrastructure.repositories.in_memory_job_repository import (
+    InMemoryJobRepository,
+)
 from app.presentation.api import app
+from app.presentation.dependencies import get_cancel_job_service
+from tests.support.jobs import make_job
 
 client = TestClient(app)
 
@@ -139,3 +148,41 @@ def test_cancel_already_completed_job_returns_409() -> None:
         )
 
         assert response.status_code == 409
+
+
+def test_cancel_job_returns_409_when_status_conflict_retries_exhausted() -> (
+    None
+):
+    """
+    ADR 0106: if concurrent writers prevent CancelJobService from
+    settling within its retry cap, JobStatusConflictError maps to
+    HTTP 409 Conflict rather than surfacing as HTTP 500.
+    """
+
+    class _AlwaysContendedRepository(InMemoryJobRepository):
+        def save_if_unchanged(
+            self,
+            job: Job,
+            expected: Job,
+        ) -> bool:
+            return False
+
+    job = make_job()
+    job.queue()
+    contended_service = CancelJobService(
+        _AlwaysContendedRepository([job]),
+    )
+    app.dependency_overrides[get_cancel_job_service] = (
+        lambda: contended_service
+    )
+    try:
+        response = client.post(
+            f"/jobs/{job.id}/cancel",
+        )
+    finally:
+        app.dependency_overrides.pop(
+            get_cancel_job_service,
+            None,
+        )
+
+    assert response.status_code == 409

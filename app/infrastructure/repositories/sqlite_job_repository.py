@@ -193,6 +193,137 @@ class SqliteJobRepository(JobRepository):
 
         self._connection.commit()
 
+    def save_if_unchanged(
+        self,
+        job: Job,
+        expected: Job,
+    ) -> bool:
+        if job.id != expected.id or job.tenant_id != expected.tenant_id:
+            raise ValueError(
+                "expected snapshot must share id and tenant_id with job"
+            )
+
+        command = (
+            json.dumps(job.command)
+            if job.command is not None
+            else None
+        )
+
+        cursor = self._connection.execute(
+            """
+            UPDATE jobs SET
+                cpu_cores = ?,
+                memory_mib = ?,
+                vram_mib = ?,
+                priority = ?,
+                constraints = ?,
+                max_retries = ?,
+                retry_count = ?,
+                status = ?,
+                assigned_node_id = ?,
+                submitted_at = ?,
+                started_at = ?,
+                completed_at = ?,
+                command = ?,
+                exit_code = ?,
+                cancellation_requested_at = ?,
+                execution_timeout_seconds = ?
+            WHERE id = ?
+              AND tenant_id = ?
+              AND status = ?
+              AND retry_count = ?
+              AND assigned_node_id IS ?
+              AND started_at IS ?
+              AND completed_at IS ?
+              AND exit_code IS ?
+              AND cancellation_requested_at IS ?
+            """,
+            (
+                job.resources.cpu_cores,
+                job.resources.memory_mib,
+                job.resources.vram_mib,
+                job.priority,
+                json.dumps(job.constraints),
+                job.max_retries,
+                job.retry_count,
+                job.status.value,
+                (
+                    str(job.assigned_node_id)
+                    if job.assigned_node_id is not None
+                    else None
+                ),
+                job.submitted_at.isoformat(),
+                (
+                    job.started_at.isoformat()
+                    if job.started_at is not None
+                    else None
+                ),
+                (
+                    job.completed_at.isoformat()
+                    if job.completed_at is not None
+                    else None
+                ),
+                command,
+                job.exit_code,
+                (
+                    job.cancellation_requested_at.isoformat()
+                    if job.cancellation_requested_at is not None
+                    else None
+                ),
+                job.execution_timeout.total_seconds(),
+                str(job.id),
+                str(job.tenant_id),
+                expected.status.value,
+                expected.retry_count,
+                (
+                    str(expected.assigned_node_id)
+                    if expected.assigned_node_id is not None
+                    else None
+                ),
+                (
+                    expected.started_at.isoformat()
+                    if expected.started_at is not None
+                    else None
+                ),
+                (
+                    expected.completed_at.isoformat()
+                    if expected.completed_at is not None
+                    else None
+                ),
+                expected.exit_code,
+                (
+                    expected.cancellation_requested_at.isoformat()
+                    if expected.cancellation_requested_at is not None
+                    else None
+                ),
+            ),
+        )
+
+        # Commit regardless of rowcount: when zero rows match, SQLite
+        # still opened an implicit write transaction (RESERVED lock).
+        # Committing the zero-row no-op releases that lock without
+        # rolling back pending statements from sibling repositories
+        # sharing this connection.
+        self._connection.commit()
+
+        if cursor.rowcount == 1:
+            return True
+
+        owner_row = self._connection.execute(
+            "SELECT tenant_id FROM jobs WHERE id = ?",
+            (str(job.id),),
+        ).fetchone()
+
+        if (
+            owner_row is not None
+            and owner_row["tenant_id"] != str(job.tenant_id)
+        ):
+            raise JobTenantConflictError(
+                f"job {job.id} belongs to another tenant"
+            )
+
+        return False
+
     def get_by_id(
         self,
         job_id: JobId,
