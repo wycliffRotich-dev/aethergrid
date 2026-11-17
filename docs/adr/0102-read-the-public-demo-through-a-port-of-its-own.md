@@ -105,6 +105,17 @@ application services and repository interfaces. That cannot be built:
   The app cannot read public_demo_scope, so only an operator script could
   compare them, and a value that nothing consumes can only mislead.
 
+## Progress
+
+2026-11-17. Decision 4 is built: read_password_file in
+database_credentials.py (PR 526), with the private messages pinned before
+the refactor.
+
+2026-11-17. Decision 8 is built: the tenant setting is gone from the public
+settings, and a stale value of the old variable, valid, malformed or empty,
+changes nothing. Putting the field back, or requiring the variable again,
+failed the new tests. Decisions 1 to 3, 5 to 7 and 9 are not built.
+
 ## How to Verify
 
     pytest -q tests/architecture tests/presentation/public

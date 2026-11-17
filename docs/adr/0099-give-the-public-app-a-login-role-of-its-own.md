@@ -108,6 +108,12 @@ run against a test database showed the role reading a view and refused
 on a base table. Using the role from the app is not done, and is listed
 above.
 
+2026-11-17. The follow-up in the Consequences, that the app refuses to
+start when AETHERGRID_PUBLIC_TENANT_ID and public_demo_scope disagree, is
+closed by removal instead. ADR 0102, decision 8, removed the setting, so
+the app has one source for its tenant. The text above is left as it was
+written.
+
 ## How to Verify
 
     NEUROMESH_TEST_DATABASE_URL=postgresql://neuromesh@127.0.0.1:5433/neuromesh_test \
