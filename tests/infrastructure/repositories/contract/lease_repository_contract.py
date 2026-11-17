@@ -277,7 +277,7 @@ class LeaseRepositoryContract:
     ) -> None:
         # The fence the method exists to provide: a stale caller that
         # names a lease identity that is no longer current must not
-        # delete whatever lease now holds the job (ADR 0096).
+        # delete whatever lease now holds the job (ADR 0104).
         lease = self._make_lease()
         repository.save(lease)
 
@@ -336,7 +336,7 @@ class LeaseRepositoryContract:
         self,
         repository,
     ) -> None:
-        # The release race ADR 0096 closes: the original lease is
+        # The release race ADR 0104 closes: the original lease is
         # reclaimed, the job is re-leased with a new lease id, and the
         # stale caller's delete_if_matches must leave the new lease.
         lease = self._make_lease()
@@ -364,6 +364,31 @@ class LeaseRepositoryContract:
         )
         assert surviving is not None
         assert surviving.id == replacement.id
+
+    def test_delete_if_matches_with_a_different_job_id_returns_false(
+        self,
+        repository,
+    ) -> None:
+        # The predicate names the job, not only the lease id. A caller
+        # that passes the right id but the wrong job must not delete the
+        # lease (ADR 0104).
+        lease = self._make_lease()
+        repository.save(lease)
+
+        deleted = repository.delete_if_matches(
+            JobId.new(),
+            lease.tenant_id,
+            lease.id,
+        )
+
+        assert deleted is False
+        assert (
+            repository.get_by_job_id(
+                lease.job_id,
+                lease.tenant_id,
+            )
+            is not None
+        )
 
     def test_renew_extends_expiry_of_an_existing_lease(
         self,

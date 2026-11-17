@@ -1,4 +1,4 @@
-# ADR 0096: Fence Lease Release Deletion by Lease Identity at Delete Time
+# ADR 0104: Fence Lease Release Deletion by Lease Identity at Delete Time
 
 ## Status
 
@@ -35,8 +35,8 @@ conditional on the identity checked before it.
 2. A lease in another tenant, or no lease at all, returns False and leaves
    the row untouched, matching every other scoped method.
 3. ReleaseLeaseService calls delete_if_matches with the same expected
-   lease id it verified at read time. A False result means the lease was
-   reclaimed and re-leased after the read, so the service raises
+   lease id it verified at read time. A False result means the lease is
+   no longer the lease verified at read time, so the service raises
    LeaseNotFoundError and records nothing.
 4. Both the in-memory and the Postgres backends implement the method, and
    the shared contract tests it on each.
@@ -52,10 +52,11 @@ conditional on the identity checked before it.
 
 ## Not Claimed
 
-- That the fence is needed on the other delete() callers. reclaim_job
-  still deletes by job id, but that is the system reclaiming its own
-  lease, not a stale caller releasing, and the recovery services precede
-  it with delete_if_expired.
+- That the fence is needed on the other delete() caller. reclaim_job in
+  app/application/services/job_execution_support.py still deletes by job
+  id, but that is the system reclaiming its own lease, not a stale
+  caller releasing, and the recovery services precede it with
+  delete_if_expired.
 - That the race was observed live. The window is narrow, and it is shown
   by a test that forces the order, not by two writers running at once.
 
@@ -71,19 +72,20 @@ conditional on the identity checked before it.
 ## How to Verify
 
 ```bash
-pytest -q tests/infrastructure/repositories/test_in_memory_lease_repository_contract.py tests/application/test_release_lease_service.py
+pytest -q tests/infrastructure/repositories/test_in_memory_lease_repository_contract.py tests/infrastructure/repositories/test_postgres_lease_repository_contract.py tests/application/test_release_lease_service.py tests/application/test_release_lease_service_against_postgres.py
 ```
 
-All of them pass. Before the change the service test fails because the
+All of them pass. The Postgres contract test is the only proof of the
+DELETE predicate. Before the change the service test fails because the
 service deletes by job id and raises nothing.
 
 ## Progress
 
-2026-11-16. The five contract tests for delete_if_matches and the service
-test that forces a refused delete were written to specify the fence. The
-service test fails before the change: execute() deletes the lease by job
-id and raises nothing, so the pytest.raises(LeaseNotFoundError) assertion
-fails. After the change the in-memory contract and release-service tests
-pass (30 tests), and the Postgres contract and release-service tests pass
-(21 tests) against a real database with migrations applied. ruff and mypy
-are clean.
+2026-11-16. The six contract tests for delete_if_matches and the service
+test that stages the reclaim-and-re-lease race were written to specify
+the fence. The service test fails before the change: execute() deletes by
+job id and raises nothing, so the pytest.raises(LeaseNotFoundError)
+assertion fails. After the change the in-memory contract, release-service
+and ADR-numbering tests pass (39 tests), and the Postgres contract and
+release-service tests pass (22 tests) against a real database with
+migrations applied. ruff and mypy are clean.

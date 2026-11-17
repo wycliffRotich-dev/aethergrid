@@ -455,39 +455,60 @@ def test_execute_raises_and_preserves_an_unrelated_lease_after_reclaim_and_reacq
     assert surviving.id == replacement_lease.id
 
 
-def test_execute_raises_and_keeps_the_lease_when_the_delete_is_fenced() -> None:
+def test_execute_raises_when_the_lease_changed_between_read_and_delete() -> None:
     """
-    ADR 0096: the release's delete is fenced by lease identity at
-    delete time, not only at read time. When delete_if_matches reports
-    that the caller's lease is no longer current (the job was re-leased
-    between the read and the delete), execute() raises LeaseNotFoundError
-    and nothing is deleted or recorded.
+    ADR 0104: the release's delete is fenced by lease identity at
+    delete time, not only at read time. This stages the race the fence
+    closes: the service reads the caller's lease, then the same job is
+    re-leased with a new lease id before the delete runs. The delete
+    must refuse, raise LeaseNotFoundError, leave the replacement lease in
+    place and record nothing.
     """
     worker, job = _make_worker_with_running_job()
 
-    lease = Lease.create(
+    original = Lease.create(
+        worker_id=worker.id,
+        job_id=job.id,
+        tenant_id=worker.tenant_id,
+    )
+    replacement = Lease.create(
         worker_id=worker.id,
         job_id=job.id,
         tenant_id=worker.tenant_id,
     )
 
-    class _RefusingLeaseRepository(InMemoryLeaseRepository):
+    class _SwappingLeaseRepository(InMemoryLeaseRepository):
         def delete_if_matches(self, job_id, tenant_id, expected_lease_id):
-            return False
+            # Reconciliation reclaimed the original lease and re-leased
+            # the same job between the service's read and this delete.
+            # The job now holds the replacement, so the real check below
+            # finds an id that no longer matches.
+            self.save(replacement)
+            return super().delete_if_matches(
+                job_id,
+                tenant_id,
+                expected_lease_id,
+            )
 
-    lease_repository = _RefusingLeaseRepository()
-    lease_repository.save(lease)
+    lease_repository = _SwappingLeaseRepository()
+    lease_repository.save(original)
+
+    events = InMemoryEventRepository()
 
     service = ReleaseLeaseService(
         lease_repository=lease_repository,
         worker_repository=InMemoryWorkerRepository([worker]),
+        record_job_events_service=RecordJobEventsService(
+            event_repository=events,
+        ),
+        job_repository=InMemoryJobRepository([job]),
     )
 
     with pytest.raises(LeaseNotFoundError):
-        service.execute(worker.id, lease.id, worker.tenant_id)
+        service.execute(worker.id, original.id, worker.tenant_id)
 
-    # The fenced delete refused, so the lease is still present.
-    assert (
-        lease_repository.get_by_worker_id(worker.id, worker.tenant_id)
-        is not None
-    )
+    # The replacement lease survives, and nothing was recorded.
+    surviving = lease_repository.get_by_job_id(job.id, worker.tenant_id)
+    assert surviving is not None
+    assert surviving.id == replacement.id
+    assert events.list(worker.tenant_id) == []

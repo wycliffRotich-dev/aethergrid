@@ -138,7 +138,7 @@ class ReleaseLeaseService:
 
         if not deleted:
             # The lease was reclaimed and re-leased between the read
-            # above and this delete (ADR 0096). The caller's lease is
+            # above and this delete (ADR 0104). The caller's lease is
             # no longer current, and the job is now held by a different
             # lease. delete_if_matches refused, so nothing was deleted
             # and nothing is recorded below.

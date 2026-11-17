@@ -152,7 +152,7 @@ class LeaseRepository(ABC):
         The id check runs in the same atomic step as the delete, so a
         caller whose lease was reclaimed and replaced between its read
         and this delete cannot remove the lease a different caller now
-        holds for the same job (ADR 0096).
+        holds for the same job (ADR 0104).
         """
         raise NotImplementedError
 
