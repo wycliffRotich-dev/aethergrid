@@ -9,6 +9,12 @@ With no file configured this returns None and behavior is unchanged.
 A password in both places is an error, not a precedence rule: a
 silent choice between two credentials is how secrets end up in places
 nobody expects.
+
+read_password_file is the one place a password file is read and
+validated. It takes the name of the setting that pointed at the file
+and puts that name in its messages, so the private app and the public
+app (ADR 0102, decision 4) each report their own setting and never
+the other's.
 """
 
 from __future__ import annotations
@@ -18,6 +24,24 @@ from urllib.parse import urlsplit
 
 PASSWORD_FILE_ENV = "NEUROMESH_DATABASE_PASSWORD_FILE"
 URL_ENV = "NEUROMESH_DATABASE_URL"
+
+
+def read_password_file(path: str, setting: str) -> str:
+    try:
+        with open(path, encoding="utf-8") as handle:
+            raw = handle.read()
+    except OSError as error:
+        raise RuntimeError(
+            f"{setting} points at '{path}', which could "
+            f"not be read: {error.strerror or type(error).__name__}."
+        ) from None
+
+    password = raw[:-1] if raw.endswith("\n") else raw
+    if not password:
+        raise RuntimeError(
+            f"{setting} points at '{path}', which is empty."
+        )
+    return password
 
 
 def resolve_database_password(
@@ -36,18 +60,4 @@ def resolve_database_password(
             f"from the file."
         )
 
-    try:
-        with open(path, encoding="utf-8") as handle:
-            raw = handle.read()
-    except OSError as error:
-        raise RuntimeError(
-            f"{PASSWORD_FILE_ENV} points at '{path}', which could "
-            f"not be read: {error.strerror or type(error).__name__}."
-        ) from None
-
-    password = raw[:-1] if raw.endswith("\n") else raw
-    if not password:
-        raise RuntimeError(
-            f"{PASSWORD_FILE_ENV} points at '{path}', which is empty."
-        )
-    return password
+    return read_password_file(path, PASSWORD_FILE_ENV)
