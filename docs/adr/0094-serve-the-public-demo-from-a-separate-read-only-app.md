@@ -109,3 +109,12 @@ services are an allowlist that starts empty, so a service enters the
 public package only when it is named in the same change that imports it.
 The check reads source text, so an import made at run time through
 importlib is not seen.
+
+2026-11-17. Decisions 5 and 7 are superseded and the rest stand.
+Decision 5 (the tenant is set in server configuration) was replaced by
+ADR 0098, decision 6, which keeps the tenant in public_demo_scope.
+Decision 7 (the app reads through the existing application services and
+repository interfaces) cannot be built, because the public role has no
+privilege on any base table and the public views carry no tenant. ADR
+0102 replaces it with a read port of its own. ADR 0102 is Proposed, so
+nothing is built from it yet.
