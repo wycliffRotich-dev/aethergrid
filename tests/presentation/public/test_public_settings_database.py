@@ -10,7 +10,6 @@ import pytest
 
 from app.presentation.public.settings import PublicSettings
 
-TENANT = "11111111-1111-1111-1111-111111111111"
 ORIGIN = "https://demo.example.org"
 URL = "postgresql://aethergrid_public@db.internal:5432/aethergrid"
 PASSWORD_FILE = "/run/secrets/public_db_password"
@@ -18,7 +17,6 @@ PASSWORD_FILE = "/run/secrets/public_db_password"
 
 def _environment(**overrides: str) -> dict[str, str]:
     environment = {
-        "AETHERGRID_PUBLIC_TENANT_ID": TENANT,
         "AETHERGRID_PUBLIC_ALLOWED_ORIGIN": ORIGIN,
         "AETHERGRID_PUBLIC_DATABASE_URL": URL,
         "AETHERGRID_PUBLIC_DATABASE_PASSWORD_FILE": PASSWORD_FILE,
@@ -70,7 +68,6 @@ def test_a_password_inside_the_url_stops_construction() -> None:
 
 def test_the_private_variables_are_never_used_as_a_fallback() -> None:
     environment = {
-        "AETHERGRID_PUBLIC_TENANT_ID": TENANT,
         "AETHERGRID_PUBLIC_ALLOWED_ORIGIN": ORIGIN,
         "NEUROMESH_DATABASE_URL": "postgresql://neuromesh@db.internal:5432/neuromesh",
         "NEUROMESH_DATABASE_PASSWORD_FILE": "/run/secrets/postgres_password",

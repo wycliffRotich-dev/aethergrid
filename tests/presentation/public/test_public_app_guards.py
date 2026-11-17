@@ -19,7 +19,6 @@ from app.presentation.public.settings import PublicSettings
 
 PACKAGE = Path(__file__).resolve().parents[3] / "app" / "presentation" / "public"
 
-TENANT = "11111111-1111-1111-1111-111111111111"
 ORIGIN = "https://demo.example.org"
 
 # Every path the public app serves. A route is added here on purpose, in
@@ -53,7 +52,6 @@ FORBIDDEN_SERVICE_WORDS = (
 def _settings() -> PublicSettings:
     return PublicSettings.from_environment(
         {
-            "AETHERGRID_PUBLIC_TENANT_ID": TENANT,
             "AETHERGRID_PUBLIC_ALLOWED_ORIGIN": ORIGIN,
             "AETHERGRID_PUBLIC_DATABASE_URL": "postgresql://aethergrid_public@db.internal:5432/aethergrid",
             "AETHERGRID_PUBLIC_DATABASE_PASSWORD_FILE": "/run/secrets/public_db_password",
@@ -143,30 +141,14 @@ def test_the_check_would_flag_a_forbidden_import() -> None:
     assert any(word in leaf for word in FORBIDDEN_SERVICE_WORDS)
 
 
-def test_a_missing_tenant_stops_construction() -> None:
-    with pytest.raises(ValueError, match="AETHERGRID_PUBLIC_TENANT_ID"):
-        PublicSettings.from_environment(
-            {"AETHERGRID_PUBLIC_ALLOWED_ORIGIN": ORIGIN}
-        )
-
-
-def test_a_malformed_tenant_stops_construction() -> None:
-    with pytest.raises(ValueError, match="AETHERGRID_PUBLIC_TENANT_ID"):
-        PublicSettings.from_environment(
-            {
-                "AETHERGRID_PUBLIC_TENANT_ID": "not-a-uuid",
-                "AETHERGRID_PUBLIC_ALLOWED_ORIGIN": ORIGIN,
-            }
-        )
-
-
 @pytest.mark.parametrize("origin", ["", "*", "http://", "demo.example.org", "https://a.org/path"])
 def test_a_wrong_origin_stops_construction(origin: str) -> None:
     with pytest.raises(ValueError, match="AETHERGRID_PUBLIC_ALLOWED_ORIGIN"):
         PublicSettings.from_environment(
             {
-                "AETHERGRID_PUBLIC_TENANT_ID": TENANT,
                 "AETHERGRID_PUBLIC_ALLOWED_ORIGIN": origin,
+                "AETHERGRID_PUBLIC_DATABASE_URL": "postgresql://aethergrid_public@db.internal:5432/aethergrid",
+                "AETHERGRID_PUBLIC_DATABASE_PASSWORD_FILE": "/run/secrets/public_db_password",
             }
         )
 
