@@ -115,6 +115,118 @@ class PostgresJobRepository(JobRepository):
                     f"job {job.id} belongs to another tenant"
                 )
 
+    def save_if_unchanged(
+        self,
+        job: Job,
+        expected: Job,
+    ) -> bool:
+        if job.id != expected.id or job.tenant_id != expected.tenant_id:
+            raise ValueError(
+                "expected snapshot must share id and tenant_id with job"
+            )
+
+        assigned_node_id = (
+            str(job.assigned_node_id)
+            if job.assigned_node_id is not None
+            else None
+        )
+        expected_assigned_node_id = (
+            str(expected.assigned_node_id)
+            if expected.assigned_node_id is not None
+            else None
+        )
+
+        command = (
+            json.dumps(job.command)
+            if job.command is not None
+            else None
+        )
+
+        with self._pool.connection() as conn:
+            row = conn.cursor(row_factory=dict_row).execute(
+                """
+                WITH updated AS (
+                    UPDATE jobs SET
+                        cpu_cores = %(cpu_cores)s,
+                        memory_mib = %(memory_mib)s,
+                        vram_mib = %(vram_mib)s,
+                        priority = %(priority)s,
+                        constraints = %(constraints)s,
+                        max_retries = %(max_retries)s,
+                        retry_count = %(retry_count)s,
+                        status = %(status)s,
+                        assigned_node_id = %(assigned_node_id)s,
+                        submitted_at = %(submitted_at)s,
+                        started_at = %(started_at)s,
+                        completed_at = %(completed_at)s,
+                        command = %(command)s,
+                        exit_code = %(exit_code)s,
+                        cancellation_requested_at = %(cancellation_requested_at)s,
+                        execution_timeout_seconds = %(execution_timeout_seconds)s
+                    WHERE id = %(id)s
+                      AND tenant_id = %(tenant_id)s
+                      AND status = %(expected_status)s
+                      AND retry_count = %(expected_retry_count)s
+                      AND assigned_node_id IS NOT DISTINCT FROM %(expected_assigned_node_id)s
+                      AND started_at IS NOT DISTINCT FROM %(expected_started_at)s
+                      AND completed_at IS NOT DISTINCT FROM %(expected_completed_at)s
+                      AND exit_code IS NOT DISTINCT FROM %(expected_exit_code)s
+                      AND cancellation_requested_at IS NOT DISTINCT FROM
+                          %(expected_cancellation_requested_at)s
+                    RETURNING 1
+                )
+                SELECT
+                    (SELECT tenant_id FROM jobs WHERE id = %(id)s) AS owner_tenant_id,
+                    EXISTS (SELECT 1 FROM updated) AS did_update
+                """,
+                {
+                    "id": str(job.id),
+                    "cpu_cores": job.resources.cpu_cores,
+                    "memory_mib": job.resources.memory_mib,
+                    "vram_mib": job.resources.vram_mib,
+                    "priority": job.priority,
+                    "constraints": json.dumps(job.constraints),
+                    "max_retries": job.max_retries,
+                    "retry_count": job.retry_count,
+                    "status": job.status.value,
+                    "assigned_node_id": assigned_node_id,
+                    "submitted_at": job.submitted_at,
+                    "started_at": job.started_at,
+                    "completed_at": job.completed_at,
+                    "command": command,
+                    "exit_code": job.exit_code,
+                    "cancellation_requested_at": job.cancellation_requested_at,
+                    "execution_timeout_seconds": (
+                        job.execution_timeout.total_seconds()
+                    ),
+                    "tenant_id": str(job.tenant_id),
+                    "expected_status": expected.status.value,
+                    "expected_retry_count": expected.retry_count,
+                    "expected_assigned_node_id": expected_assigned_node_id,
+                    "expected_started_at": expected.started_at,
+                    "expected_completed_at": expected.completed_at,
+                    "expected_exit_code": expected.exit_code,
+                    "expected_cancellation_requested_at": (
+                        expected.cancellation_requested_at
+                    ),
+                },
+            ).fetchone()
+
+        assert row is not None
+
+        if row["did_update"]:
+            return True
+
+        if (
+            row["owner_tenant_id"] is not None
+            and str(row["owner_tenant_id"]) != str(job.tenant_id)
+        ):
+            raise JobTenantConflictError(
+                f"job {job.id} belongs to another tenant"
+            )
+
+        return False
+
     def get_by_id(
         self,
         job_id: JobId,

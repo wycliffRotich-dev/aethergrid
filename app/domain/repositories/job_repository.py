@@ -19,6 +19,27 @@ class JobRepository(ABC):
     ) -> None: ...
 
     @abstractmethod
+    def save_if_unchanged(
+        self,
+        job: Job,
+        expected: Job,
+    ) -> bool:
+        """
+        Persist `job` only when the stored row in `job.tenant_id`
+        still matches the lifecycle state of `expected` (status,
+        retry_count, assigned_node_id, started_at, completed_at,
+        exit_code, and cancellation_requested_at).
+
+        Returns True when the stored row matched and was updated,
+        or False when no job with `job.id` exists in `job.tenant_id`
+        or its lifecycle state changed since `expected` was read.
+        Raises ValueError if `expected` does not share `id` and
+        `tenant_id` with `job`, and raises JobTenantConflictError
+        when `job.id` belongs to another tenant (ADR 0064).
+        """
+        ...
+
+    @abstractmethod
     def get_by_id(
         self,
         job_id: JobId,
