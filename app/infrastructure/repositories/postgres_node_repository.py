@@ -149,6 +149,63 @@ class PostgresNodeRepository(NodeRepository):
 
         return cursor.rowcount > 0
 
+    def allocate(
+        self,
+        node_id: NodeId,
+        tenant_id: TenantId,
+        requirements: ResourceRequirements,
+    ) -> bool:
+        with self._pool.connection() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE nodes
+                SET available_cpu_cores = available_cpu_cores - %(cpu)s,
+                    available_memory_mib = available_memory_mib - %(mem)s,
+                    available_vram_mib = available_vram_mib - %(vram)s
+                WHERE id = %(id)s
+                  AND tenant_id = %(tenant_id)s
+                  AND available_cpu_cores >= %(cpu)s
+                  AND available_memory_mib >= %(mem)s
+                  AND available_vram_mib >= %(vram)s
+                """,
+                {
+                    "cpu": requirements.cpu_cores,
+                    "mem": requirements.memory_mib,
+                    "vram": requirements.vram_mib,
+                    "id": str(node_id),
+                    "tenant_id": str(tenant_id.value),
+                },
+            )
+
+        return cursor.rowcount > 0
+
+    def release(
+        self,
+        node_id: NodeId,
+        tenant_id: TenantId,
+        requirements: ResourceRequirements,
+    ) -> bool:
+        with self._pool.connection() as conn:
+            cursor = conn.execute(
+                """
+            UPDATE nodes
+            SET available_cpu_cores = LEAST(available_cpu_cores + %(cpu)s, capacity_cpu_cores),
+                available_memory_mib = LEAST(available_memory_mib + %(mem)s, capacity_memory_mib),
+                available_vram_mib = LEAST(available_vram_mib + %(vram)s, capacity_vram_mib)
+            WHERE id = %(id)s
+              AND tenant_id = %(tenant_id)s
+            """,
+                {
+                    "cpu": requirements.cpu_cores,
+                    "mem": requirements.memory_mib,
+                    "vram": requirements.vram_mib,
+                    "id": str(node_id),
+                    "tenant_id": str(tenant_id.value),
+                },
+            )
+
+        return cursor.rowcount > 0
+
     @staticmethod
     def _to_entity(row: dict[str, Any]) -> Node:
         capacity = ResourceRequirements(

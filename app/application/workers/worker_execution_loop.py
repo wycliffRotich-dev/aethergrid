@@ -314,20 +314,13 @@ class WorkerExecutionLoop:
         )
 
         if job.assigned_node_id is not None:
-            node = self._node_repository.get_by_id(
+            released = self._node_repository.release(
                 job.assigned_node_id,
                 tenant_id,
+                job.resources,
             )
 
-            if node is not None:
-                node.release(
-                    job.resources,
-                )
-
-                self._node_repository.save(
-                    node,
-                )
-            else:
+            if not released:
                 # On Postgres a job's node is always in the job's tenant,
                 # and deleting a node clears the link, so this state means
                 # a mistake upstream (ADR 0075 decision 14).

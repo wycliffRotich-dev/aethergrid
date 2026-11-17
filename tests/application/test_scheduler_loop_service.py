@@ -29,6 +29,12 @@ from app.infrastructure.repositories.in_memory_node_repository import (
 from app.infrastructure.repositories.in_memory_worker_repository import (
     InMemoryWorkerRepository,
 )
+from app.infrastructure.repositories.sqlite_connection import (
+    create_connection,
+)
+from app.infrastructure.repositories.sqlite_node_repository import (
+    SqliteNodeRepository,
+)
 from tests.support.jobs import make_job
 from tests.support.nodes import make_node
 from tests.support.workers import make_worker
@@ -183,3 +189,86 @@ def test_scheduler_loop_records_job_scheduled_event() -> None:
     assert recorded[0].event_type == "JobScheduled"
     assert recorded[0].aggregate_id == str(job.id)
     assert recorded[0].aggregate_type == "Job"
+
+
+def test_scheduler_loop_leaves_the_job_queued_when_allocation_is_refused() -> None:
+    """
+    ADR 0105: when the repository refuses the allocation, the scheduler
+    must leave the job QUEUED, assigned to no node, and must not save or
+    record anything for it. The job is retried on the next tick.
+    """
+    node = make_node(id=NodeId.new())
+    job = make_job(id=JobId.new())
+    job.queue()
+
+    class _RefusingNodeRepository(InMemoryNodeRepository):
+        def allocate(self, node_id, tenant_id, requirements):
+            return False
+
+    jobs = InMemoryJobRepository([job])
+    nodes = _RefusingNodeRepository([node])
+    events = InMemoryEventRepository()
+
+    service = SchedulerLoopService(
+        jobs,
+        nodes,
+        Scheduler(),
+        record_job_events_service=RecordJobEventsService(
+            event_repository=events,
+        ),
+    )
+
+    service.execute()
+
+    assert job.status == JobStatus.QUEUED
+    assert job.assigned_node_id is None
+    assert events.list(DEFAULT_TENANT_ID) == []
+
+
+def test_scheduler_loop_uses_the_updated_snapshot_within_a_tick() -> None:
+    """
+    ADR 0105: after one job fills a node, later jobs in the same tick
+    must be matched against the node's remaining capacity, not the
+    snapshot loaded before the allocation. Two nodes with room for one
+    job each must both be used in one tick. Runs on SQLite because the
+    in-memory repository mutates the same object the scheduler holds and
+    so would hide a stale snapshot.
+    """
+    node_a = make_node(
+        id=NodeId.new(),
+        capacity=ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=1024,
+            vram_mib=0,
+        ),
+    )
+    node_b = make_node(
+        id=NodeId.new(),
+        capacity=ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=1024,
+            vram_mib=0,
+        ),
+    )
+
+    job_a = make_job(id=JobId.new())
+    job_a.queue()
+    job_b = make_job(id=JobId.new())
+    job_b.queue()
+
+    jobs = InMemoryJobRepository([job_a, job_b])
+    connection = create_connection(":memory:")
+    nodes = SqliteNodeRepository(connection)
+    nodes.save(node_a)
+    nodes.save(node_b)
+
+    service = SchedulerLoopService(jobs, nodes, Scheduler())
+    service.execute()
+
+    assert job_a.status == JobStatus.SCHEDULED
+    assert job_b.status == JobStatus.SCHEDULED
+    assert job_a.assigned_node_id is not None
+    assert job_b.assigned_node_id is not None
+    assert job_a.assigned_node_id != job_b.assigned_node_id
+
+    connection.close()

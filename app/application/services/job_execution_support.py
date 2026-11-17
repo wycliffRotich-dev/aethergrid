@@ -131,11 +131,10 @@ def reclaim_job(
         job.reclaim()
     except InvalidJobTransition:
         if job.is_cancelled() and node is not None:
-            node.release(
+            node_repository.release(
+                node.id,
+                node.tenant_id,
                 job.resources,
-            )
-            node_repository.save(
-                node,
             )
 
         return False
@@ -145,11 +144,10 @@ def reclaim_job(
     )
 
     if node is not None:
-        node.release(
+        node_repository.release(
+            node.id,
+            node.tenant_id,
             job.resources,
-        )
-        node_repository.save(
-            node,
         )
 
     return True
