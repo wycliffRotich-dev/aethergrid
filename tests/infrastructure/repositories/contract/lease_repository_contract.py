@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from uuid import uuid4
 
 import pytest
 
@@ -246,6 +247,147 @@ class LeaseRepositoryContract:
                 lease.tenant_id,
             )
             is None
+        )
+
+    def test_delete_if_matches_removes_a_matching_lease(
+        self,
+        repository,
+    ) -> None:
+        lease = self._make_lease()
+        repository.save(lease)
+
+        deleted = repository.delete_if_matches(
+            lease.job_id,
+            lease.tenant_id,
+            lease.id,
+        )
+
+        assert deleted is True
+        assert (
+            repository.get_by_job_id(
+                lease.job_id,
+                lease.tenant_id,
+            )
+            is None
+        )
+
+    def test_delete_if_matches_leaves_a_lease_with_a_different_id(
+        self,
+        repository,
+    ) -> None:
+        # The fence the method exists to provide: a stale caller that
+        # names a lease identity that is no longer current must not
+        # delete whatever lease now holds the job (ADR 0104).
+        lease = self._make_lease()
+        repository.save(lease)
+
+        deleted = repository.delete_if_matches(
+            lease.job_id,
+            lease.tenant_id,
+            uuid4(),
+        )
+
+        assert deleted is False
+        assert (
+            repository.get_by_job_id(
+                lease.job_id,
+                lease.tenant_id,
+            )
+            is not None
+        )
+
+    def test_delete_if_matches_in_another_tenant_leaves_the_lease(
+        self,
+        repository,
+    ) -> None:
+        lease = self._make_lease()
+        repository.save(lease)
+
+        deleted = repository.delete_if_matches(
+            lease.job_id,
+            TenantId.new(),
+            lease.id,
+        )
+
+        assert deleted is False
+        assert (
+            repository.get_by_job_id(
+                lease.job_id,
+                lease.tenant_id,
+            )
+            is not None
+        )
+
+    def test_delete_if_matches_returns_false_when_no_lease_exists(
+        self,
+        repository,
+    ) -> None:
+        lease = self._make_lease()
+
+        deleted = repository.delete_if_matches(
+            lease.job_id,
+            lease.tenant_id,
+            lease.id,
+        )
+
+        assert deleted is False
+
+    def test_delete_if_matches_with_a_stale_id_leaves_a_reassigned_lease(
+        self,
+        repository,
+    ) -> None:
+        # The release race ADR 0104 closes: the original lease is
+        # reclaimed, the job is re-leased with a new lease id, and the
+        # stale caller's delete_if_matches must leave the new lease.
+        lease = self._make_lease()
+        repository.save(lease)
+
+        repository.delete(lease.job_id, lease.tenant_id)
+
+        replacement = Lease.create(
+            worker_id=lease.worker_id,
+            job_id=lease.job_id,
+            tenant_id=lease.tenant_id,
+        )
+        repository.save(replacement)
+
+        deleted = repository.delete_if_matches(
+            lease.job_id,
+            lease.tenant_id,
+            lease.id,
+        )
+
+        assert deleted is False
+        surviving = repository.get_by_job_id(
+            lease.job_id,
+            lease.tenant_id,
+        )
+        assert surviving is not None
+        assert surviving.id == replacement.id
+
+    def test_delete_if_matches_with_a_different_job_id_returns_false(
+        self,
+        repository,
+    ) -> None:
+        # The predicate names the job, not only the lease id. A caller
+        # that passes the right id but the wrong job must not delete the
+        # lease (ADR 0104).
+        lease = self._make_lease()
+        repository.save(lease)
+
+        deleted = repository.delete_if_matches(
+            JobId.new(),
+            lease.tenant_id,
+            lease.id,
+        )
+
+        assert deleted is False
+        assert (
+            repository.get_by_job_id(
+                lease.job_id,
+                lease.tenant_id,
+            )
+            is not None
         )
 
     def test_renew_extends_expiry_of_an_existing_lease(

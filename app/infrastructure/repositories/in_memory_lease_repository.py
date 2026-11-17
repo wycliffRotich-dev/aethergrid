@@ -109,3 +109,22 @@ class InMemoryLeaseRepository(
 
         return True
 
+    def delete_if_matches(
+        self,
+        job_id: JobId,
+        tenant_id: TenantId,
+        expected_lease_id: UUID,
+    ) -> bool:
+        lease = self._leases.get(str(job_id))
+
+        if (
+            lease is None
+            or lease.tenant_id != tenant_id
+            or lease.id != expected_lease_id
+        ):
+            return False
+
+        del self._leases[str(job_id)]
+
+        return True
+

@@ -135,3 +135,24 @@ class LeaseRepository(ABC):
         """
         raise NotImplementedError
 
+    @abstractmethod
+    def delete_if_matches(
+        self,
+        job_id: JobId,
+        tenant_id: TenantId,
+        expected_lease_id: UUID,
+    ) -> bool:
+        """
+        Delete the lease for job_id in this tenant only when its id is
+        still expected_lease_id. Returns True when a row was deleted,
+        and False when no lease exists for job_id in this tenant or
+        its id no longer matches. A lease in another tenant is left
+        untouched.
+
+        The id check runs in the same atomic step as the delete, so a
+        caller whose lease was reclaimed and replaced between its read
+        and this delete cannot remove the lease a different caller now
+        holds for the same job (ADR 0104).
+        """
+        raise NotImplementedError
+
