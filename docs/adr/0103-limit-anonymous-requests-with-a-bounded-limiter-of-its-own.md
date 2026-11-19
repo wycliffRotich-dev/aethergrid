@@ -67,9 +67,17 @@ callers. The limiter of ADR 0021 cannot be reused:
    whole seconds, at least 1. The response names no client and no limit.
 7. The limiter is a middleware of the public app, not a dependency of its
    routes, so unknown paths and refused methods are counted and a new route
-   cannot leave it out. It sits inside the CORS middleware, so a 429
-   reaches the browser as a 429 and not as a CORS error. No route is
-   exempt, /healthz included.
+   cannot leave it out. It is the outermost middleware. The CORS
+   middleware answers a preflight itself, so a limiter inside it would
+   leave preflights uncounted and be a free path around the limit. Because
+   the limiter is outside, a refusal does not pass through CORS, and the
+   429 sets Access-Control-Allow-Origin itself, only when the Origin
+   header equals the configured origin, so the browser reads a 429 and not
+   a CORS error. A refusal never allows credentials. A test compares that
+   header with the one the CORS middleware sends on an admitted request. A
+   WebSocket handshake is counted like any request, and a refused one is
+   closed with code 1013. Lifespan events are not requests and pass
+   through. No route is exempt, /healthz included.
 8. The limits are named constants of the module: per client 20 tokens with
    2 refilled each second, global 200 tokens with 50 refilled each second,
    and 10000 clients. The only setting is the number of proxy hops, because
@@ -90,6 +98,9 @@ callers. The limiter of ADR 0021 cannot be reused:
   rarely.
 - The public settings gain one required value, and their tests change on
   purpose.
+- create_public_app takes an optional limiter so a test can give it a clock.
+  When none is given it builds one with the limits of decision 8, and a
+  test shows that default is active.
 
 ## Not Claimed
 
@@ -98,6 +109,9 @@ callers. The limiter of ADR 0021 cannot be reused:
   the load.
 - That the limit values are right. They are first values and are not
   measured.
+- That the close code of a refused WebSocket handshake is what a browser
+  sees. It was tested through Starlette's test client only, and the public
+  app serves no WebSocket route.
 - That the operator's proxy writes X-Forwarded-For as decision 5 assumes.
   The hops setting is trusted as it is given.
 
