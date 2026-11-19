@@ -55,6 +55,14 @@ callers. The limiter of ADR 0021 cannot be reused:
    When the header has fewer than N entries, the request did not pass
    through every proxy, and the socket address is used. The setting is
    required, has no default, and must be an integer from 0 to 5.
+   Repeated X-Forwarded-For header lines are joined in the order they
+   were received before counting, and an empty entry counts as an entry,
+   so neither can shift which entry is chosen. A bracket or a port on the
+   chosen entry, as in 203.0.113.9:443 or [2001:db8::1]:443, is removed
+   only when it has exactly that shape, with a port of 1 to 5 ASCII
+   digits that is no larger than 65535. Any other form is left as it is
+   and gets the shared key under decision 4. The setting accepts only the
+   characters 0 to 5 and no other spelling of a number.
 6. A refused request gets 429 with a fixed body and a Retry-After header in
    whole seconds, at least 1. The response names no client and no limit.
 7. The limiter is a middleware of the public app, not a dependency of its

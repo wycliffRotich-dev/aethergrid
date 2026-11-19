@@ -17,7 +17,7 @@ DATABASE_PASSWORD_FILE_SETTING = "AETHERGRID_PUBLIC_DATABASE_PASSWORD_FILE"
 PROXY_HOPS_SETTING = "AETHERGRID_PUBLIC_TRUSTED_PROXY_HOPS"
 
 _LOCAL_HOSTS = {"localhost", "127.0.0.1"}
-_MAX_PROXY_HOPS = 5
+MAX_PROXY_HOPS = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,13 +93,13 @@ def _proxy_hops(raw: str) -> int:
     # operator controls stand in front of the app, and a wrong one lets a
     # caller choose the address that is used to count them (ADR 0103).
     # The message names the setting only. It never repeats the value.
-    accepted = {str(count): count for count in range(_MAX_PROXY_HOPS + 1)}
+    accepted = {str(count): count for count in range(MAX_PROXY_HOPS + 1)}
     value = accepted.get(raw.strip())
 
     if value is None:
         raise ValueError(
             f"{PROXY_HOPS_SETTING} must be a whole number from 0 to "
-            f"{_MAX_PROXY_HOPS}, the number of proxies you operate in front "
+            f"{MAX_PROXY_HOPS}, the number of proxies you operate in front "
             "of the app"
         )
 
