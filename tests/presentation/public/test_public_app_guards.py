@@ -55,6 +55,7 @@ def _settings() -> PublicSettings:
             "AETHERGRID_PUBLIC_ALLOWED_ORIGIN": ORIGIN,
             "AETHERGRID_PUBLIC_DATABASE_URL": "postgresql://aethergrid_public@db.internal:5432/aethergrid",
             "AETHERGRID_PUBLIC_DATABASE_PASSWORD_FILE": "/run/secrets/public_db_password",
+            "AETHERGRID_PUBLIC_TRUSTED_PROXY_HOPS": "1",
         }
     )
 
@@ -149,6 +150,7 @@ def test_a_wrong_origin_stops_construction(origin: str) -> None:
                 "AETHERGRID_PUBLIC_ALLOWED_ORIGIN": origin,
                 "AETHERGRID_PUBLIC_DATABASE_URL": "postgresql://aethergrid_public@db.internal:5432/aethergrid",
                 "AETHERGRID_PUBLIC_DATABASE_PASSWORD_FILE": "/run/secrets/public_db_password",
+                "AETHERGRID_PUBLIC_TRUSTED_PROXY_HOPS": "1",
             }
         )
 

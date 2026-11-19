@@ -20,6 +20,7 @@ def _environment(**overrides: str) -> dict[str, str]:
         "AETHERGRID_PUBLIC_ALLOWED_ORIGIN": ORIGIN,
         "AETHERGRID_PUBLIC_DATABASE_URL": URL,
         "AETHERGRID_PUBLIC_DATABASE_PASSWORD_FILE": PASSWORD_FILE,
+        "AETHERGRID_PUBLIC_TRUSTED_PROXY_HOPS": "1",
     }
     environment.update(overrides)
 

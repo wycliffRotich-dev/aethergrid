@@ -14,6 +14,7 @@ from app.presentation.public.settings import (
     DATABASE_PASSWORD_FILE_SETTING,
     DATABASE_URL_SETTING,
     ORIGIN_SETTING,
+    PROXY_HOPS_SETTING,
     PublicSettings,
 )
 
@@ -28,6 +29,7 @@ def _environment() -> dict[str, str]:
         ORIGIN_SETTING: ORIGIN,
         DATABASE_URL_SETTING: DATABASE_URL,
         DATABASE_PASSWORD_FILE_SETTING: PASSWORD_FILE,
+        PROXY_HOPS_SETTING: "1",
     }
 
 

@@ -14,8 +14,10 @@ from urllib.parse import urlsplit
 ORIGIN_SETTING = "AETHERGRID_PUBLIC_ALLOWED_ORIGIN"
 DATABASE_URL_SETTING = "AETHERGRID_PUBLIC_DATABASE_URL"
 DATABASE_PASSWORD_FILE_SETTING = "AETHERGRID_PUBLIC_DATABASE_PASSWORD_FILE"
+PROXY_HOPS_SETTING = "AETHERGRID_PUBLIC_TRUSTED_PROXY_HOPS"
 
 _LOCAL_HOSTS = {"localhost", "127.0.0.1"}
+_MAX_PROXY_HOPS = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +26,7 @@ class PublicSettings:
     # Kept out of repr so a log line of the settings never shows them.
     database_url: str = field(repr=False)
     database_password_file: str = field(repr=False)
+    trusted_proxy_hops: int
 
     @classmethod
     def from_environment(cls, environment: Mapping[str, str]) -> PublicSettings:
@@ -32,6 +35,9 @@ class PublicSettings:
             database_url=_database_url(environment.get(DATABASE_URL_SETTING, "")),
             database_password_file=_password_file(
                 environment.get(DATABASE_PASSWORD_FILE_SETTING, "")
+            ),
+            trusted_proxy_hops=_proxy_hops(
+                environment.get(PROXY_HOPS_SETTING, "")
             ),
         )
 
@@ -79,3 +85,22 @@ def _password_file(raw: str) -> str:
         raise ValueError(f"{DATABASE_PASSWORD_FILE_SETTING} must name a file")
 
     return path
+
+
+def _proxy_hops(raw: str) -> int:
+    # Parsed by lookup, not by int(), which accepts forms such as "+1",
+    # "1_0" and non-ASCII digits. The value says how many proxies that the
+    # operator controls stand in front of the app, and a wrong one lets a
+    # caller choose the address that is used to count them (ADR 0103).
+    # The message names the setting only. It never repeats the value.
+    accepted = {str(count): count for count in range(_MAX_PROXY_HOPS + 1)}
+    value = accepted.get(raw.strip())
+
+    if value is None:
+        raise ValueError(
+            f"{PROXY_HOPS_SETTING} must be a whole number from 0 to "
+            f"{_MAX_PROXY_HOPS}, the number of proxies you operate in front "
+            "of the app"
+        )
+
+    return value
