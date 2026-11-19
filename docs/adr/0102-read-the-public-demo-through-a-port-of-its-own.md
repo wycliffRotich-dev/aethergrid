@@ -80,8 +80,8 @@ application services and repository interfaces. That cannot be built:
 - The public settings tests change on purpose, because of decision 8.
 - A new public field is a view migration, a record field, a schema field
   and a test.
-- The public app has no rate limiter yet, so nothing is deployed (ADR
-  0094).
+- The public app has its rate limiter (ADR 0103), and nothing is deployed
+  yet (ADR 0094).
 
 ## Not Claimed
 
@@ -115,6 +115,13 @@ the refactor.
 settings, and a stale value of the old variable, valid, malformed or empty,
 changes nothing. Putting the field back, or requiring the variable again,
 failed the new tests. Decisions 1 to 3, 5 to 7 and 9 are not built.
+
+2026-11-19. Decision 1 is built: app/application/public_read_port.py holds
+the read-only port and one frozen record per view. Tests pin each record
+to the columns of its view in migration 0007, the nullable columns as
+optional, no tenant parameter on any method, and no field named for a
+private column or for usage. The clamp and the order are the reader's
+job and belong to decision 2. Decisions 2, 3, 5 to 7 and 9 are not built.
 
 ## How to Verify
 
