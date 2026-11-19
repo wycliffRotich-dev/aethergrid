@@ -28,9 +28,13 @@ INTERNAL = {
     "presentation": {"presentation", "application", "domain"},
 }
 
-# The one module of the application layer that infrastructure imports:
-# the port that its leadership adapters implement.
-PORTS_IMPLEMENTED = {"app.application.scheduler_leadership"}
+# The modules of the application layer that infrastructure imports: the
+# ports that its adapters implement. Each one is named in full, and a
+# module whose name only starts with one of them is still refused.
+PORTS_IMPLEMENTED = {
+    "app.application.scheduler_leadership",
+    "app.application.public_read_port",
+}
 
 # Third-party packages each layer may import. The domain and the
 # application take the standard library and nothing else.
@@ -187,6 +191,8 @@ DOMAIN_MODULE = "app.domain.entities.job"
 APPLICATION_MODULE = "app.application.services.get_job_service"
 INFRASTRUCTURE_MODULE = "app.infrastructure.repositories.postgres_job_repository"
 PORT_MODULE = "app.application.scheduler_leadership"
+PUBLIC_PORT_MODULE = "app.application.public_read_port"
+NEAR_MISS_MODULE = "app.application.public_read_port_extra"
 
 
 @pytest.mark.parametrize(
@@ -198,6 +204,8 @@ PORT_MODULE = "app.application.scheduler_leadership"
         ("app/application/x.py", "application", INFRASTRUCTURE_MODULE, False),
         ("app/infrastructure/x.py", "infrastructure", PORT_MODULE, True),
         ("app/infrastructure/x.py", "infrastructure", APPLICATION_MODULE, False),
+        ("app/infrastructure/x.py", "infrastructure", PUBLIC_PORT_MODULE, True),
+        ("app/infrastructure/x.py", "infrastructure", NEAR_MISS_MODULE, False),
         ("app/presentation/x.py", "presentation", INFRASTRUCTURE_MODULE, False),
         ("app/presentation/dependencies.py", "presentation", INFRASTRUCTURE_MODULE, True),
         ("app/main.py", "main", "app.presentation.api", True),
