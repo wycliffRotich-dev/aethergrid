@@ -14,6 +14,7 @@ from typing import Protocol, get_type_hints
 from uuid import UUID
 
 import pytest
+
 from app.application.public_read_port import (
     PublicEventRecord,
     PublicJobRecord,
