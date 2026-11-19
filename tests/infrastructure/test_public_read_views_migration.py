@@ -32,9 +32,16 @@ from app.infrastructure.migrations.runner import (
     load_migrations,
 )
 from tests.infrastructure.test_baseline_migration import Db
+from tests.support.public_views import (
+    ROLE,
+    VIEWS_MIGRATION,
+    allow_views,
+    make_tenant,
+    seed_chain,
+    set_scope,
+)
 
-ROLE = "aethergrid_public_read"
-VERSION = 7
+VERSION = VIEWS_MIGRATION
 
 VIEW_COLUMNS = {
     "public_nodes": [
@@ -81,14 +88,6 @@ VIEW_COLUMNS = {
     ],
 }
 VIEWS = sorted(VIEW_COLUMNS)
-
-KEY_OF_VIEW = {
-    "public_nodes": "node",
-    "public_jobs": "job",
-    "public_workers": "worker",
-    "public_leases": "lease",
-    "public_events": "event",
-}
 
 PRIVATE_COLUMNS = {
     "tenant_id",
@@ -175,62 +174,6 @@ def _migrate_in(db: Db, schema: str) -> list[int]:
     )
 
 
-def _tenant(db: Db, name: str) -> str:
-    tenant_id = str(uuid.uuid4())
-    db.conn.execute(
-        "INSERT INTO tenants (id, name, created_at) VALUES (%s, %s, now())",
-        (tenant_id, name),
-    )
-    return tenant_id
-
-
-def _seed(db: Db, tenant_id: str) -> dict[str, str]:
-    """One node, job, worker, lease and event for the tenant."""
-    ids = {key: str(uuid.uuid4()) for key in KEY_OF_VIEW.values()}
-    db.conn.execute(
-        "INSERT INTO nodes (id, name, capacity_cpu_cores, capacity_memory_mib, "
-        "capacity_vram_mib, available_cpu_cores, available_memory_mib, "
-        "available_vram_mib, last_seen_at, tenant_id) "
-        "VALUES (%s, 'node', 8, 16384, 0, 8, 16384, 0, now(), %s)",
-        (ids["node"], tenant_id),
-    )
-    db.conn.execute(
-        "INSERT INTO jobs (id, cpu_cores, memory_mib, status, submitted_at, "
-        "tenant_id) VALUES (%s, 1, 512, 'RUNNING', now(), %s)",
-        (ids["job"], tenant_id),
-    )
-    db.conn.execute(
-        "INSERT INTO workers (id, node_id, status, running_job_id, "
-        "last_seen_at, tenant_id) VALUES (%s, %s, 'BUSY', %s, now(), %s)",
-        (ids["worker"], ids["node"], ids["job"], tenant_id),
-    )
-    db.conn.execute(
-        "INSERT INTO leases (id, worker_id, job_id, acquired_at, expires_at, "
-        "tenant_id) VALUES (%s, %s, %s, now(), now() + interval '30 seconds', %s)",
-        (ids["lease"], ids["worker"], ids["job"], tenant_id),
-    )
-    db.conn.execute(
-        "INSERT INTO events (id, job_id, aggregate_id, aggregate_type, "
-        "event_type, occurred_at, tenant_id) "
-        "VALUES (%s, %s, %s, 'job', 'JOB_STARTED', now(), %s)",
-        (ids["event"], ids["job"], ids["job"], tenant_id),
-    )
-    return ids
-
-
-def _scope(db: Db, tenant_id: str) -> None:
-    db.conn.execute(
-        "INSERT INTO public_demo_scope (tenant_id) VALUES (%s)", (tenant_id,)
-    )
-
-
-def _allow_views(db: Db, schema: str) -> None:
-    """Test only. This is what the operator script will do on the demo database."""
-    db.conn.execute(f'GRANT USAGE ON SCHEMA "{schema}" TO {ROLE}')
-    for view in VIEWS:
-        db.conn.execute(f"GRANT SELECT ON {view} TO {ROLE}")
-
-
 def _as_role(db: Db, statement: str) -> list[tuple[Any, ...]]:
     with db.conn.transaction():
         db.conn.execute(f"SET LOCAL ROLE {ROLE}")
@@ -291,16 +234,16 @@ def test_the_views_are_security_barrier_and_not_security_invoker(db: Db) -> None
 
 def test_the_scope_table_refuses_a_second_row(db: Db) -> None:
     _migrated(db)
-    _scope(db, _tenant(db, "a"))
-    other = _tenant(db, "b")
+    set_scope(db.conn, make_tenant(db.conn, "a"))
+    other = make_tenant(db.conn, "b")
 
     with pytest.raises(psycopg.errors.UniqueViolation):
-        _scope(db, other)
+        set_scope(db.conn, other)
 
 
 def test_the_scope_table_refuses_a_row_that_is_not_the_single_one(db: Db) -> None:
     _migrated(db)
-    tenant = _tenant(db, "a")
+    tenant = make_tenant(db.conn, "a")
 
     with pytest.raises(psycopg.errors.CheckViolation):
         db.conn.execute(
@@ -333,33 +276,33 @@ def test_the_migration_grants_the_role_nothing_on_the_views(db: Db) -> None:
 @pytest.mark.parametrize("view", VIEWS)
 def test_an_empty_scope_shows_no_rows(db: Db, view: str) -> None:
     schema = _migrated(db)
-    tenant = _tenant(db, "a")
-    _seed(db, tenant)
-    _allow_views(db, schema)
+    tenant = make_tenant(db.conn, "a")
+    seed_chain(db.conn, tenant)
+    allow_views(db.conn, schema)
 
     assert _as_role(db, f"SELECT count(*) FROM {view}") == [(0,)]
 
-    _scope(db, tenant)
+    set_scope(db.conn, tenant)
     assert _as_role(db, f"SELECT count(*) FROM {view}") == [(1,)]
 
 
 @pytest.mark.parametrize("view", VIEWS)
 def test_a_view_shows_only_the_scoped_tenant(db: Db, view: str) -> None:
     schema = _migrated(db)
-    tenant_a = _tenant(db, "a")
-    tenant_b = _tenant(db, "b")
-    ids_a = _seed(db, tenant_a)
-    ids_b = _seed(db, tenant_b)
-    _scope(db, tenant_a)
-    _allow_views(db, schema)
-    key = KEY_OF_VIEW[view]
+    tenant_a = make_tenant(db.conn, "a")
+    tenant_b = make_tenant(db.conn, "b")
+    ids_a = seed_chain(db.conn, tenant_a)
+    ids_b = seed_chain(db.conn, tenant_b)
+    set_scope(db.conn, tenant_a)
+    allow_views(db.conn, schema)
+    table = view.removeprefix("public_")
 
     shown = _as_role(db, f"SELECT id::text FROM {view}")
-    assert shown == [(ids_a[key],)]
+    assert shown == [(str(ids_a.of(table)),)]
 
     db.conn.execute("UPDATE public_demo_scope SET tenant_id = %s", (tenant_b,))
     shown = _as_role(db, f"SELECT id::text FROM {view}")
-    assert shown == [(ids_b[key],)]
+    assert shown == [(str(ids_b.of(table)),)]
 
 
 @pytest.mark.parametrize("table", BASE_TABLES)
@@ -367,7 +310,7 @@ def test_the_role_cannot_read_a_base_table_even_with_the_views(
     db: Db, table: str
 ) -> None:
     schema = _migrated(db)
-    _allow_views(db, schema)
+    allow_views(db.conn, schema)
 
     with pytest.raises(psycopg.errors.InsufficientPrivilege) as refused:
         _as_role(db, f"SELECT 1 FROM {table}")
@@ -380,7 +323,7 @@ def test_the_role_cannot_read_a_base_table_even_with_the_views(
 @pytest.mark.parametrize("statement", WRITES)
 def test_the_role_cannot_write_through_a_view(db: Db, statement: str) -> None:
     schema = _migrated(db)
-    _allow_views(db, schema)
+    allow_views(db.conn, schema)
 
     # A view that joins the scope table cannot be updated at all, so no grant
     # makes these succeed. The privilege check below is what pins the grant.
@@ -508,26 +451,26 @@ def _scoped_tenants(db: Db) -> list[str]:
 
 def test_the_scope_script_points_the_views_at_the_named_tenant(db: Db) -> None:
     schema = _migrated(db)
-    tenant = _tenant(db, "demo")
-    ids = _seed(db, tenant)
-    _allow_views(db, schema)
+    tenant = make_tenant(db.conn, "demo")
+    ids = seed_chain(db.conn, tenant)
+    allow_views(db.conn, schema)
 
     _run_scope_script(db, "demo")
 
-    assert _scoped_tenants(db) == [tenant]
-    assert _as_role(db, "SELECT id::text FROM public_jobs") == [(ids["job"],)]
+    assert _scoped_tenants(db) == [str(tenant)]
+    assert _as_role(db, "SELECT id::text FROM public_jobs") == [(str(ids.job),)]
 
 
 def test_running_the_scope_script_twice_for_the_same_tenant_changes_nothing(
     db: Db,
 ) -> None:
     _migrated(db)
-    tenant = _tenant(db, "demo")
+    tenant = make_tenant(db.conn, "demo")
     _run_scope_script(db, "demo")
 
     _run_scope_script(db, "demo")
 
-    assert _scoped_tenants(db) == [tenant]
+    assert _scoped_tenants(db) == [str(tenant)]
 
 
 def test_the_scope_script_refuses_an_unknown_tenant_name_and_changes_nothing(
@@ -546,20 +489,20 @@ def test_the_scope_script_refuses_to_move_the_views_to_another_tenant(
     db: Db,
 ) -> None:
     _migrated(db)
-    first = _tenant(db, "first")
-    _tenant(db, "second")
+    first = make_tenant(db.conn, "first")
+    make_tenant(db.conn, "second")
     _run_scope_script(db, "first")
 
     with pytest.raises(psycopg.Error) as refused:
         _run_scope_script(db, "second")
 
     assert "the views already show first" in str(refused.value)
-    assert _scoped_tenants(db) == [first]
+    assert _scoped_tenants(db) == [str(first)]
 
 
 def test_the_scope_script_grants_the_role_nothing(db: Db) -> None:
     schema = _migrated(db)
-    _tenant(db, "demo")
+    make_tenant(db.conn, "demo")
 
     _run_scope_script(db, "demo")
 
@@ -600,12 +543,12 @@ def _run_scope_script_with_psql(
 
 def test_the_scope_script_works_through_psql(db: Db) -> None:
     schema = _migrated(db)
-    tenant = _tenant(db, "demo")
+    tenant = make_tenant(db.conn, "demo")
 
     done = _run_scope_script_with_psql(db, schema, "demo")
 
     assert done.returncode == 0, done.stderr
-    assert _scoped_tenants(db) == [tenant]
+    assert _scoped_tenants(db) == [str(tenant)]
 
 
 def test_the_scope_script_refuses_an_unknown_name_through_psql(db: Db) -> None:
