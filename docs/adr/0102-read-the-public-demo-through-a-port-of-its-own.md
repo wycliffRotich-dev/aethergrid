@@ -123,6 +123,19 @@ optional, no tenant parameter on any method, and no field named for a
 private column or for usage. The clamp and the order are the reader's
 job and belong to decision 2. Decisions 2, 3, 5 to 7 and 9 are not built.
 
+2026-11-19. Decision 2 is built: app/infrastructure/public_read/ holds
+the Postgres reader. Its five queries are fixed strings, and a test reads
+the source of the package and refuses any other shape: a base table, a
+join, a star, a literal limit or a query built from text. A limit that
+is not an integer, a bool included, raises TypeError, and one below 1
+raises ValueError, both before the pool is used. A larger limit is cut
+to MAX_LIMIT, which is read at each call. Every read has its fixed order
+with the id last. The database tests run as the real read role. Removing
+an ORDER BY, removing the clamp, copying MAX_LIMIT at import time and
+pointing a query at a base table each turned tests red. Each time the
+file was restored and its hash compared. Decisions 3, 5 to 7 and 9 are
+not built.
+
 ## How to Verify
 
     pytest -q tests/architecture tests/presentation/public
