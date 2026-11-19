@@ -2,7 +2,10 @@
 
 ## Status
 
-Proposed.
+Accepted. The anonymous limiter, the choice of the counted address, the
+proxy hops setting and the middleware that applies the limiter to every
+request of the public app are implemented and tested. Four deliberate
+breaks of the wiring each turned tests red. Nothing is deployed.
 
 Related: ADR 0021, ADR 0094 and ADR 0102.
 
