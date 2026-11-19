@@ -38,6 +38,11 @@ callers. The limiter of ADR 0021 cannot be reused:
    the least recently used entry is dropped. A client whose entry was
    dropped starts again with a full bucket. That is the reason for the
    global bucket, which bounds the total load however clients rotate.
+   A new client that the global bucket refuses is not added to the table,
+   so a flood of refused addresses cannot evict clients that were
+   admitted. A client that is refused by its own bucket counts as
+   recently used, so a caller who keeps hitting an empty bucket cannot
+   have it dropped and refilled by rotating other addresses.
 4. A client key is the IPv4 address, the first 64 bits of an IPv6 address,
    or one shared key for a missing or unparseable address, so garbage
    cannot create keys. An IPv4 mapped IPv6 address is keyed as its IPv4
@@ -67,6 +72,7 @@ callers. The limiter of ADR 0021 cannot be reused:
 - Memory is bounded by max_clients, and a test floods the limiter with more
   addresses than that and checks the size.
 - The limiter takes a clock, so tests refill it exactly and nothing sleeps.
+  The clock is read inside the lock, and a step backwards adds no tokens.
 - Like ADR 0021, the state is local to the process. Two public processes
   have two limiters, so the public app is run as one process.
 - A flood from many networks can empty the global bucket and refuse real
