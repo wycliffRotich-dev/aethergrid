@@ -19,6 +19,16 @@ from app.infrastructure.database_credentials import read_password_file
 PUBLIC_APP_ROLE = "aethergrid_public_app"
 ALLOWED_KEYS = frozenset({"host", "port", "dbname", "user", "sslmode", "sslrootcert"})
 URL_SCHEMES = ("postgresql://", "postgres://")
+# ADR 0102, decision 3. The timeout is the two seconds of /health (ADR 0046),
+# so an anonymous caller does not hold a thread longer than a probe does.
+POOL_MIN_SIZE = 1
+POOL_MAX_SIZE = 5
+POOL_TIMEOUT_SECONDS = 2.0
+STATEMENT_TIMEOUT_MS = 2000
+CONNECTION_SETTINGS = (
+    ("statement_timeout", str(STATEMENT_TIMEOUT_MS)),
+    ("default_transaction_read_only", "on"),
+)
 REFUSAL = "the database URL of the public pool is not accepted"
 
 
@@ -49,6 +59,13 @@ def open_public_pool(
     check_database_url(database_url)
     password = read_password_file(password_file, password_file_setting)
 
+    options = " ".join(f"-c {name}={value}" for name, value in CONNECTION_SETTINGS)
+
     return ConnectionPool(
-        database_url, open=False, kwargs={"password": password}
+        database_url,
+        min_size=POOL_MIN_SIZE,
+        max_size=POOL_MAX_SIZE,
+        timeout=POOL_TIMEOUT_SECONDS,
+        open=False,
+        kwargs={"password": password, "autocommit": True, "options": options},
     )
