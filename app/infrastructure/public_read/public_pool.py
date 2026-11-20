@@ -25,6 +25,9 @@ POOL_MIN_SIZE = 1
 POOL_MAX_SIZE = 5
 POOL_TIMEOUT_SECONDS = 2.0
 STATEMENT_TIMEOUT_MS = 2000
+# The first connection is made at start, so it may need a TLS handshake. It
+# is not the wait of a visitor, which is POOL_TIMEOUT_SECONDS.
+STARTUP_TIMEOUT_SECONDS = 5.0
 CONNECTION_SETTINGS = (
     ("statement_timeout", str(STATEMENT_TIMEOUT_MS)),
     ("default_transaction_read_only", "on"),
@@ -53,6 +56,13 @@ def check_database_url(database_url: str) -> None:
         raise ValueError(REFUSAL) from None
 
 
+def _close_quietly(pool: ConnectionPool) -> None:
+    try:
+        pool.close()
+    except Exception:
+        return None
+
+
 def open_public_pool(
     database_url: str, password_file: str, password_file_setting: str
 ) -> ConnectionPool:
@@ -61,7 +71,7 @@ def open_public_pool(
 
     options = " ".join(f"-c {name}={value}" for name, value in CONNECTION_SETTINGS)
 
-    return ConnectionPool(
+    pool = ConnectionPool(
         database_url,
         min_size=POOL_MIN_SIZE,
         max_size=POOL_MAX_SIZE,
@@ -69,3 +79,18 @@ def open_public_pool(
         open=False,
         kwargs={"password": password, "autocommit": True, "options": options},
     )
+    failed = False
+
+    try:
+        pool.open(wait=True, timeout=STARTUP_TIMEOUT_SECONDS)
+    except Exception:
+        failed = True
+
+    if failed:
+        _close_quietly(pool)
+        raise RuntimeError(
+            "the public database pool could not open its first connection, "
+            f"check the database URL and {password_file_setting}"
+        ) from None
+
+    return pool
