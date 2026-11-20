@@ -124,13 +124,31 @@ function, and reading the file before the URL check. The last is caught
 by the URL tests, which pass a missing file with every refused URL. Each
 time the file was restored and its hash compared.
 
-open_public_pool still builds a pool that is not opened. It does not set
-the pool values or the connection options or wait for the first
-connection yet, and nothing calls it. Decisions 1, 5, 6 and 8 are not
-finished.
+2026-11-20. Decision 5 is built: open_public_pool gives the pool at least
+one and at most five connections, a wait of 2.0 seconds for a connection,
+and connections that commit each statement as it runs. Every connection
+starts read only with a statement timeout of 2000 ms. The values are
+named constants of the module. The connection keywords are exactly the
+password, the autocommit flag and the options, so nothing else can steer
+where the pool connects or how a session behaves. Six cases pin this.
+Eight deliberate breaks each turned tests red, and only the test that
+pins the value that was changed: the minimum size, the maximum size, the
+wait, autocommit, an emptied options string, a different statement
+timeout, a dropped read only option, an extra option and an extra
+connection keyword. Each time the file was restored and its hash
+compared. The tests read what the pool is given. They do not show that a
+connection to a real database takes these options, and they do not show
+that the 2000 ms of the options wins over the statement timeout that the
+login role carries (ADR 0099). The tests against the real database say
+so.
+
+open_public_pool still builds a pool that is not opened. It does not wait
+for the first connection yet, and nothing calls it. Decisions 1, 6 and 8
+are not finished.
 
 ## How to Verify
 
     pytest -q tests/architecture tests/presentation/public \
         tests/infrastructure/test_public_pool_url.py \
-        tests/infrastructure/test_public_pool_password.py
+        tests/infrastructure/test_public_pool_password.py \
+        tests/infrastructure/test_public_pool_settings.py
