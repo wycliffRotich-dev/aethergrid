@@ -142,13 +142,35 @@ that the 2000 ms of the options wins over the statement timeout that the
 login role carries (ADR 0099). The tests against the real database say
 so.
 
-open_public_pool still builds a pool that is not opened. It does not wait
-for the first connection yet, and nothing calls it. Decisions 1, 6 and 8
-are not finished.
+2026-11-20. Decision 6 is built: open_public_pool opens the pool and
+waits for one connection. When that fails, whatever the reason, it closes
+the pool and raises one fixed RuntimeError that names the password file
+setting it was given. The message, its repr, its chain and the log
+records hold no part of the URL, the password or the text of the driver.
+A pool that cannot close does not change the message. The wait for the
+first connection is 5.0 seconds. The ADR gave no number, so this one was
+chosen here: the first connection is made at start and may need a TLS
+handshake, and it is not the 2.0 seconds that a visitor waits. It is a
+first value, to be measured. Eight cases pin this. Seven deliberate
+breaks each turned tests red, and only the tests that pin what was
+changed: dropping the wait, a wait of 30 seconds, never closing the
+pool, keeping the error of the driver as the cause, writing the setting
+name into the function, handling only a pool timeout, and opening the
+pool twice. Each time the file was restored and its hash compared.
+
+The function catches Exception and not BaseException, so an interrupt
+during the first connection leaves the worker threads of the pool to
+stop with the process. At start the process ends anyway. The tests use a
+stand-in for the pool. They do not show that a real wrong password, an
+unreachable host or a role that cannot log in ends as this message. The
+tests against the real database say so.
+
+Nothing calls open_public_pool yet. Decisions 1 and 8 are not finished.
 
 ## How to Verify
 
     pytest -q tests/architecture tests/presentation/public \
         tests/infrastructure/test_public_pool_url.py \
         tests/infrastructure/test_public_pool_password.py \
-        tests/infrastructure/test_public_pool_settings.py
+        tests/infrastructure/test_public_pool_settings.py \
+        tests/infrastructure/test_public_pool_startup.py
