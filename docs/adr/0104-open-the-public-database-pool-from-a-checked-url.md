@@ -95,6 +95,28 @@ close it.
 - **Allow any user in the URL.** Rejected. A mistake would log the public
   app in as a role with more rights.
 
+## Progress
+
+2026-11-20. Decisions 2 and 3 are built: app/infrastructure/public_read/
+public_pool.py checks the URL the way libpq reads it. Only the listed
+keys pass, the user must be the public app role, and a hash sign in the
+database name is refused. Every refusal raises one fixed message that
+holds no part of the URL, before any file is read and before a pool
+exists. Twenty one cases pin this, five accepted and sixteen refused.
+Five deliberate breaks each turned tests red: removing the scheme check,
+the allowlist, the role check or the hash check, and raising without
+suppressing the context. The first break of the scheme check did not
+turn any test red, because the allowlist and the role check refused
+every case in the file. A keyword string with listed keys only passed
+without it. That case was added, and the break then failed it alone.
+Each time the file was restored and its hash compared.
+
+open_public_pool checks the URL and builds a pool that is not opened.
+It does not read the password file, set the pool values or wait for the
+first connection yet, and nothing calls it. Decisions 1 and 4 to 8 are
+not finished.
+
 ## How to Verify
 
-    pytest -q tests/architecture tests/presentation/public
+    pytest -q tests/architecture tests/presentation/public \
+        tests/infrastructure/test_public_pool_url.py
