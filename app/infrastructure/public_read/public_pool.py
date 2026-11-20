@@ -14,6 +14,8 @@ import psycopg
 from psycopg.conninfo import conninfo_to_dict
 from psycopg_pool import ConnectionPool
 
+from app.infrastructure.database_credentials import read_password_file
+
 PUBLIC_APP_ROLE = "aethergrid_public_app"
 ALLOWED_KEYS = frozenset({"host", "port", "dbname", "user", "sslmode", "sslrootcert"})
 URL_SCHEMES = ("postgresql://", "postgres://")
@@ -45,5 +47,8 @@ def open_public_pool(
     database_url: str, password_file: str, password_file_setting: str
 ) -> ConnectionPool:
     check_database_url(database_url)
+    password = read_password_file(password_file, password_file_setting)
 
-    return ConnectionPool(database_url, open=False)
+    return ConnectionPool(
+        database_url, open=False, kwargs={"password": password}
+    )
