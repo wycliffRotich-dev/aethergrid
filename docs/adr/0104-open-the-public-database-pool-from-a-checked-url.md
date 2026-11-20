@@ -111,12 +111,26 @@ every case in the file. A keyword string with listed keys only passed
 without it. That case was added, and the break then failed it alone.
 Each time the file was restored and its hash compared.
 
-open_public_pool checks the URL and builds a pool that is not opened.
-It does not read the password file, set the pool values or wait for the
-first connection yet, and nothing calls it. Decisions 1 and 4 to 8 are
-not finished.
+2026-11-20. Decision 4 is built: open_public_pool reads the password file
+with read_password_file and the setting name it is given, after the URL
+check, and hands the password to the pool as the password connection
+keyword. It is never part of the URL, so a password with characters that
+a URL escapes arrives as written. A file that is missing or empty stops
+the function before a pool exists, with the message of
+read_password_file, which names the given setting and no NEUROMESH
+variable. Nine cases pin this. Three deliberate breaks each turned tests
+red: naming the keyword differently, writing the setting name into the
+function, and reading the file before the URL check. The last is caught
+by the URL tests, which pass a missing file with every refused URL. Each
+time the file was restored and its hash compared.
+
+open_public_pool still builds a pool that is not opened. It does not set
+the pool values or the connection options or wait for the first
+connection yet, and nothing calls it. Decisions 1, 5, 6 and 8 are not
+finished.
 
 ## How to Verify
 
     pytest -q tests/architecture tests/presentation/public \
-        tests/infrastructure/test_public_pool_url.py
+        tests/infrastructure/test_public_pool_url.py \
+        tests/infrastructure/test_public_pool_password.py
