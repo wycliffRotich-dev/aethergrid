@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.presentation.public.app import create_public_app
 from app.presentation.public.settings import PublicSettings
+from tests.support.public_app import FakePublicReader
 
 ORIGIN = "https://demo.example.org"
 
@@ -20,7 +21,7 @@ def _client() -> TestClient:
         }
     )
 
-    return TestClient(create_public_app(settings))
+    return TestClient(create_public_app(settings, reader=FakePublicReader()))
 
 
 def test_the_configured_origin_is_allowed() -> None:

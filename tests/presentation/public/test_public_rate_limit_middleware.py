@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from app.application.public_rate_limiter import AnonymousRateLimiter
 from app.presentation.public.app import create_public_app
 from app.presentation.public.settings import PublicSettings
+from tests.support.public_app import FakePublicReader
 
 ORIGIN = "https://demo.example.org"
 URL = "postgresql://aethergrid_public@db.internal:5432/aethergrid"
@@ -60,7 +61,7 @@ def make_client(
         max_clients=100,
         clock=clock,
     )
-    app = create_public_app(make_settings(hops), limiter=limiter)
+    app = create_public_app(make_settings(hops), limiter=limiter, reader=FakePublicReader())
 
     return TestClient(app, client=(socket, 50000))
 
@@ -112,7 +113,7 @@ class TestCounting:
         assert client.get("/healthz").status_code == 429
 
     def test_the_default_limiter_is_active(self) -> None:
-        client = TestClient(create_public_app(make_settings(0)))
+        client = TestClient(create_public_app(make_settings(0), reader=FakePublicReader()))
 
         statuses = [client.get("/healthz").status_code for _ in range(60)]
 
@@ -120,7 +121,7 @@ class TestCounting:
         assert 429 in statuses
 
     def test_startup_and_shutdown_are_not_limited(self) -> None:
-        with TestClient(create_public_app(make_settings(0))) as client:
+        with TestClient(create_public_app(make_settings(0), reader=FakePublicReader())) as client:
             assert client.get("/healthz").status_code == 200
 
 

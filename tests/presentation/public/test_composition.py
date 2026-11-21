@@ -15,6 +15,7 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from app.presentation.public import composition
+from tests.support.public_app import PUBLIC_PATHS
 
 PASSWORD_SETTING = "AETHERGRID_PUBLIC_DATABASE_PASSWORD_FILE"
 URL = "postgresql://aethergrid_public_app@db.internal:5432/aethergrid"
@@ -100,12 +101,14 @@ def test_the_pool_is_closed_once_and_only_when_the_app_stops(
     assert opened.pool.closed == 1
 
 
-def test_the_composed_app_serves_only_the_health_route(opened: FakeOpen) -> None:
+def test_the_composed_app_serves_the_health_route_and_the_five_public_routes(
+    opened: FakeOpen,
+) -> None:
     app = composition.create_app(ENVIRONMENT)
 
     paths = {route.path for route in app.routes if isinstance(route, APIRoute)}
 
-    assert paths == {"/healthz"}
+    assert paths == PUBLIC_PATHS
 
 
 def test_the_process_environment_is_the_default(

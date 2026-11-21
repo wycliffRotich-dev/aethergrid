@@ -118,3 +118,8 @@ repository interfaces) cannot be built, because the public role has no
 privilege on any base table and the public views carry no tenant. ADR
 0102 replaces it with a read port of its own. ADR 0102 is Proposed, so
 nothing is built from it yet.
+
+2026-11-21. The tests that every route is rate limited and that every
+response model is a public schema are now written, in
+tests/presentation/public/test_public_app_guards.py. The sentence above
+that says they are not written is out of date and is left as written.

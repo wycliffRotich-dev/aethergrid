@@ -16,18 +16,19 @@ import pytest
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
+from pydantic import BaseModel
 
+from app.application.public_rate_limiter import AnonymousRateLimiter
 from app.presentation.public.app import create_public_app
 from app.presentation.public.settings import PublicSettings
 from tests.support.import_boundary import FORBIDDEN_PREFIXES, imported_names
+from tests.support.public_app import PUBLIC_PATHS, FakePublicReader, make_settings
 
 PACKAGE = Path(__file__).resolve().parents[3] / "app" / "presentation" / "public"
 
 ORIGIN = "https://demo.example.org"
 
-# Every path the public app serves. A route is added here on purpose, in
-# the same change that adds the route.
-ALLOWED_PATHS = {"/healthz"}
+ALLOWED_PATHS = PUBLIC_PATHS
 
 FORBIDDEN_SERVICE_WORDS = (
     "create_",
@@ -59,7 +60,7 @@ def _settings() -> PublicSettings:
 
 
 def _app():
-    return create_public_app(_settings())
+    return create_public_app(_settings(), reader=FakePublicReader())
 
 
 def _imported_modules() -> list[tuple[str, int, str]]:
@@ -123,7 +124,7 @@ def test_a_lifespan_runs_on_entry_and_exit_and_adds_no_handler() -> None:
         yield
         events.append("exit")
 
-    app = create_public_app(_settings(), lifespan=lifespan)
+    app = create_public_app(_settings(), lifespan=lifespan, reader=FakePublicReader())
 
     assert events == []
 
@@ -134,6 +135,93 @@ def test_a_lifespan_runs_on_entry_and_exit_and_adds_no_handler() -> None:
     assert events == ["enter", "exit"]
     assert app.router.on_startup == []
     assert app.router.on_shutdown == []
+
+
+RESPONSES_MODULE = "app.presentation.public.responses"
+
+
+def _unlimited_paths(app: FastAPI) -> list[str]:
+    """
+    Paths whose second request from one caller is not refused. Each path
+    gets a caller of its own, so one path cannot use up the bucket of
+    another.
+    """
+    unlimited: list[str] = []
+    paths = [r.path for r in app.routes if isinstance(r, APIRoute)]
+
+    for index, path in enumerate(paths):
+        client = TestClient(app, client=(f"203.0.113.{index + 1}", 50000))
+        client.get(path)
+        if client.get(path).status_code != 429:
+            unlimited.append(path)
+
+    return unlimited
+
+
+def _model_modules(app: FastAPI) -> dict[str, str]:
+    """The module of the response model, or of its list element, per route."""
+    found: dict[str, str] = {}
+
+    for route in app.routes:
+        if isinstance(route, APIRoute) and route.response_model is not None:
+            model = route.response_model
+            args = getattr(model, "__args__", None)
+            found[route.path] = (args[0] if args else model).__module__
+
+    return found
+
+
+def _limited_app() -> FastAPI:
+    limiter = AnonymousRateLimiter(
+        client_capacity=1,
+        client_refill_per_second=0.001,
+        global_capacity=1000,
+        global_refill_per_second=1000.0,
+        max_clients=20,
+    )
+
+    return create_public_app(make_settings(), limiter=limiter, reader=FakePublicReader())
+
+
+def test_every_route_is_rate_limited() -> None:
+    app = _limited_app()
+
+    assert {r.path for r in app.routes if isinstance(r, APIRoute)} == ALLOWED_PATHS
+    assert _unlimited_paths(app) == []
+
+
+def test_the_rate_limit_check_flags_a_route_outside_the_limiter() -> None:
+    bare = FastAPI()
+
+    @bare.get("/open")
+    def open_route() -> dict[str, str]:
+        return {"status": "ok"}
+
+    assert _unlimited_paths(bare) == ["/open"]
+
+
+def test_every_response_model_is_a_public_schema() -> None:
+    modules = _model_modules(_app())
+
+    assert modules.pop("/healthz", "builtins") == "builtins"
+    assert set(modules) == ALLOWED_PATHS - {"/healthz"}
+    assert set(modules.values()) == {RESPONSES_MODULE}
+
+
+def test_the_model_check_flags_a_private_schema() -> None:
+    class Private(BaseModel):
+        name: str
+
+    Private.__module__ = "app.presentation.schemas.list_nodes_response"
+    bare = FastAPI()
+
+    @bare.get("/private", response_model=list[Private])
+    def private_route() -> list[Private]:
+        return []
+
+    assert _model_modules(bare) == {
+        "/private": "app.presentation.schemas.list_nodes_response"
+    }
 
 
 def _forbidden_imports(modules: list[tuple[str, int, str]]) -> list[str]:

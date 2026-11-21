@@ -4,8 +4,8 @@ The composition root of the public app (ADR 0102, decision 6).
 It reads the environment, opens the public pool and gives the app a
 lifespan that closes the pool once when the app stops. It imports only
 modules of app.infrastructure.public_read, never psycopg_pool, so the
-pool is typed by the one method this file uses. The reader is not built
-here yet, because no route uses it.
+pool is typed by the one method this file uses. It also builds the
+reader of the routes on that pool.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from typing import Protocol
 
 from fastapi import FastAPI
 
+from app.infrastructure.public_read.postgres_public_reader import PostgresPublicReader
 from app.infrastructure.public_read.public_pool import open_public_pool
 from app.presentation.public.app import create_public_app
 from app.presentation.public.settings import (
@@ -51,7 +52,10 @@ def create_app(environment: Mapping[str, str] | None = None) -> FastAPI:
         DATABASE_PASSWORD_FILE_SETTING,
     )
     try:
-        return create_public_app(settings, lifespan=_close_pool_on_exit(pool))
+        reader = PostgresPublicReader(pool)
+        return create_public_app(
+            settings, lifespan=_close_pool_on_exit(pool), reader=reader
+        )
     except BaseException:
         # A failing close must not hide the error that stopped construction.
         with suppress(Exception):
