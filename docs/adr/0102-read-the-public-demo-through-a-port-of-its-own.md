@@ -69,6 +69,13 @@ application services and repository interfaces. That cannot be built:
 9. Public responses name allocation, not use. The views hold capacity and
    available, so a bar shows the allocated share, capacity minus
    available. No field or label says usage or utilization.
+10. Reads in flight are capped. The limiter of ADR 0103 bounds the rate
+    of requests and not the number that run at once, and a route that
+    waits on the database holds a server thread. The public app lets
+    MAX_READS_IN_FLIGHT reads run at once, 20, and answers a read past
+    that at once with the fixed 503 of decision 7, without asking the
+    port. The health route does not use a thread. The value is a first
+    choice and is not measured.
 
 ## Consequences
 
@@ -225,6 +232,84 @@ claimed: safe to expose.
 are out of date. Decision 3 was built by ADR 0104. The entry above that
 says decisions 6, 7 and 9 are not built is out of date in one part:
 decision 6 is built except the reader. Those lines are left as written.
+
+2026-11-21. Decisions 5, 7 and 9 are built, decision 6 is complete and
+decision 10 is added. create_public_app takes the reader and serves five
+GET routes next to /healthz: /public/nodes, /public/jobs, /public/workers,
+/public/leases and /public/events. Each route asks the port for ROW_LIMIT
+rows, 100, and returns a list of a public model. The models are in
+app/presentation/public/responses.py. Their fields equal the port records
+in order, and the module imports nothing from app.presentation.schemas. A
+node also carries allocated_cpu_cores, allocated_memory_mib and
+allocated_vram_mib, which are capacity minus available, and an available
+amount above capacity is refused. No field or text says usage or
+utilization. The composition root builds the reader from the pool and
+hands it to create_public_app, which completes decision 6.
+
+When the read, or the mapping of its rows, raises an Exception, the route
+returns 503 with the fixed body {"error":"unavailable"} and the failure
+goes to the log. A stop signal or a cancellation is not caught. A 503
+carries content-length, content-type, vary and, when the request has an
+Origin, access-control-allow-origin, and a test pins that set for each
+route and keeps the failure text out of every header value. ROW_LIMIT is a
+request. The clamp of the reader to MAX_LIMIT is what bounds the rows, and
+a test seeds MAX_LIMIT plus 5 rows and shows that each route returns
+exactly 100, even with ROW_LIMIT patched to 10000.
+
+Decision 10 came from a test. With 40 reads held in the reader, the health
+route waited behind them, because every route was a plain function and
+shared the server threads. The health route is now async def, and a gate
+of MAX_READS_IN_FLIGHT reads, one for each app, refuses a read past the
+cap at once. Tests run every request in one event loop, because the thread
+limiter belongs to the loop. They show that the 21st read gets the fixed
+503, that the cap frees when the reads end, that the health route answers
+with every thread held even when the cap is patched to 1000, that the cap
+leaves threads free, and that each app has a cap of its own.
+
+The two guard tests that ADR 0094 listed as not written now exist in
+tests/presentation/public/test_public_app_guards.py: every route is rate
+limited, and every response model is a public schema. Each comes with an
+app that breaks the rule, so the helper is shown able to fail. The public
+root cannot import psycopg_pool, so it types the pool with a Protocol, and
+a test requires the real pool to have each method of that Protocol.
+
+Forty-three tests cover the response models, and fifteen mutations of them
+were killed. Eleven mutations of the routes were tried against a fake
+reader: the row limit, an except that names ValueError, an except that
+names BaseException, status 500, the body, the log call, the wrong model,
+the wrong reader method, the limiter removed, a sixth route and a route
+missing from the test table. Ten turned tests red at first. The except on
+BaseException survived, because nothing sent a stop signal, and tests that
+raise one now close it. Against the real database, as
+aethergrid_public_app, five more turned tests red: the reader clamp
+removed, an except that names ValueError, a lifespan that closes the pool
+with a wrong call, the nodes route reading jobs, and a 503 body that names
+the exception class. Raising ROW_LIMIT to 100000 stays green by design,
+because the clamp is the guard. Five mutations of the cap turned tests
+red: a gate that is never released, a cap of 1000, a plain def health
+route, one gate shared by every app and a gate that blocks. Two survived
+at first, the plain def and the shared gate, and three tests closed them.
+Renaming the close call turned six tests red, two of them the Protocol
+tests. A server header, an x-error header and a vary header that holds the
+failure text each turned the header test red. Each time the file was
+restored and its hash compared.
+
+The real database tests check that each route returns only the scoped
+rows, that the JSON equals the model of the records of the reader, and
+that no tenant_id, command, labels or payload key appears at any depth. A
+closed pool, a revoked grant and an exhausted pool each give the fixed
+503, and the pool recovers after the exhaustion. For those three failures
+the password, the URL string and the path of the password file appear in
+no response and no log, and a test shows that this check can fail.
+
+Nothing here shows what a deployed app can reach at run time. Not
+claimed: safe to expose.
+
+2026-11-21. Correction. Earlier entries that say the reader or the routes
+are not built, among them the allowlist entry that ends with the routes of
+decision 5 and decisions 6, 7 and 9 not built, and the entry that says
+decision 6 is built except the reader, are out of date. Those lines are
+left as written.
 
 ## How to Verify
 
