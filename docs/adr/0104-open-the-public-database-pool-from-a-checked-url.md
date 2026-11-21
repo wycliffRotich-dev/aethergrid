@@ -2,7 +2,10 @@
 
 ## Status
 
-Proposed.
+Accepted. The URL check, the password file, the pool values and options,
+and the wait for the first connection are implemented and tested,
+including against a real database. Nothing calls open_public_pool yet
+and nothing is deployed.
 
 Related: ADR 0046, ADR 0094, ADR 0097, ADR 0099 and ADR 0102.
 
@@ -165,7 +168,34 @@ stand-in for the pool. They do not show that a real wrong password, an
 unreachable host or a role that cannot log in ends as this message. The
 tests against the real database say so.
 
-Nothing calls open_public_pool yet. Decisions 1 and 8 are not finished.
+2026-11-21. Decision 8 is built: the tests against a real database log in
+as aethergrid_public_app with the password that the role script stored,
+through open_public_pool. Nine cases pass and none is skipped. They need
+psql on the machine and skip without it. The reader returns exactly the
+rows of the shown tenant from the five views, while the owner sees the
+rows of both tenants. None of the eight base tables can be read, and a
+deliberate grant on one of them makes the same read succeed. A pool
+connection shows a statement timeout of 2s and read only on, and a plain
+login as the same role shows 5s and read only off, so the options win
+over the defaults of the role. A sleep of 3 seconds is cancelled on the
+pool and finishes on the plain login. A wrong password and an
+unreachable host each end as the fixed message, with no part of the
+password in the message, its repr or the log records. The owner password
+is removed from the environment in these tests, so libpq cannot stand in
+for the right one.
+
+Decision 6 says that the log records never hold the URL or the text of
+the driver. That is corrected here. It was shown only with a stand-in for
+the pool, and the first run against a real unreachable host failed it.
+The driver writes its own warning to the psycopg.pool logger, and the
+warning names the host and the port. The password, the URL string and the
+path of the password file are not in those logs, and a test pins that.
+The text goes to the log of the operator, who needs it to learn why the
+first connection failed, so the logger is not silenced. Decision 7 of ADR
+0102 is meant to keep it out of every response, and it is not built yet.
+The message, its repr and its chain still hold no part of the URL.
+
+Nothing calls open_public_pool yet. All eight decisions are built.
 
 ## How to Verify
 
@@ -174,3 +204,7 @@ Nothing calls open_public_pool yet. Decisions 1 and 8 are not finished.
         tests/infrastructure/test_public_pool_password.py \
         tests/infrastructure/test_public_pool_settings.py \
         tests/infrastructure/test_public_pool_startup.py
+
+    NEUROMESH_TEST_DATABASE_URL=postgresql://neuromesh@127.0.0.1:5433/neuromesh_test \
+    NEUROMESH_DATABASE_PASSWORD_FILE=./secrets/postgres_password.local \
+    pytest -q tests/infrastructure/test_public_pool_real_database.py
