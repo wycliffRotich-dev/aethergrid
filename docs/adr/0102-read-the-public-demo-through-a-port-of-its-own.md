@@ -162,6 +162,70 @@ package included. Nothing here shows what the deployed app can reach at
 run time. public_read_port is on the list before anything imports it.
 The routes of decision 5 and decisions 6, 7 and 9 are not built.
 
+2026-11-21. Decision 6 is built except the reader. app/public_main.py
+imports only app.presentation.public.composition, and importing it opens
+nothing. create_app in that module reads the environment, builds the
+public settings, opens the pool through open_public_pool with the name of
+the public password setting, and gives create_public_app a lifespan that
+closes the pool once when the app stops. A bad setting stops construction
+before the pool opens, a pool that fails to open passes its fixed error
+on, and a failure after the pool opened closes it and re-raises.
+create_public_app only forwards the lifespan and never learns what a pool
+is. The reader is not built here, because no route uses it. It arrives
+with the first route, and decision 6 is not complete until then.
+
+The layer rule is narrower than decision 6, which only forbids
+psycopg_pool in the public root. The layer test now holds two tables.
+ENTRY_POINTS maps each entry file to the one module it may import, matched
+exactly. COMPOSITION_ROOTS maps each root to an infrastructure prefix,
+matched with the dot. The public root may import only
+app.infrastructure.public_read modules, so psycopg_pool, psycopg, a
+private repository, the credential reader and a bare app.infrastructure
+are all refused. Because it cannot name ConnectionPool, it types the pool
+with a small Protocol that has close. Each new row comes with a refused
+case. Thirteen mutations of the tables each turned the predicted tests
+red, and two of them showed a gap in the exact match of the entry rule,
+which was then closed.
+
+Seven mutations of the composition code, each with the file restored and
+its hash compared, turned the predicted tests red and no others: dropping
+the close, closing twice, closing at construction, skipping the close
+after a construction failure, a wrong setting name, reading the
+environment at import time and not passing the lifespan on. A test
+against the real database logs in as aethergrid_public_app, enters and
+leaves the lifespan and checks that the pool is closed only after it. It
+skips without psql. Dropping the close and closing before the yield each
+turned it red.
+
+A pool that fails to close when the app stops is not hidden: the error
+leaves the lifespan. A close that fails after a construction failure is
+suppressed, so the error that stopped construction is the one raised.
+Removing that suppression and making the lifespan swallow the close error
+each turned the matching test red. A test starts the real command,
+uvicorn app.public_main:create_app --factory, as a separate process with a
+password file that does not exist. The process exits with a non-zero code
+and the fixed message of read_password_file, no server starts and the
+database host does not appear in the output. A wrong setting name turned
+it red. It needs no database.
+
+The guards test of the public package held its own forbidden list, four
+entries against seven in the import boundary test, and a scan that read
+only the module of each import and matched without the dot. Both tests
+now read one list, FORBIDDEN_PREFIXES in tests/support/import_boundary.py,
+and the guards test uses the shared scan. Emptying the list in the guards
+test survived at first, because the real package is clean and nothing fed
+the check a bad import. The check is now a function with a test that feeds
+it a listed prefix and a near miss, and emptying the list and removing the
+dot each turned that test red.
+
+Nothing here shows what a deployed app can reach at run time. Not
+claimed: safe to expose.
+
+2026-11-21. Correction. Earlier entries that list decision 3 as not built
+are out of date. Decision 3 was built by ADR 0104. The entry above that
+says decisions 6, 7 and 9 are not built is out of date in one part:
+decision 6 is built except the reader. Those lines are left as written.
+
 ## How to Verify
 
     pytest -q tests/architecture tests/presentation/public

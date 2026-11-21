@@ -8,14 +8,18 @@ is reachable from the package.
 from __future__ import annotations
 
 import ast
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from app.presentation.public.app import create_public_app
 from app.presentation.public.settings import PublicSettings
+from tests.support.import_boundary import FORBIDDEN_PREFIXES, imported_names
 
 PACKAGE = Path(__file__).resolve().parents[3] / "app" / "presentation" / "public"
 
@@ -25,12 +29,6 @@ ORIGIN = "https://demo.example.org"
 # the same change that adds the route.
 ALLOWED_PATHS = {"/healthz"}
 
-FORBIDDEN_IMPORT_PREFIXES = (
-    "app.presentation.routers",
-    "app.presentation.dependencies",
-    "app.presentation.api",
-    "app.application.workers",
-)
 FORBIDDEN_SERVICE_WORDS = (
     "create_",
     "drain_",
@@ -66,15 +64,14 @@ def _app():
 
 def _imported_modules() -> list[tuple[str, int, str]]:
     found: list[tuple[str, int, str]] = []
+    root = PACKAGE.parents[2]
 
     for path in sorted(PACKAGE.rglob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                found += [(path.name, node.lineno, a.name) for a in node.names]
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                found.append((path.name, node.lineno, node.module))
+        package = ".".join(path.parent.relative_to(root).parts)
+        source = path.read_text(encoding="utf-8")
+        found += [
+            (path.name, line, name) for line, name in imported_names(source, package)
+        ]
 
     return found
 
@@ -117,11 +114,33 @@ def test_the_app_starts_nothing() -> None:
     assert app.router.on_shutdown == []
 
 
-def test_the_package_imports_nothing_that_writes_or_schedules() -> None:
+def test_a_lifespan_runs_on_entry_and_exit_and_adds_no_handler() -> None:
+    events: list[str] = []
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        events.append("enter")
+        yield
+        events.append("exit")
+
+    app = create_public_app(_settings(), lifespan=lifespan)
+
+    assert events == []
+
+    with TestClient(app) as client:
+        assert events == ["enter"]
+        assert client.get("/healthz").status_code == 200
+
+    assert events == ["enter", "exit"]
+    assert app.router.on_startup == []
+    assert app.router.on_shutdown == []
+
+
+def _forbidden_imports(modules: list[tuple[str, int, str]]) -> list[str]:
     bad: list[str] = []
 
-    for name, line, module in _imported_modules():
-        if module.startswith(FORBIDDEN_IMPORT_PREFIXES):
+    for name, line, module in modules:
+        if any(module == p or module.startswith(p + ".") for p in FORBIDDEN_PREFIXES):
             bad.append(f"{name}:{line} imports {module}")
 
         if module.startswith("app.application.services."):
@@ -129,7 +148,24 @@ def test_the_package_imports_nothing_that_writes_or_schedules() -> None:
             if any(word in leaf for word in FORBIDDEN_SERVICE_WORDS):
                 bad.append(f"{name}:{line} imports the service {leaf}")
 
+    return bad
+
+
+def test_the_package_imports_nothing_that_writes_or_schedules() -> None:
+    bad = _forbidden_imports(_imported_modules())
+
     assert bad == [], "\n" + "\n".join(bad)
+
+
+def test_the_check_flags_a_listed_prefix_and_keeps_the_dot_boundary() -> None:
+    modules = [
+        ("x.py", 1, "app.infrastructure.repositories.node_repository"),
+        ("x.py", 2, "app.presentation.apiary"),
+    ]
+
+    assert _forbidden_imports(modules) == [
+        "x.py:1 imports app.infrastructure.repositories.node_repository"
+    ]
 
 
 def test_the_check_would_flag_a_forbidden_import() -> None:

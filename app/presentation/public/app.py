@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.types import Lifespan
 
 from app.application.public_rate_limiter import AnonymousRateLimiter
 from app.presentation.public.rate_limit_middleware import (
@@ -21,12 +22,14 @@ from app.presentation.public.settings import PublicSettings
 def create_public_app(
     settings: PublicSettings,
     limiter: AnonymousRateLimiter | None = None,
+    lifespan: Lifespan[FastAPI] | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="AetherGrid public demo",
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
+        lifespan=lifespan,
     )
 
     app.add_middleware(
