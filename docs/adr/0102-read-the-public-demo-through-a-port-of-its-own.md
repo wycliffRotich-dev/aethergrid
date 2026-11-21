@@ -136,6 +136,32 @@ pointing a query at a base table each turned tests red. Each time the
 file was restored and its hash compared. Decisions 3, 5 to 7 and 9 are
 not built.
 
+
+2026-11-21. The allowlist half of decision 5 is enforced. The text of
+decision 5 says one module. The public app already imports the rate
+limiter of ADR 0103, so the allowlist holds two, public_rate_limiter and
+public_read_port, and this entry corrects the count without changing the
+decision. The import boundary test of ADR 0094 matches them by exact
+module name. Any other module under app.application is refused, among
+them scheduler_leadership and a near miss named public_read_port_extra,
+and so is a bare import of app.application. The prefixes
+app.infrastructure.repositories and
+app.infrastructure.database_credentials are forbidden. Eleven mutations
+of the scan and of the constants were tried. Ten turned tests red: a gate
+that accepts every module, a prefix match without the dot, the wrong path
+segment, each forbidden prefix removed, each allowed module removed and a
+refused module added. One survived at first: the scan of the real package
+could stop passing the allowlist and stay green, because that package is
+flat and clean. A test that scans a temporary directory with a top level
+file and a nested file closed it, and five mutations of the shared scan
+helper then turned that test red. Each time the file was restored and its
+hash compared. What the tests do not show: the scan reads source text, so
+an import made through importlib is not seen by it. The layer test flags
+__import__ and import_module calls in every file under app, the public
+package included. Nothing here shows what the deployed app can reach at
+run time. public_read_port is on the list before anything imports it.
+The routes of decision 5 and decisions 6, 7 and 9 are not built.
+
 ## How to Verify
 
     pytest -q tests/architecture tests/presentation/public

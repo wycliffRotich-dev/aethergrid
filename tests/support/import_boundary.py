@@ -3,8 +3,9 @@ Static import scan used by the ADR 0094 boundary tests.
 
 It resolves every import statement to the dotted names Python would load,
 including relative imports and the names that "from package import name"
-brings in, then checks them against a list of forbidden prefixes and an
-allowlist of application services.
+brings in, then checks them against a list of forbidden prefixes, an
+allowlist of application services, and an optional allowlist of the other
+application modules, matched by exact module name.
 
 It reads source text only. An import made at run time through importlib
 or __import__ is not seen here.
@@ -16,6 +17,7 @@ import ast
 from collections.abc import Iterable
 
 SERVICES = "app.application.services"
+APPLICATION = "app.application"
 
 
 def _resolve(module: str | None, level: int, package: str) -> str:
@@ -64,8 +66,15 @@ def violations(
     package: str,
     forbidden_prefixes: Iterable[str],
     allowed_services: frozenset[str],
+    allowed_application_modules: frozenset[str] | None = None,
 ) -> list[str]:
-    """Return one message for each import that crosses the boundary."""
+    """
+    Return one message for each import that crosses the boundary.
+
+    Services are checked by the allowed_services rule. Every other module
+    under app.application is checked by exact module name against
+    allowed_application_modules. None switches that second rule off.
+    """
     prefixes = tuple(forbidden_prefixes)
     problems: list[str] = []
 
@@ -80,6 +89,15 @@ def violations(
                 problems.append(
                     f"line {line} imports {name}, "
                     "a service that is not on the allowlist"
+                )
+        elif allowed_application_modules is not None and _under(name, APPLICATION):
+            parts = name.split(".")
+            module = parts[2] if len(parts) > 2 else None
+
+            if module is None or module not in allowed_application_modules:
+                problems.append(
+                    f"line {line} imports {name}, "
+                    "an application module that is not on the allowlist"
                 )
 
     return problems
