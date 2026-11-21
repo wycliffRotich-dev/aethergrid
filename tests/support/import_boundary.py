@@ -19,6 +19,18 @@ from collections.abc import Iterable
 SERVICES = "app.application.services"
 APPLICATION = "app.application"
 
+# Modules the public package may never import (ADR 0094, ADR 0102).
+# Both public package tests read this one list.
+FORBIDDEN_PREFIXES = (
+    "app.presentation.routers",
+    "app.presentation.dependencies",
+    "app.presentation.api",
+    "app.presentation.schemas",
+    "app.application.workers",
+    "app.infrastructure.repositories",
+    "app.infrastructure.database_credentials",
+)
+
 
 def _resolve(module: str | None, level: int, package: str) -> str:
     if level == 0:

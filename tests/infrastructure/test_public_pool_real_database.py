@@ -24,12 +24,14 @@ from urllib.parse import urlparse, urlunparse
 
 import psycopg
 import pytest
+from fastapi.testclient import TestClient
 from psycopg_pool import ConnectionPool
 
 from app.infrastructure.public_read import public_pool
 from app.infrastructure.public_read.postgres_public_reader import (
     PostgresPublicReader,
 )
+from app.presentation.public import composition
 from tests.infrastructure.test_baseline_migration import Db
 from tests.infrastructure.test_public_app_role_script import (
     APP_ROLE,
@@ -260,3 +262,45 @@ def test_the_driver_logs_hold_neither_the_password_nor_the_url_string(
     assert login.password not in caplog.text
     assert url not in caplog.text
     assert login.password_file not in caplog.text
+
+
+def test_the_lifespan_closes_the_real_pool_when_the_app_stops(
+    login: Login, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    opened: list[ConnectionPool] = []
+
+    def recording(
+        database_url: str, password_file: str, password_file_setting: str
+    ) -> ConnectionPool:
+        made = public_pool.open_public_pool(
+            database_url, password_file, password_file_setting
+        )
+        opened.append(made)
+
+        return made
+
+    monkeypatch.setattr(composition, "open_public_pool", recording)
+    environment = {
+        "AETHERGRID_PUBLIC_ALLOWED_ORIGIN": "https://demo.example.org",
+        "AETHERGRID_PUBLIC_DATABASE_URL": login.url,
+        SETTING: login.password_file,
+        "AETHERGRID_PUBLIC_TRUSTED_PROXY_HOPS": "1",
+    }
+
+    try:
+        app = composition.create_app(environment)
+
+        assert len(opened) == 1
+        assert not opened[0].closed
+
+        with TestClient(app) as client:
+            assert client.get("/healthz").status_code == 200
+            with opened[0].connection() as conn:
+                row = conn.execute("SELECT current_user").fetchone()
+            assert row == (APP_ROLE,)
+            assert not opened[0].closed
+
+        assert opened[0].closed
+    finally:
+        for made in opened:
+            made.close()

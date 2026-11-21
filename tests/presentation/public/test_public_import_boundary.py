@@ -21,20 +21,15 @@ from pathlib import Path
 
 import pytest
 
-from tests.support.import_boundary import imported_names, violations
+from tests.support.import_boundary import (
+    FORBIDDEN_PREFIXES,
+    imported_names,
+    violations,
+)
 
 PACKAGE = "app.presentation.public"
 PACKAGE_DIR = Path(__file__).resolve().parents[3] / "app" / "presentation" / "public"
 
-FORBIDDEN_PREFIXES = (
-    "app.presentation.routers",
-    "app.presentation.dependencies",
-    "app.presentation.api",
-    "app.presentation.schemas",
-    "app.application.workers",
-    "app.infrastructure.repositories",
-    "app.infrastructure.database_credentials",
-)
 ALLOWED_SERVICES: frozenset[str] = frozenset()
 ALLOWED_APPLICATION_MODULES: frozenset[str] = frozenset(
     {"public_rate_limiter", "public_read_port"}
@@ -64,6 +59,8 @@ def _violations(source: str) -> list[str]:
         "from ..routers import nodes",
         "from .. import dependencies",
         "from ...application.workers import loop",
+        "from app.infrastructure.repositories.node_repository import X",
+        "import app.infrastructure.database_credentials",
     ],
 )
 def test_an_import_of_the_private_api_is_flagged(source: str) -> None:
