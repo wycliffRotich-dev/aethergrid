@@ -160,3 +160,32 @@ exactly the identity primitive this check needs. Introducing a
 second, weaker comparison (e.g. "is the lease's acquired_at
 still what I remember") would be strictly worse than reusing an
 identifier this codebase already trusts elsewhere.
+
+## Progress
+
+2026-11-22. A flaw in the release fence was found and fixed. The
+Decision above compares the lease id with the lease read for the
+worker, and then deleted by job id. A reclaim, followed by a new lease
+for the same job, landing between that read and the delete would have
+removed the new lease on behalf of the stale caller. The port now has
+delete_by_id(lease_id, tenant_id). It returns True only when a row with
+that id in that tenant was removed, and in PostgreSQL it is one DELETE
+with the id and the tenant in its WHERE clause. ReleaseLeaseService
+calls it, and when it removes nothing the service raises
+LeaseNotFoundError before any LeaseReleased event is recorded. The
+delete by job id stays for reclaim_job, which has no lease id to name.
+Ten cases pin this: four contract cases on each of the in-memory and
+PostgreSQL repositories (removes the lease, unknown id, a newer lease on
+the same job, another tenant), and one window case on each of them. The
+window cases wrap the repository so that the lease just read is
+reclaimed and another worker takes a new lease on the same job before
+the delete. The PostgreSQL window case runs against the real database.
+All ten failed before the change. Seven deliberate breaks each turned
+tests red, and only the tests that pin what was changed: PostgreSQL
+ignoring the id (3 cases), ignoring the tenant (1), always returning
+True (4); the release service ignoring a False result (2); the
+in-memory repository ignoring the tenant (1), always returning True (4),
+ignoring the id (3). Each time the file was restored and its hash
+compared.
+
+Not claimed: safe to expose.

@@ -185,6 +185,25 @@ class PostgresLeaseRepository(LeaseRepository):
             )
             return cursor.rowcount > 0
 
+    def delete_by_id(
+        self,
+        lease_id: UUID,
+        tenant_id: TenantId,
+    ) -> bool:
+        with self._pool.connection() as conn:
+            cursor = conn.execute(
+                """
+                DELETE FROM leases
+                WHERE id = %(id)s
+                AND tenant_id = %(tenant_id)s
+                """,
+                {
+                    "id": str(lease_id),
+                    "tenant_id": str(tenant_id.value),
+                },
+            )
+            return cursor.rowcount > 0
+
     @staticmethod
     def _to_entity(row: dict[str, Any]) -> Lease:
         return Lease(

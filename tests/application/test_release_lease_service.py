@@ -453,3 +453,61 @@ def test_execute_raises_and_preserves_an_unrelated_lease_after_reclaim_and_reacq
     surviving = lease_repository.get_by_worker_id(worker.id, worker.tenant_id)
     assert surviving is not None
     assert surviving.id == replacement_lease.id
+
+
+
+class _SwapAfterReadLeaseRepository(InMemoryLeaseRepository):
+    """
+    Right after the first read by worker id, the lease that was read
+    is reclaimed and another worker takes a new lease on the same
+    job. This is the gap between the identity check and the delete.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.replacement: Lease | None = None
+
+    def get_by_worker_id(
+        self,
+        worker_id: WorkerId,
+        tenant_id: TenantId,
+    ) -> Lease | None:
+        lease = super().get_by_worker_id(worker_id, tenant_id)
+
+        if lease is not None and self.replacement is not None:
+            replacement, self.replacement = self.replacement, None
+            self.delete(lease.job_id, lease.tenant_id)
+            self.save(replacement)
+
+        return lease
+
+
+def test_execute_leaves_a_lease_taken_after_the_read_when_the_original_is_reclaimed() -> None:
+    worker, job = _make_worker_with_running_job()
+
+    original_lease = Lease.create(
+        worker_id=worker.id,
+        job_id=job.id,
+        tenant_id=worker.tenant_id,
+    )
+    replacement_lease = Lease.create(
+        worker_id=WorkerId.new(),
+        job_id=job.id,
+        tenant_id=worker.tenant_id,
+    )
+
+    lease_repository = _SwapAfterReadLeaseRepository()
+    lease_repository.save(original_lease)
+    lease_repository.replacement = replacement_lease
+
+    service = ReleaseLeaseService(
+        lease_repository=lease_repository,
+        worker_repository=InMemoryWorkerRepository([worker]),
+    )
+
+    with pytest.raises(LeaseNotFoundError):
+        service.execute(worker.id, original_lease.id, worker.tenant_id)
+
+    surviving = lease_repository.get_by_job_id(job.id, worker.tenant_id)
+    assert surviving is not None
+    assert surviving.id == replacement_lease.id
