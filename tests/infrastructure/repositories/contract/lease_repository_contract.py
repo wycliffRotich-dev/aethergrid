@@ -227,6 +227,42 @@ class LeaseRepositoryContract:
             is not None
         )
 
+    def test_delete_if_expired_removes_only_the_lease_of_the_job_it_is_given(
+        self,
+        repository,
+    ) -> None:
+        target = self._make_lease(
+            duration=timedelta(seconds=-1),
+        )
+        bystander = self._make_lease(
+            duration=timedelta(seconds=-1),
+        )
+
+        repository.save(target)
+        repository.save(bystander)
+
+        deleted = repository.delete_if_expired(
+            target.job_id,
+            target.tenant_id,
+        )
+
+        assert deleted is True
+        assert (
+            repository.get_by_job_id(
+                target.job_id,
+                target.tenant_id,
+            )
+            is None
+        )
+
+        survivor = repository.get_by_job_id(
+            bystander.job_id,
+            bystander.tenant_id,
+        )
+
+        assert survivor is not None
+        assert survivor.id == bystander.id
+
     def test_delete_if_expired_in_a_tenant_returns_false_when_no_lease_exists(
         self,
         repository,
