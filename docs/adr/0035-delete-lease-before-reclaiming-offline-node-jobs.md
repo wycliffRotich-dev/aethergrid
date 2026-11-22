@@ -136,3 +136,23 @@ been confirmed at the time this alternative was weighed. Worth
 revisiting seriously if a fourth instance of this shape is ever
 found; three independent occurrences is close to the threshold
 where a structural guard stops being premature.
+
+## Progress
+
+2026-11-22. Two cases now pin the refusal this ADR describes. No test
+of AcquireLeaseService itself expected it. When a job already has a
+lease, a second worker asking for that job gets a ValueError, the stored
+lease stays the first one, and no second LeaseAcquired event is
+recorded. When that lease is already expired, the second worker is still
+refused and the expired lease stays stored. Acquire never replaces a
+lease. Only reconciliation deletes an expired one, through
+delete_if_expired. No application code changed, and both cases passed on
+their first run because they pin behaviour that already existed. Seven
+deliberate breaks then turned tests red, and only the tests that pin
+what was changed: dropping the duplicate check (2 cases), raising
+RuntimeError instead of ValueError (2), saving a new lease before
+raising (2), letting an expired lease through (1), recording another
+event type (2), returning None instead of the lease (3) and dropping the
+tenant guard (1). Each time the file was restored and its hash compared.
+
+Not claimed: safe to expose.
