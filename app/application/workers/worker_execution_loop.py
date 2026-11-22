@@ -177,7 +177,7 @@ class WorkerExecutionLoop:
 
         stop_renewing = threading.Event()
         cancel_event = threading.Event()
-        lost_lease: list[LeaseNotFoundError] = []
+        lost_lease: list[LeaseNotFoundError | NoActiveLeaseError] = []
 
         def keep_lease_alive() -> None:
             # wait() returns True once stop_renewing is set (we're
@@ -190,7 +190,14 @@ class WorkerExecutionLoop:
                         expected_lease_id=lease_id,
                         tenant_id=tenant_id,
                     )
-                except LeaseNotFoundError as exc:
+                except (
+                    LeaseNotFoundError,
+                    NoActiveLeaseError,
+                ) as exc:
+                    # Either the lease on record is another one, or this
+                    # worker holds none because reconciliation reclaimed
+                    # the job. This loop no longer owns the job in both
+                    # cases, so the thread records it and stops.
                     lost_lease.append(exc)
                     return
 
@@ -254,40 +261,38 @@ class WorkerExecutionLoop:
             # than risk stomping whoever reconciliation handed this to
             raise lost_lease[0]
 
+        # The release is the fence. It runs before the worker and the job
+        # change state and before any outcome event is recorded, so a
+        # loop that lost its lease writes nothing about this job. If the
+        # lease is gone or replaced, the release raises here.
+        self._release_lease_service.execute(
+            worker_id,
+            lease_id,
+            tenant_id=tenant_id,
+        )
+
         if result.cancelled:
             worker.cancel_job(
                 exit_code=result.exit_code,
             )
 
-            if self._record_job_events_service is not None:
-                self._record_job_events_service.record_for_job(
-                    job,
-                    event_type="JobCancelled",
-                )
+            outcome_event = "JobCancelled"
         elif result.succeeded:
             worker.complete(
                 exit_code=result.exit_code,
             )
 
-            if self._record_job_events_service is not None:
-                self._record_job_events_service.record_for_job(
-                    job,
-                    event_type="JobCompleted",
-                )
+            outcome_event = "JobCompleted"
         else:
             worker.fail(
                 exit_code=result.exit_code,
             )
 
-            if self._record_job_events_service is not None:
-                self._record_job_events_service.record_for_job(
-                    job,
-                    event_type="JobFailed",
-                )
+            outcome_event = "JobFailed"
 
-        # Release the lease and persist the worker as IDLE *before*
-        # persisting the job's terminal status. Order matters here to
-        # avoid two races:
+        # Persist the worker as IDLE *before* persisting the job's
+        # terminal status. The lease was released above, before the
+        # outcome was decided. Order matters here to avoid two races:
         #
         # 1. AssignWorkerService only treats a worker as assignable
         #    once it's saved with running_job cleared. If this
@@ -303,12 +308,6 @@ class WorkerExecutionLoop:
         #    window resolves a running_job that's already COMPLETED,
         #    and calling worker.start() on it raises
         #    InvalidJobTransition.
-        self._release_lease_service.execute(
-            worker_id,
-            lease_id,
-            tenant_id=tenant_id,
-        )
-
         self._worker_repository.save(
             worker,
         )
@@ -371,3 +370,12 @@ class WorkerExecutionLoop:
         self._job_repository.save(
             job,
         )
+
+        # The outcome is stored first and the event is written last. A
+        # failed event write then loses one event, and it cannot leave a
+        # released lease with a job that is still RUNNING.
+        if self._record_job_events_service is not None:
+            self._record_job_events_service.record_for_job(
+                job,
+                event_type=outcome_event,
+            )
