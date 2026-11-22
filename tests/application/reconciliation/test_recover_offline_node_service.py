@@ -497,3 +497,92 @@ def test_recover_offline_node_keeps_jobless_worker_offline() -> None:
 
     assert stored_worker is not None
     assert stored_worker.status.value == "OFFLINE"
+
+
+class _RenewsLeaseBeforeDelete(InMemoryLeaseRepository):
+    """
+    Renews the lease just before delete_if_expired runs, so the
+    renewal lands after the service's own expiry check and
+    before the delete. Only delete_if_expired can refuse it.
+    """
+
+    def delete_if_expired(self, job_id, tenant_id):
+        lease = self.get_by_job_id(job_id, tenant_id)
+
+        if lease is not None:
+            self.renew(lease.id, timedelta(seconds=30), tenant_id)
+
+        return super().delete_if_expired(job_id, tenant_id)
+
+
+def test_recover_offline_node_keeps_a_lease_renewed_just_before_the_delete() -> (
+    None
+):
+    """
+    The service reads the lease as expired and passes its own
+    check. The worker then renews it, and the delete runs. The
+    delete must refuse, so the job stays RUNNING, the worker
+    stays BUSY and the same lease remains.
+    """
+    node = _make_offline_node()
+
+    worker = make_worker(
+        id=WorkerId.new(),
+        node=node,
+    )
+
+    worker.ready()
+
+    job = make_job(
+        id=JobId.new(),
+        resources=ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=512,
+            vram_mib=0,
+        ),
+        max_retries=1,
+    )
+
+    job.queue()
+    job.assign_to(node.id)
+
+    worker.accept(job)
+    worker.start()
+
+    lease = Lease.create(
+        worker_id=worker.id,
+        job_id=job.id,
+        tenant_id=worker.tenant_id,
+        duration=timedelta(seconds=-1),
+    )
+
+    lease_repository = _RenewsLeaseBeforeDelete()
+    lease_repository.save(lease)
+
+    node_repository = InMemoryNodeRepository([node])
+    worker_repository = InMemoryWorkerRepository([worker])
+    job_repository = InMemoryJobRepository([job])
+
+    service = RecoverOfflineNodeService(
+        node_repository=node_repository,
+        worker_repository=worker_repository,
+        job_repository=job_repository,
+        lease_repository=lease_repository,
+    )
+
+    service.execute()
+
+    recovered_worker = worker_repository.get_by_id(worker.id, worker.tenant_id)
+    recovered_job = job_repository.get_by_id(job.id, DEFAULT_TENANT_ID)
+
+    assert recovered_worker is not None
+    assert recovered_worker.status is WorkerStatus.BUSY
+
+    assert recovered_job is not None
+    assert recovered_job.status is JobStatus.RUNNING
+    assert recovered_job.retry_count == 0
+
+    survived_lease = lease_repository.get_by_job_id(job.id, job.tenant_id)
+    assert survived_lease is not None
+    assert survived_lease.id == lease.id
+    assert not survived_lease.is_expired()
