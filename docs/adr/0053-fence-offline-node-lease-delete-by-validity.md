@@ -77,6 +77,29 @@ independently in `RecoverOfflineNodeService`, the same way ADR 0052
 already does in `RecoverExpiredLeaseService`, closes the actual race
 without redesigning how workers heartbeat or renew.
 
+## Progress
+
+2026-11-22. A gap in the tests for this decision was found and closed.
+No application code changed.
+
+The Decision skips the job when delete_if_expired refuses, because the
+lease was renewed after the service's own expiry check. No case reached
+that branch. The case for a valid lease leaves the lease valid from the
+start, so the first check skips it. The case for an expired lease has
+its delete succeed. Removing the refusal check left every case green.
+
+A new case wraps the in-memory lease repository so that the lease is
+renewed inside delete_if_expired, after the service's check and before
+the delete. The job must stay RUNNING, the worker must stay BUSY, and
+the same lease must remain.
+
+Three deliberate breaks were run. Each turned red only the new case: the
+service ignoring a refused delete, the service checking expiry and then
+deleting with a plain delete, and the in-memory repository ignoring
+expiry. Each time the file was restored and its hash compared.
+
+Not claimed: safe to expose.
+
 ## Consequences
 
 ### Positive
