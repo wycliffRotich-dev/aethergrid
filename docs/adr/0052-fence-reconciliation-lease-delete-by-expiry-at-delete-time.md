@@ -104,6 +104,41 @@ loop currently assumes autocommit, per-repository-call semantics.
 The conditional delete closes the actual race without touching that
 broader question.
 
+## Progress
+
+2026-11-22. Two gaps in the tests for this decision were found and
+closed. No application code changed.
+
+The Consequences below say the service level case simulates the exact
+interleaving. It did not. That case renews the lease before execute()
+runs, so the service's own expiry check skips the lease and
+delete_if_expired never decides anything. Replacing the delete with an
+expiry check followed by a plain delete left it green. A new case wraps
+the in-memory lease repository so that the lease is renewed inside
+delete_if_expired, after the service's check and before the delete. The
+job must stay RUNNING with its retry count unchanged, the worker must
+stay BUSY, and the same lease must remain.
+
+The second gap was in the repositories. No case pinned the job id in the
+delete, so removing it from the PostgreSQL WHERE clause left every case
+green. A new contract case saves two expired leases in one tenant and
+calls delete_if_expired for one job. That job's lease must be removed
+and the other must remain. It runs against both backends, so three
+cases were added in total.
+
+Seven deliberate breaks were run. Each turned red the case that pins the
+broken part, and no other case in its run: the in-memory repository
+ignoring expiry (the new service case), the service checking expiry and
+then deleting with a plain delete (the new service case), PostgreSQL
+ignoring expiry (the renewed lease case), PostgreSQL ignoring the tenant
+(the other tenant case), PostgreSQL ignoring the job id (the new
+contract case), the in-memory repository ignoring the tenant (the other
+tenant case), and the in-memory repository deleting every expired lease
+of the tenant (the new contract case). Each time the file was restored
+and its hash compared.
+
+Not claimed: safe to expose.
+
 ## Consequences
 
 ### Positive
