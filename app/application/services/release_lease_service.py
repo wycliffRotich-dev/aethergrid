@@ -130,10 +130,11 @@ class ReleaseLeaseService:
             if job is None:
                 raise JobNotFoundError(lease.job_id)
 
-        self._lease_repository.delete(
-            lease.job_id,
-            tenant_id,
-        )
+        # The id was compared above, but a reclaim and a new lease can
+        # land between that read and this delete. Deleting by id makes
+        # the check and the delete one statement (ADR 0034).
+        if not self._lease_repository.delete_by_id(lease.id, tenant_id):
+            raise LeaseNotFoundError(expected_lease_id)
 
         if recorder is not None and job is not None:
             recorder.record_for_job(

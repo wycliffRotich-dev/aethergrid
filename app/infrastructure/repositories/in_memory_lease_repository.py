@@ -109,3 +109,16 @@ class InMemoryLeaseRepository(
 
         return True
 
+    def delete_by_id(
+        self,
+        lease_id: UUID,
+        tenant_id: TenantId,
+    ) -> bool:
+        for key, lease in self._leases.items():
+            if lease.id == lease_id and lease.tenant_id == tenant_id:
+                del self._leases[key]
+
+                return True
+
+        return False
+

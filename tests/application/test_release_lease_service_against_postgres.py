@@ -236,3 +236,94 @@ def test_release_records_the_event_under_the_tenant_of_the_job_in_postgres(
     assert (
         PostgresLeaseRepository(pool).get_by_worker_id(worker.id, tenant) is None
     )
+
+
+
+class _SwapAfterReadPostgresLeaseRepository(PostgresLeaseRepository):
+    """
+    Right after the first read by worker id, the lease that was read
+    is reclaimed and another worker takes a new lease on the same
+    job. This is the gap between the identity check and the delete.
+    """
+
+    def __init__(self, pool: ConnectionPool) -> None:
+        super().__init__(pool)
+        self.replacement: Lease | None = None
+
+    def get_by_worker_id(
+        self,
+        worker_id: WorkerId,
+        tenant_id: TenantId,
+    ) -> Lease | None:
+        lease = super().get_by_worker_id(worker_id, tenant_id)
+
+        if lease is not None and self.replacement is not None:
+            replacement, self.replacement = self.replacement, None
+            self.delete(lease.job_id, lease.tenant_id)
+            self.save(replacement)
+
+        return lease
+
+
+def test_release_leaves_a_lease_taken_after_the_read_when_the_original_is_reclaimed_in_postgres(
+    pool,
+) -> None:
+    with pool.connection() as conn:
+        conn.execute("TRUNCATE leases, workers, jobs, nodes CASCADE")
+
+    node_repository = PostgresNodeRepository(pool)
+    worker_repository = PostgresWorkerRepository(pool)
+    job_repository = PostgresJobRepository(pool)
+
+    capacity = ResourceRequirements(
+        cpu_cores=8,
+        memory_mib=16384,
+        vram_mib=8192,
+    )
+    node_a = make_node(id=NodeId.new(), capacity=capacity)
+    node_b = make_node(id=NodeId.new(), capacity=capacity)
+    node_repository.save(node_a)
+    node_repository.save(node_b)
+
+    worker_a = make_worker(id=WorkerId.new(), node=node_a)
+    worker_b = make_worker(id=WorkerId.new(), node=node_b)
+    worker_repository.save(worker_a)
+    worker_repository.save(worker_b)
+
+    job = make_job(
+        id=JobId.new(),
+        resources=ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=512,
+            vram_mib=0,
+        ),
+    )
+    job_repository.save(job)
+
+    original_lease = Lease.create(
+        worker_id=worker_a.id,
+        job_id=job.id,
+        tenant_id=worker_a.tenant_id,
+    )
+    replacement_lease = Lease.create(
+        worker_id=worker_b.id,
+        job_id=job.id,
+        tenant_id=worker_a.tenant_id,
+    )
+
+    releasing_repository = _SwapAfterReadPostgresLeaseRepository(pool)
+    releasing_repository.save(original_lease)
+    releasing_repository.replacement = replacement_lease
+
+    service = ReleaseLeaseService(
+        lease_repository=releasing_repository,
+        worker_repository=PostgresWorkerRepository(pool),
+    )
+
+    with pytest.raises(LeaseNotFoundError):
+        service.execute(worker_a.id, original_lease.id, worker_a.tenant_id)
+
+    surviving = PostgresLeaseRepository(pool).get_by_job_id(job.id, worker_a.tenant_id)
+    assert surviving is not None
+    assert surviving.id == replacement_lease.id
+    assert surviving.worker_id == worker_b.id

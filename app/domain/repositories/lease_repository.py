@@ -135,3 +135,22 @@ class LeaseRepository(ABC):
         """
         raise NotImplementedError
 
+    @abstractmethod
+    def delete_by_id(
+        self,
+        lease_id: UUID,
+        tenant_id: TenantId,
+    ) -> bool:
+        """
+        Delete the lease with this id in this tenant. Returns True if
+        a row was deleted, and False if no lease has that id in this
+        tenant, for example because it was reclaimed and the job was
+        given a new lease after the caller read it. A lease in another
+        tenant is left untouched.
+
+        The identity and the delete are one atomic step, so a caller
+        that names the lease it read cannot remove a newer lease for
+        the same job (ADR 0034).
+        """
+        raise NotImplementedError
+

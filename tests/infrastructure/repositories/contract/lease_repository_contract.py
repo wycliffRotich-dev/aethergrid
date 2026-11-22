@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from uuid import uuid4
 
 import pytest
 
@@ -365,3 +366,64 @@ class LeaseRepositoryContract:
         after = repository.get_by_job_id(lease.job_id, lease.tenant_id)
         assert after is not None
         assert after.expires_at == expiry_before
+
+
+    def test_delete_by_id_removes_the_lease(
+        self,
+        repository,
+    ) -> None:
+        lease = self._make_lease()
+        repository.save(lease)
+
+        deleted = repository.delete_by_id(lease.id, lease.tenant_id)
+
+        assert deleted is True
+        assert repository.get_by_job_id(lease.job_id, lease.tenant_id) is None
+
+    def test_delete_by_id_returns_false_for_an_unknown_id(
+        self,
+        repository,
+    ) -> None:
+        lease = self._make_lease()
+        repository.save(lease)
+
+        deleted = repository.delete_by_id(uuid4(), lease.tenant_id)
+
+        assert deleted is False
+        assert repository.get_by_job_id(lease.job_id, lease.tenant_id) is not None
+
+    def test_delete_by_id_leaves_a_newer_lease_on_the_same_job(
+        self,
+        repository,
+    ) -> None:
+        # The stale holder names the lease it read. After a reclaim and
+        # a new lease for the same job, that id no longer exists, so
+        # the delete must remove nothing.
+        original = self._make_lease()
+        repository.save(original)
+        repository.delete(original.job_id, original.tenant_id)
+        newer = Lease.create(
+            worker_id=original.worker_id,
+            job_id=original.job_id,
+            tenant_id=original.tenant_id,
+        )
+        repository.save(newer)
+
+        deleted = repository.delete_by_id(original.id, original.tenant_id)
+
+        assert deleted is False
+        remaining = repository.get_by_job_id(original.job_id, original.tenant_id)
+        assert remaining is not None
+        assert remaining.id == newer.id
+
+    def test_delete_by_id_in_another_tenant_leaves_the_lease(
+        self,
+        repository,
+    ) -> None:
+        lease = self._make_lease()
+        repository.save(lease)
+
+        deleted = repository.delete_by_id(lease.id, TenantId.new())
+
+        assert deleted is False
+        assert repository.get_by_job_id(lease.job_id, lease.tenant_id) is not None
