@@ -142,6 +142,8 @@ class RecoverOfflineNodeService:
                 worker,
             )
 
+            was_cancelling = job.is_cancelling()
+
             reclaimed = reclaim_job(
                 job,
                 node,
@@ -155,7 +157,12 @@ class RecoverOfflineNodeService:
                 reclaimed
                 and self._record_job_events_service is not None
             ):
+                event_type = (
+                    "JobCancelled"
+                    if was_cancelling
+                    else "JobReclaimed"
+                )
                 self._record_job_events_service.record_for_job(
                     job,
-                    event_type="JobReclaimed",
+                    event_type=event_type,
                 )
