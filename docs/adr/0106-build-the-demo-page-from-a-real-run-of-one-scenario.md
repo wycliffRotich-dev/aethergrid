@@ -53,3 +53,26 @@ is built before the page shows it.
     and tests.
 
 Not claimed: safe to expose.
+
+## Progress
+
+2026-11-23. Two sentences of item 10 are corrected, because the code does
+something other than they say.
+
+A job is reclaimed in three ways. Reconciliation reclaims a job whose
+lease has expired. RecoverOfflineNodeService reclaims the job of a worker
+on an offline node when the job has no lease or an expired one.
+CreateWorkerService reclaims the job of a worker whose node registers
+again (ADR 0039). The sentence "A job is reclaimed only after its lease
+has expired" is replaced by "Reconciliation reclaims a job whose lease has
+expired", which is the case the scenario runs.
+
+A stale lease is refused with 409 by the route that renews a lease and by
+the three outcome routes: complete, fail and cancel. There is no release
+route. The release runs inside the outcome report, and the loop of a
+worker that the server runs calls it directly. The sentence "A stale renew
+or release is refused with 409" is replaced by "A stale renew or outcome
+report is refused with 409". The lease id is compared in the service and
+again in the SQL, for renew and for release.
+
+Not claimed: safe to expose.
