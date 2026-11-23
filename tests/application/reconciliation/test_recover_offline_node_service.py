@@ -586,3 +586,64 @@ def test_recover_offline_node_keeps_a_lease_renewed_just_before_the_delete() -> 
     assert survived_lease is not None
     assert survived_lease.id == lease.id
     assert not survived_lease.is_expired()
+
+
+def test_recover_offline_node_records_job_cancelled_when_cancelling() -> None:
+    """
+    Reclaiming a job that was CANCELLING when its assigned node
+    went offline must record JobCancelled, not the generic
+    JobReclaimed used for the SCHEDULED/RUNNING retry path,
+    mirroring RecoverExpiredLeaseService and ADR 0031.
+    """
+    node = _make_offline_node()
+
+    worker = make_worker(
+        id=WorkerId.new(),
+        node=node,
+    )
+
+    worker.ready()
+
+    job = make_job(
+        id=JobId.new(),
+        resources=ResourceRequirements(
+            cpu_cores=1,
+            memory_mib=512,
+            vram_mib=0,
+        ),
+        max_retries=1,
+    )
+
+    job.queue()
+    job.assign_to(node.id)
+
+    worker.accept(job)
+    worker.start()
+    job.request_cancellation()
+
+    node_repository = InMemoryNodeRepository([node])
+    worker_repository = InMemoryWorkerRepository([worker])
+    job_repository = InMemoryJobRepository([job])
+    lease_repository = InMemoryLeaseRepository()
+
+    events = InMemoryEventRepository()
+    record_job_events_service = RecordJobEventsService(
+        event_repository=events,
+    )
+
+    service = RecoverOfflineNodeService(
+        node_repository=node_repository,
+        worker_repository=worker_repository,
+        job_repository=job_repository,
+        lease_repository=lease_repository,
+        record_job_events_service=record_job_events_service,
+    )
+
+    service.execute()
+
+    recorded = events.list(DEFAULT_TENANT_ID)
+    assert len(recorded) == 1
+    assert recorded[0].event_type == "JobCancelled"
+    assert recorded[0].aggregate_id == str(job.id)
+    assert recorded[0].aggregate_type == "Job"
+
