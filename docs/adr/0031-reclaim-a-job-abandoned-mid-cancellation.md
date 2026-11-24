@@ -98,3 +98,28 @@ already being cancelled, on request, when its worker happened to die
 didn't fail on its own merits; recording it as `CANCELLED` reports
 the true, intended outcome rather than miscategorizing a requested
 stop as a failure.
+
+## Progress
+
+2026-11-24. The offline node path records JobCancelled.
+
+RecoverOfflineNodeService now reads job.is_cancelling() before reclaim_job
+runs. If the job was CANCELLING it records JobCancelled, otherwise
+JobReclaimed, the same rule RecoverExpiredLeaseService follows under this
+ADR. Before this, the offline node path recorded JobReclaimed in both cases,
+so a job that ended CANCELLED showed a reclaim in its event history.
+Keshavgg found this and wrote the fix and its first test (PR 550). His commit
+is kept, with him as its author.
+
+Four tests pin it: his, and three added with it. A CANCELLING job with an
+expired lease ends CANCELLED with no retry used, records JobCancelled and
+one OFFLINE_NODE lease record. A CANCELLING job with no lease ends
+CANCELLED, records JobCancelled and no lease record. A RUNNING job with an
+expired lease is requeued, records JobReclaimed and one lease record.
+
+Three deliberate breaks each turned tests red. Always recording
+JobReclaimed turned 3 red. Always recording JobCancelled turned 5 red.
+Reading is_cancelling() after reclaim_job instead of before turned 3 red,
+the same 3 as the first. No break survived.
+
+Not claimed: safe to expose.

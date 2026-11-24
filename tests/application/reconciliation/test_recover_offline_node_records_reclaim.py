@@ -23,6 +23,7 @@ from app.domain.entities.lease_reclaim import LeaseReclaim
 from app.domain.entities.node import Node
 from app.domain.entities.tenant import DEFAULT_TENANT_ID
 from app.domain.entities.worker import Worker
+from app.domain.enums.job_status import JobStatus
 from app.domain.enums.lease_recovery_path import LeaseRecoveryPath
 from app.domain.value_objects.job_id import JobId
 from app.domain.value_objects.node_id import NodeId
@@ -383,3 +384,57 @@ def test_a_job_that_cannot_be_reclaimed_is_not_recorded() -> None:
     assert world.lease_repository.get_by_job_id(stuck.id, DEFAULT_TENANT_ID) is None
     assert records.saved == []
     assert world.events.list(DEFAULT_TENANT_ID) == []
+
+
+def test_a_cancelling_job_with_an_expired_lease_is_recorded_and_ends_cancelled() -> None:
+    party = _party()
+    assert party.lease is not None
+    party.job.request_cancellation()
+    records = _SpyRecords()
+    world = _world(party, records=records)
+
+    world.service.execute()
+
+    stored = world.job_repository.get_by_id(party.job.id, DEFAULT_TENANT_ID)
+
+    assert stored is not None
+    assert stored.status is JobStatus.CANCELLED
+    assert stored.retry_count == 0
+    assert [e.event_type for e in world.events.list(DEFAULT_TENANT_ID)] == ["JobCancelled"]
+    assert len(records.saved) == 1
+    assert records.saved[0].lease_id == party.lease.id
+    assert records.saved[0].recovered_by is LeaseRecoveryPath.OFFLINE_NODE
+
+
+def test_a_cancelling_job_with_no_lease_ends_cancelled_and_is_not_recorded() -> None:
+    party = _party(lease="none")
+    party.job.request_cancellation()
+    records = _SpyRecords()
+    world = _world(party, records=records)
+
+    world.service.execute()
+
+    stored = world.job_repository.get_by_id(party.job.id, DEFAULT_TENANT_ID)
+
+    assert stored is not None
+    assert stored.status is JobStatus.CANCELLED
+    assert stored.retry_count == 0
+    assert [e.event_type for e in world.events.list(DEFAULT_TENANT_ID)] == ["JobCancelled"]
+    assert records.saved == []
+
+
+def test_a_running_job_with_an_expired_lease_is_recorded_with_job_reclaimed() -> None:
+    party = _party()
+    assert party.lease is not None
+    records = _SpyRecords()
+    world = _world(party, records=records)
+
+    world.service.execute()
+
+    stored = world.job_repository.get_by_id(party.job.id, DEFAULT_TENANT_ID)
+
+    assert stored is not None
+    assert stored.is_queued()
+    assert stored.retry_count == 1
+    assert [e.event_type for e in world.events.list(DEFAULT_TENANT_ID)] == ["JobReclaimed"]
+    assert [r.lease_id for r in records.saved] == [party.lease.id]
