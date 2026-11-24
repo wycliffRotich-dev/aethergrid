@@ -104,3 +104,65 @@ Once reclaim has run, nothing ties that id to a job.
   deleted with the node, and the record must outlast them.
 
 Not claimed: safe to expose.
+
+## Progress
+
+2026-11-24. The storage for the record is built. The service that writes
+it and the three recovery paths that call it are not part of this slice.
+
+What is built: the entity LeaseReclaim, the enum LeaseRecoveryPath
+(expired_lease, offline_node, worker_registered), the port
+LeaseReclaimRepository, the in-memory and PostgreSQL repositories, and
+migration 0008. LeaseReclaim.record takes a lease and the recovery path,
+gives the record an id of its own and sets reclaimed_at from the time of
+the call. The PostgreSQL repository saves with ON CONFLICT on the tenant
+and the lease id and does nothing, so the first record of a lease stays.
+The in-memory repository keeps the first record the same way. The
+checksum of 0008 is in the frozen list.
+
+How it is tested: 7 tests on the entity. One shared contract runs against
+both repositories, 7 tests for the in-memory one and 9 for PostgreSQL,
+which adds two refusal tests of its own. 22 tests on the migration, run
+on a scratch schema built from the real migration files. They check the
+columns, the primary key, the two foreign keys, each recovery path
+accepted and an unknown one refused, a record for a missing job or for a
+job in another tenant refused, the unique pair, the cascade, and that the
+public read role holds none of the seven privileges on the table.
+
+What each deliberate break turned red, in the real tests.
+
+Repositories, 13 breaks. In-memory: the first record no longer stays (1
+test), the key ignores the tenant (4), the read ignores the tenant (2).
+PostgreSQL: a conflict raises (1), a conflict replaces the record (1),
+the read drops the tenant (2), worker id and job id swapped on save (4),
+lease times swapped (4), the recovery path not stored as given (2),
+reclaimed_at read from the expiry (4), the record id read from the lease
+id (4), the worker id read from the job id column (4), the lease id
+written from the record id (4).
+
+Migration 0008, 11 breaks. The recovery path check accepts anything (1
+test). A fourth path is accepted (1, the same test). The unique pair is
+dropped (1). Unique on the lease id alone (1). The job key does not name
+the tenant (2). The cascade is dropped (1). The tenant key is dropped
+(1). reclaimed_at may be null (1). worker_id is text (1). SELECT is
+granted to the public read role (1). A key on worker_id (9).
+
+The full suite found one flaw before this slice was committed. The
+repository rule test of ADR 0064, point 4, did not list the new port, and
+it failed with LeaseReclaimRepository neither scoped nor exempt.
+LeaseReclaimRepository is now in its scoped list, and LeaseReclaim is among
+the entities that carry their own tenant, which is how the rule accepts a
+save that takes a record.
+
+The repository rule test, 3 breaks. The port left out of the scoped list
+(1 test). The record left out of the entities that carry a tenant (1). The
+read without its tenant argument (1).
+
+Two sentences of this ADR are corrected, because the code does something
+other than they say. Decision 3 says both methods of the port take the
+tenant. Only get_by_lease_id takes it. save takes a record, and the record
+already carries its tenant. Decision 4 says the record takes its id from
+the lease. The record has an id of its own, and the id of the lease is
+kept in lease_id.
+
+Not claimed: safe to expose.
