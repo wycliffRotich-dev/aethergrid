@@ -6,6 +6,10 @@ from app.application.services.job_execution_support import (
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
+from app.application.services.record_lease_reclaim_service import (
+    RecordLeaseReclaimService,
+)
+from app.domain.enums.lease_recovery_path import LeaseRecoveryPath
 from app.domain.repositories.job_repository import (
     JobRepository,
 )
@@ -64,12 +68,14 @@ class RecoverOfflineNodeService:
         job_repository: JobRepository,
         lease_repository: LeaseRepository,
         record_job_events_service: RecordJobEventsService | None = None,
+        record_lease_reclaim_service: RecordLeaseReclaimService | None = None,
     ) -> None:
         self._node_repository = node_repository
         self._worker_repository = worker_repository
         self._job_repository = job_repository
         self._lease_repository = lease_repository
         self._record_job_events_service = record_job_events_service
+        self._record_lease_reclaim_service = record_lease_reclaim_service
 
     def execute(
         self,
@@ -150,6 +156,16 @@ class RecoverOfflineNodeService:
                 job_repository=self._job_repository,
                 lease_already_deleted=lease_already_deleted,
             )
+
+            if (
+                reclaimed
+                and lease is not None
+                and self._record_lease_reclaim_service is not None
+            ):
+                self._record_lease_reclaim_service.record(
+                    lease,
+                    recovered_by=LeaseRecoveryPath.OFFLINE_NODE,
+                )
 
             if (
                 reclaimed

@@ -8,6 +8,10 @@ from app.application.services.job_execution_support import (
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
+from app.application.services.record_lease_reclaim_service import (
+    RecordLeaseReclaimService,
+)
+from app.domain.enums.lease_recovery_path import LeaseRecoveryPath
 from app.domain.repositories.job_repository import (
     JobRepository,
 )
@@ -40,12 +44,14 @@ class RecoverExpiredLeaseService:
         lease_repository: LeaseRepository,
         node_repository: NodeRepository,
         record_job_events_service: RecordJobEventsService | None = None,
+        record_lease_reclaim_service: RecordLeaseReclaimService | None = None,
     ) -> None:
         self._worker_repository = worker_repository
         self._job_repository = job_repository
         self._lease_repository = lease_repository
         self._node_repository = node_repository
         self._record_job_events_service = record_job_events_service
+        self._record_lease_reclaim_service = record_lease_reclaim_service
 
     def execute(
         self,
@@ -195,6 +201,12 @@ class RecoverExpiredLeaseService:
                     job.status,
                 )
                 continue
+
+            if self._record_lease_reclaim_service is not None:
+                self._record_lease_reclaim_service.record(
+                    lease,
+                    recovered_by=LeaseRecoveryPath.EXPIRED_LEASE,
+                )
 
             if self._record_job_events_service is not None:
                 event_type = (

@@ -166,3 +166,62 @@ the lease. The record has an id of its own, and the id of the lease is
 kept in lease_id.
 
 Not claimed: safe to expose.
+
+2026-11-24. The three recovery paths keep the record.
+
+RecordLeaseReclaimService builds the record of a deleted lease and saves it.
+A failed save is logged as one warning with the lease id, the job id and the
+error text, and is not raised, so a failed write does not stop a pass or undo
+a reclaim (decision 4).
+
+RecoverExpiredLeaseService records the lease with the path EXPIRED_LEASE,
+once, after the job is reclaimed and before the job event is recorded. A
+lease renewed before the delete, a job that cannot be reclaimed, a missing
+job and a job of another tenant are not recorded.
+
+RecoverOfflineNodeService records the lease it read and deleted with the path
+OFFLINE_NODE, after a successful reclaim and before the event. A job with no
+lease is reclaimed as before and nothing is recorded. A lease that is still
+valid, or renewed before the delete, is not recorded.
+
+CreateWorkerService reads the lease before it reclaims, because the reclaim
+deletes it, and records it with the path WORKER_REGISTERED only when the lease
+existed and the reclaim succeeded. A first registration and a worker with no
+job record nothing.
+
+Each service takes the recorder as an optional argument, and built without it
+behaves as before. dependencies.py builds one recorder over the PostgreSQL
+repository when the pool exists and over the in-memory repository otherwise,
+and passes it to all three.
+
+New tests, 47: recorder service 10, expired lease path 12, offline node path
+11, worker registration 10, wiring 4.
+
+What each deliberate break turned red, in the real tests.
+
+Expired lease path, 9 breaks. The record call dropped (7 tests). The path
+swapped to OFFLINE_NODE (2). The record placed before the reclaim (2), before
+the check that the job was reclaimed (1), before the check that the delete
+happened (5). An extra record in the branch of a missing job (2). The record
+placed after the event (1). The recorder guard removed (1 new test, 8
+existing). The recorder without its try and except (1 test here, 4 in the
+recorder service tests).
+
+Offline node path, 7 breaks. The record call dropped (6 tests). The path
+swapped to EXPIRED_LEASE (1). The reclaim result dropped from the guard (1).
+The lease check dropped from the guard (1). The record placed before the
+reclaim (2), after the event (1). The recorder guard removed (1 new test, 1
+existing).
+
+Worker registration, 6 breaks. The record call dropped (5 tests). The path
+swapped to EXPIRED_LEASE (1). The reclaim result dropped from the guard (1).
+The lease check dropped from the guard (1). The lease read after the reclaim
+(5). The recorder guard removed (1 new test, 1 existing).
+
+Wiring, 7 breaks. The recorder dropped from each of the three builders (1
+test each). A separate recorder built in each of the three (1 test each). The
+repository always in memory (1).
+
+No break survived.
+
+Not claimed: safe to expose.
