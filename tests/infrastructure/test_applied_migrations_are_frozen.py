@@ -41,6 +41,9 @@ EXPECTED_CHECKSUMS = {
     "0007_create_the_public_views.sql": (
         "4000b55bb0fe7de6051374b20751f79c5ad400fffaf3c911c01b0ed5f6216e34"
     ),
+    "0008_create_the_lease_reclaims_table.sql": (
+        "51056e2e546350d4c26ddfb2ccc6ec1fb9de9ceea32f391b38434bace79b12fa"
+    ),
 }
 
 
