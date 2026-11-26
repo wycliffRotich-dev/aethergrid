@@ -167,3 +167,78 @@ Enum values, 4 breaks. Each of the four values changed (1 test each).
 No break survived.
 
 Not claimed: safe to expose.
+
+2026-11-26. The wiring of the record of a refused call.
+
+RecordLeaseRefusalService reads the reclaim record of the lease id in the
+tenant of the call. It records nothing when there is none, so a lease id
+that reclaim never removed leaves no row. Otherwise it saves a LeaseRefusal
+made from that record, with the worker, the operation and the reason of the
+refused call. A failed read or a failed save is logged as one warning that
+names the operation, the lease id and the error, and it is not raised, so
+the refusal the caller gets does not change.
+
+RenewLeaseService calls the recorder once before each of its two refusals,
+and ReleaseLeaseService once before each of its three. The lease id recorded
+is the one the caller sent. A renew with no lease on record is recorded as
+no_active_lease, and a renew of another lease as lease_not_current. A
+release records the same two reasons, and also records lease_not_current
+when the delete by id removes nothing. A missing worker and a missing job
+are not fencing refusals and are not recorded. The outcome report releases
+through the shared release service, so a refused report is recorded as a
+release. Both services take the recorder as an optional argument, and
+without it they behave as before.
+
+app/presentation/dependencies.py builds one recorder over the same reclaim
+repository as the reclaim recorder, with the refusal repository of the
+backend (PostgreSQL on the pool, otherwise in memory), and gives it to both
+services.
+
+New tests, 37: recorder 19, renew 4, release 5, wiring 5, renew through the
+API 3, outcome report through the API 1. The API tests use the real services
+of the app. A refused renew gives 409 with the text of NoActiveLeaseError
+and one stored refusal. With a refusal repository that fails, the 409 body
+is the same, one warning is logged and nothing is stored. A lease id that
+nobody held stores nothing. A refused report to the complete route gives 409
+and one refusal recorded as a release. The collected tests went from 2434 to
+2471.
+
+Flaw found and fixed. The first run of the deliberate breaks left one break
+standing: the return on a missing reclaim record, removed. Without the
+return the entity got no record and failed inside the try, and the failure
+was logged as a warning, so nothing was saved and every assertion held. A
+call with a lease id that reclaim never removed would have logged a warning
+each time. A test was added that makes such a call and asserts that nothing
+above info is logged and nothing is saved. It turns that break red.
+
+What each deliberate break turned red, in the real tests.
+
+Renew, 8 breaks. The call dropped at the first refusal (4) and at the second
+(1). The reason swapped at the first (3) and at the second (1). The
+operation swapped to release (3). An extra call on the success path (1). The
+call placed after the first raise (4). The guard for a missing recorder
+removed (3, in the existing test file).
+
+Release, 10 breaks. The call dropped at each of the three refusals (2, 1,
+1). The reason swapped at each of the three (2, 1, 1). The operation swapped
+to renew (4). An extra call on the success path (1). The call placed after
+the first raise (2). The guard for a missing recorder removed (3, in the
+existing test file).
+
+Recorder, 5 breaks. The except narrowed to KeyError (10). The return on a
+missing reclaim record removed (1). The worker taken from the reclaim record
+(1). The operation always renew (3). The reason always no_active_lease (2).
+
+Wiring, 6 breaks. The recorder dropped from the renew builder (3) and from
+the release builder (2). A separate recorder built for the renew service (2)
+and for the release service (1). The recorder reading a separate reclaim
+repository (4). The refusal repository always in memory (1).
+
+No break survived. 29 breaks were run in all.
+
+Two statements of the entry above are corrected. The tenant rule test of ADR
+0064, point 4, failed only for the new repository, and the new entity was
+not part of that failure. The new tests number 63, not 62: the collected
+tests went from 2371 to 2434.
+
+Not claimed: safe to expose.

@@ -112,6 +112,9 @@ from app.application.services.record_job_events_service import (
 from app.application.services.record_lease_reclaim_service import (
     RecordLeaseReclaimService,
 )
+from app.application.services.record_lease_refusal_service import (
+    RecordLeaseRefusalService,
+)
 from app.application.services.register_worker_service import (
     RegisterWorkerService,
 )
@@ -163,6 +166,9 @@ from app.domain.repositories.job_repository import (
 from app.domain.repositories.lease_reclaim_repository import (
     LeaseReclaimRepository,
 )
+from app.domain.repositories.lease_refusal_repository import (
+    LeaseRefusalRepository,
+)
 from app.domain.repositories.lease_repository import (
     LeaseRepository,
 )
@@ -202,6 +208,9 @@ from app.infrastructure.repositories.in_memory_job_repository import (
 from app.infrastructure.repositories.in_memory_lease_reclaim_repository import (
     InMemoryLeaseReclaimRepository,
 )
+from app.infrastructure.repositories.in_memory_lease_refusal_repository import (
+    InMemoryLeaseRefusalRepository,
+)
 from app.infrastructure.repositories.in_memory_lease_repository import (
     InMemoryLeaseRepository,
 )
@@ -225,6 +234,9 @@ from app.infrastructure.repositories.postgres_job_repository import (
 )
 from app.infrastructure.repositories.postgres_lease_reclaim_repository import (
     PostgresLeaseReclaimRepository,
+)
+from app.infrastructure.repositories.postgres_lease_refusal_repository import (
+    PostgresLeaseRefusalRepository,
 )
 from app.infrastructure.repositories.postgres_lease_repository import (
     PostgresLeaseRepository,
@@ -433,6 +445,19 @@ _record_lease_reclaim_service = RecordLeaseReclaimService(
 )
 
 
+_lease_refusal_repository: LeaseRefusalRepository = (
+    PostgresLeaseRefusalRepository(_connection_pool)
+    if _connection_pool is not None
+    else InMemoryLeaseRefusalRepository()
+)
+
+
+_record_lease_refusal_service = RecordLeaseRefusalService(
+    lease_reclaim_repository=_lease_reclaim_repository,
+    lease_refusal_repository=_lease_refusal_repository,
+)
+
+
 _acquire_lease_service = AcquireLeaseService(
     lease_repository=_lease_repository,
     record_job_events_service=_record_job_events_service,
@@ -440,6 +465,7 @@ _acquire_lease_service = AcquireLeaseService(
 
 _renew_lease_service = RenewLeaseService(
     lease_repository=_lease_repository,
+    record_lease_refusal_service=_record_lease_refusal_service,
 )
 
 
@@ -448,6 +474,7 @@ _release_lease_service = ReleaseLeaseService(
     worker_repository=_worker_repository,
     record_job_events_service=_record_job_events_service,
     job_repository=_job_repository,
+    record_lease_refusal_service=_record_lease_refusal_service,
 )
 
 
