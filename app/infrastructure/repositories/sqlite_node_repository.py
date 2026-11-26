@@ -227,6 +227,64 @@ class SqliteNodeRepository(NodeRepository):
 
         return cursor.rowcount > 0
 
+    def allocate(
+        self,
+        node_id: NodeId,
+        tenant_id: TenantId,
+        requirements: ResourceRequirements,
+    ) -> bool:
+        cursor = self._connection.execute(
+            """
+            UPDATE nodes
+            SET available_cpu_cores = available_cpu_cores - ?,
+                available_memory_mib = available_memory_mib - ?,
+                available_vram_mib = available_vram_mib - ?
+            WHERE id = ? AND tenant_id = ?
+              AND available_cpu_cores >= ?
+              AND available_memory_mib >= ?
+              AND available_vram_mib >= ?
+            """,
+            (
+                requirements.cpu_cores,
+                requirements.memory_mib,
+                requirements.vram_mib,
+                str(node_id),
+                str(tenant_id),
+                requirements.cpu_cores,
+                requirements.memory_mib,
+                requirements.vram_mib,
+            ),
+        )
+        self._connection.commit()
+
+        return cursor.rowcount > 0
+
+    def release(
+        self,
+        node_id: NodeId,
+        tenant_id: TenantId,
+        requirements: ResourceRequirements,
+    ) -> bool:
+        cursor = self._connection.execute(
+            """
+            UPDATE nodes
+            SET available_cpu_cores = MIN(available_cpu_cores + ?, capacity_cpu_cores),
+                available_memory_mib = MIN(available_memory_mib + ?, capacity_memory_mib),
+                available_vram_mib = MIN(available_vram_mib + ?, capacity_vram_mib)
+            WHERE id = ? AND tenant_id = ?
+            """,
+            (
+                requirements.cpu_cores,
+                requirements.memory_mib,
+                requirements.vram_mib,
+                str(node_id),
+                str(tenant_id),
+            ),
+        )
+        self._connection.commit()
+
+        return cursor.rowcount > 0
+
     def _row_to_node(
         self,
         row: sqlite3.Row,

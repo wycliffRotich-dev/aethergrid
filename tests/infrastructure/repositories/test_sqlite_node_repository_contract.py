@@ -14,6 +14,10 @@ from tests.infrastructure.repositories.contract.node_repository_contract import 
 
 
 class TestSqliteNodeRepositoryContract(NodeRepositoryContract):
+    # The repository shares one sqlite3.Connection. Concurrent writes
+    # through it corrupt the database, so the concurrent test skips.
+    concurrent_safe = False
+
     @pytest.fixture
     def repository(self, tmp_path):
         connection = create_connection(str(tmp_path / "nodes.db"))
