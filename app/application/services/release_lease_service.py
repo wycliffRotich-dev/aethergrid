@@ -5,6 +5,11 @@ from uuid import UUID
 from app.application.services.record_job_events_service import (
     RecordJobEventsService,
 )
+from app.application.services.record_lease_refusal_service import (
+    RecordLeaseRefusalService,
+)
+from app.domain.enums.lease_refusal_operation import LeaseRefusalOperation
+from app.domain.enums.lease_refusal_reason import LeaseRefusalReason
 from app.domain.exceptions.job_not_found_error import (
     JobNotFoundError,
 )
@@ -63,6 +68,7 @@ class ReleaseLeaseService:
         worker_repository: WorkerRepository,
         record_job_events_service: RecordJobEventsService | None = None,
         job_repository: JobRepository | None = None,
+        record_lease_refusal_service: RecordLeaseRefusalService | None = None,
     ) -> None:
         # An event takes its tenant from its job (ADR 0074), and the
         # lease holds only the job id. Recording therefore needs a
@@ -76,6 +82,29 @@ class ReleaseLeaseService:
         self._worker_repository = worker_repository
         self._record_job_events_service = record_job_events_service
         self._job_repository = job_repository
+        self._record_lease_refusal_service = record_lease_refusal_service
+
+    def _record_refusal(
+        self,
+        worker_id: WorkerId,
+        lease_id: UUID,
+        tenant_id: TenantId,
+        reason: LeaseRefusalReason,
+    ) -> None:
+        # ADR 0108, decision 5: the record is made just before the
+        # refusal is raised, and it never raises itself. An outcome
+        # report is refused through this service, so it is recorded
+        # as a release.
+        if self._record_lease_refusal_service is None:
+            return
+
+        self._record_lease_refusal_service.record(
+            lease_id=lease_id,
+            tenant_id=tenant_id,
+            worker_id=worker_id,
+            operation=LeaseRefusalOperation.RELEASE,
+            reason=reason,
+        )
 
     def execute(
         self,
@@ -89,6 +118,12 @@ class ReleaseLeaseService:
         )
 
         if lease is None:
+            self._record_refusal(
+                worker_id,
+                expected_lease_id,
+                tenant_id,
+                LeaseRefusalReason.NO_ACTIVE_LEASE,
+            )
             raise NoActiveLeaseError(worker_id)
 
         if lease.id != expected_lease_id:
@@ -101,6 +136,12 @@ class ReleaseLeaseService:
             # deleting it would remove a lease this caller has
             # no claim to. Raised the same way renew() already
             # refuses to resurrect a reclaimed lease.
+            self._record_refusal(
+                worker_id,
+                expected_lease_id,
+                tenant_id,
+                LeaseRefusalReason.LEASE_NOT_CURRENT,
+            )
             raise LeaseNotFoundError(expected_lease_id)
 
         worker = self._worker_repository.get_by_id(
@@ -134,6 +175,12 @@ class ReleaseLeaseService:
         # land between that read and this delete. Deleting by id makes
         # the check and the delete one statement (ADR 0034).
         if not self._lease_repository.delete_by_id(lease.id, tenant_id):
+            self._record_refusal(
+                worker_id,
+                expected_lease_id,
+                tenant_id,
+                LeaseRefusalReason.LEASE_NOT_CURRENT,
+            )
             raise LeaseNotFoundError(expected_lease_id)
 
         if recorder is not None and job is not None:

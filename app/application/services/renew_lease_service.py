@@ -3,7 +3,12 @@ from __future__ import annotations
 from datetime import timedelta
 from uuid import UUID
 
+from app.application.services.record_lease_refusal_service import (
+    RecordLeaseRefusalService,
+)
 from app.domain.entities.lease import DEFAULT_LEASE_DURATION
+from app.domain.enums.lease_refusal_operation import LeaseRefusalOperation
+from app.domain.enums.lease_refusal_reason import LeaseRefusalReason
 from app.domain.exceptions.lease_not_found_error import (
     LeaseNotFoundError,
 )
@@ -44,8 +49,30 @@ class RenewLeaseService:
     def __init__(
         self,
         lease_repository: LeaseRepository,
+        record_lease_refusal_service: RecordLeaseRefusalService | None = None,
     ) -> None:
         self._lease_repository = lease_repository
+        self._record_lease_refusal_service = record_lease_refusal_service
+
+    def _record_refusal(
+        self,
+        worker_id: WorkerId,
+        lease_id: UUID,
+        tenant_id: TenantId,
+        reason: LeaseRefusalReason,
+    ) -> None:
+        # ADR 0108, decision 5: the record is made just before the
+        # refusal is raised, and it never raises itself.
+        if self._record_lease_refusal_service is None:
+            return
+
+        self._record_lease_refusal_service.record(
+            lease_id=lease_id,
+            tenant_id=tenant_id,
+            worker_id=worker_id,
+            operation=LeaseRefusalOperation.RENEW,
+            reason=reason,
+        )
 
     def execute(
         self,
@@ -81,9 +108,21 @@ class RenewLeaseService:
         )
 
         if lease is None:
+            self._record_refusal(
+                worker_id,
+                expected_lease_id,
+                tenant_id,
+                LeaseRefusalReason.NO_ACTIVE_LEASE,
+            )
             raise NoActiveLeaseError(worker_id)
 
         if lease.id != expected_lease_id:
+            self._record_refusal(
+                worker_id,
+                expected_lease_id,
+                tenant_id,
+                LeaseRefusalReason.LEASE_NOT_CURRENT,
+            )
             raise LeaseNotFoundError(expected_lease_id)
 
         self._lease_repository.renew(
