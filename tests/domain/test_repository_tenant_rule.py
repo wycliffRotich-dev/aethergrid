@@ -13,6 +13,7 @@ from app.domain.entities.event import Event
 from app.domain.entities.job import Job
 from app.domain.entities.lease import Lease
 from app.domain.entities.lease_reclaim import LeaseReclaim
+from app.domain.entities.lease_refusal import LeaseRefusal
 from app.domain.entities.node import Node
 from app.domain.entities.worker import Worker
 from app.domain.repositories.api_key_repository import (
@@ -21,6 +22,7 @@ from app.domain.repositories.api_key_repository import (
 from app.domain.repositories.event_repository import EventRepository
 from app.domain.repositories.job_repository import JobRepository
 from app.domain.repositories.lease_reclaim_repository import LeaseReclaimRepository
+from app.domain.repositories.lease_refusal_repository import LeaseRefusalRepository
 from app.domain.repositories.lease_repository import LeaseRepository
 from app.domain.repositories.node_repository import NodeRepository
 from app.domain.repositories.tenant_repository import TenantRepository
@@ -34,6 +36,7 @@ SCOPED_REPOSITORIES = [
     EventRepository,
     JobRepository,
     LeaseReclaimRepository,
+    LeaseRefusalRepository,
     LeaseRepository,
     NodeRepository,
     WorkerRepository,
@@ -54,7 +57,16 @@ REPOSITORIES_DIR = Path(__file__).resolve().parents[2] / "app" / "domain" / "rep
 
 # Entity types that carry their own tenant_id, so a method
 # that takes one is scoped by that entity.
-TENANT_CARRYING_ENTITIES = (ApiKey, Event, Job, Lease, LeaseReclaim, Node, Worker)
+TENANT_CARRYING_ENTITIES = (
+    ApiKey,
+    Event,
+    Job,
+    Lease,
+    LeaseReclaim,
+    LeaseRefusal,
+    Node,
+    Worker,
+)
 
 ACROSS_TENANTS_SUFFIX = "_across_tenants"
 
