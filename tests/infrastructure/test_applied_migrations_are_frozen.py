@@ -47,6 +47,9 @@ EXPECTED_CHECKSUMS = {
     "0009_create_the_lease_refusals_table.sql": (
         "92bf9edd65a49542188ce072fa74aa4fc72da60488fa46ae3efc475a3c513a08"
     ),
+    "0010_create_the_lease_record_views.sql": (
+        "477c978c7c038cf1ec0faf6a2147d4cf05a81b18c8c062422b49f9fc48bbbd26"
+    ),
 }
 
 
