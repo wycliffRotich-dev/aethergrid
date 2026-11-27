@@ -1,7 +1,7 @@
 """
 ADR 0102, decision 2. What the SQL of the public reader may look like.
 
-The reader selects from the five public views and from nothing else. These
+The reader selects from the seven public views and from nothing else. These
 tests read the source of the package and hold every query to one narrow
 shape: a named column list, one public view, a fixed order that ends with the
 id, and a bound limit. Nothing else is accepted, so a join, a star, a base
@@ -21,7 +21,9 @@ import pytest
 from app.application.public_read_port import (
     PublicEventRecord,
     PublicJobRecord,
+    PublicLeaseReclaimRecord,
     PublicLeaseRecord,
+    PublicLeaseRefusalRecord,
     PublicNodeRecord,
     PublicWorkerRecord,
 )
@@ -36,11 +38,14 @@ RECORD_OF_VIEW = {
     "public_workers": PublicWorkerRecord,
     "public_leases": PublicLeaseRecord,
     "public_events": PublicEventRecord,
+    "public_lease_reclaims": PublicLeaseReclaimRecord,
+    "public_lease_refusals": PublicLeaseRefusalRecord,
 }
 
 QUERY = re.compile(
     r"^\s*select\s+(?P<columns>[a-z_][a-z_0-9]*(?:\s*,\s*[a-z_][a-z_0-9]*)*)\s+"
-    r"from\s+(?P<view>public_(?:nodes|jobs|workers|leases|events))\s+"
+    r"from\s+(?P<view>public_(?:nodes|jobs|workers|leases|events"
+    r"|lease_reclaims|lease_refusals))\s+"
     r"order\s+by\s+(?P<order>"
     r"[a-z_][a-z_0-9]*(?:\s+(?:asc|desc))?"
     r"(?:\s*,\s*[a-z_][a-z_0-9]*(?:\s+(?:asc|desc))?)*)\s+"
@@ -61,11 +66,17 @@ SQL_TEXT = re.compile(
 )
 
 GOOD = [
+    "SELECT id, reclaimed_at FROM public_lease_reclaims "
+    "ORDER BY reclaimed_at DESC, id LIMIT %s",
+    "SELECT id, refused_at FROM public_lease_refusals "
+    "ORDER BY refused_at DESC, id LIMIT %s",
     "SELECT id, name FROM public_nodes ORDER BY name, id LIMIT %s",
     "SELECT id, occurred_at\nFROM public_events\nORDER BY occurred_at DESC, id\nLIMIT %s\n",
 ]
 
 BAD = [
+    "SELECT id FROM lease_reclaims ORDER BY id LIMIT %s",
+    "SELECT id FROM public_lease_reclaims_x ORDER BY id LIMIT %s",
     "SELECT * FROM public_nodes ORDER BY id LIMIT %s",
     "SELECT id FROM nodes ORDER BY id LIMIT %s",
     "SELECT id FROM public_nodes JOIN tenants ON true ORDER BY id LIMIT %s",
@@ -124,7 +135,7 @@ def strings() -> list[str]:
 
 def queries() -> list[str]:
     found = [text for text in strings() if re.match(r"\s*select\b", text, re.I)]
-    assert found, "the package must hold the queries of the five views"
+    assert found, "the package must hold the queries of the seven views"
 
     return found
 

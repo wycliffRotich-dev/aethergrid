@@ -43,6 +43,8 @@ from app.presentation.public.app import create_public_app
 from app.presentation.public.responses import (
     PublicEventResponse,
     PublicJobResponse,
+    PublicLeaseReclaimResponse,
+    PublicLeaseRefusalResponse,
     PublicLeaseResponse,
     PublicNodeResponse,
     PublicWorkerResponse,
@@ -55,7 +57,14 @@ from tests.infrastructure.test_public_app_role_script import (
     _run_script,
 )
 from tests.support.public_app import ORIGIN, make_settings
-from tests.support.public_views import Chain, make_tenant, seed_chain, set_scope
+from tests.support.public_views import (
+    Chain,
+    LeaseRecordIds,
+    make_tenant,
+    seed_chain,
+    seed_lease_record,
+    set_scope,
+)
 
 SETTING = "AETHERGRID_PUBLIC_DATABASE_PASSWORD_FILE"
 MESSAGE = (
@@ -384,6 +393,58 @@ def test_a_route_serves_the_scoped_rows_of_the_real_reader(
     assert response.status_code == 200
     body = response.json()
     assert [row["id"] for row in body] == [str(login.chain.of(table))]
+    assert body == [model.from_record(r).model_dump(mode="json") for r in records]
+    assert _keys(body).isdisjoint(PRIVATE_KEYS)
+
+
+LEASE_RECORD_ROUTES = [
+    ("/public/lease-reclaims", PublicLeaseReclaimResponse, "lease_reclaims"),
+    ("/public/lease-refusals", PublicLeaseRefusalResponse, "lease_refusals"),
+]
+
+
+@pytest.fixture
+def lease_records(login: Login) -> LeaseRecordIds:
+    """
+    A reclaim record and a refusal for each of the two tenants. The login
+    fixture is left as it is, because these rows come with a job, a node and
+    the rest of a chain, and the tests above count those rows.
+    """
+    scope = login.db.conn.execute("SELECT tenant_id FROM public_demo_scope").fetchone()
+    assert scope is not None
+    other = login.db.conn.execute(
+        "SELECT tenant_id FROM nodes WHERE id <> %s", (login.chain.node,)
+    ).fetchone()
+    assert other is not None
+    seed_lease_record(login.db.conn, other[0])
+
+    return seed_lease_record(login.db.conn, scope[0])
+
+
+@pytest.mark.parametrize(
+    ("path", "model", "table"),
+    LEASE_RECORD_ROUTES,
+    ids=[route[0] for route in LEASE_RECORD_ROUTES],
+)
+def test_a_lease_record_route_serves_the_scoped_rows_of_the_real_reader(
+    login: Login,
+    pool: ConnectionPool,
+    lease_records: LeaseRecordIds,
+    path: str,
+    model: Any,
+    table: str,
+) -> None:
+    owner = login.db.conn.execute(f"SELECT count(*) FROM {table}").fetchone()
+    assert owner == (2,), f"{table}: both tenants must have a row"
+
+    reader = PostgresPublicReader(pool)
+    records = getattr(reader, "list_" + table)(100)
+
+    response = TestClient(_app(reader)).get(path)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [row["id"] for row in body] == [str(lease_records.of(table))]
     assert body == [model.from_record(r).model_dump(mode="json") for r in records]
     assert _keys(body).isdisjoint(PRIVATE_KEYS)
 

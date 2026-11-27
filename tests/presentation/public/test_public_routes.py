@@ -1,5 +1,6 @@
 """
-ADR 0102, decisions 5 and 7. The five routes of the public app.
+ADR 0102, decisions 5 and 7, and ADR 0109, decision 7. The seven routes
+of the public app.
 
 Each route is a plain GET that reads a fixed number of rows through the port
 and returns them as a list of public models. A query string changes nothing,
@@ -26,6 +27,8 @@ from app.presentation.public.app import create_public_app
 from app.presentation.public.responses import (
     PublicEventResponse,
     PublicJobResponse,
+    PublicLeaseReclaimResponse,
+    PublicLeaseRefusalResponse,
     PublicLeaseResponse,
     PublicNodeResponse,
     PublicWorkerResponse,
@@ -37,6 +40,8 @@ from tests.support.public_app import (
     event,
     job,
     lease,
+    lease_reclaim,
+    lease_refusal,
     make_settings,
     node,
     worker,
@@ -62,6 +67,20 @@ ROUTES = [
     Route("/public/workers", "list_workers", "workers", worker, PublicWorkerResponse),
     Route("/public/leases", "list_leases", "leases", lease, PublicLeaseResponse),
     Route("/public/events", "list_events", "events", event, PublicEventResponse),
+    Route(
+        "/public/lease-reclaims",
+        "list_lease_reclaims",
+        "lease_reclaims",
+        lease_reclaim,
+        PublicLeaseReclaimResponse,
+    ),
+    Route(
+        "/public/lease-refusals",
+        "list_lease_refusals",
+        "lease_refusals",
+        lease_refusal,
+        PublicLeaseRefusalResponse,
+    ),
 ]
 EACH_ROUTE = [pytest.param(route, id=route.path) for route in ROUTES]
 

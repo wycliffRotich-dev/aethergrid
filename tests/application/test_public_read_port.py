@@ -18,13 +18,15 @@ import pytest
 from app.application.public_read_port import (
     PublicEventRecord,
     PublicJobRecord,
+    PublicLeaseReclaimRecord,
     PublicLeaseRecord,
+    PublicLeaseRefusalRecord,
     PublicNodeRecord,
     PublicReadPort,
     PublicWorkerRecord,
 )
 
-# The columns of the five views of migration 0007, in order, with the type
+# The columns of the seven views of migrations 0007 and 0010, in order, with the type
 # each one has in the base table. Nullable columns are optional.
 RECORDS: dict[type, dict[str, object]] = {
     PublicNodeRecord: {
@@ -75,6 +77,25 @@ RECORDS: dict[type, dict[str, object]] = {
         "event_type": str,
         "occurred_at": datetime,
     },
+    PublicLeaseReclaimRecord: {
+        "id": UUID,
+        "lease_id": UUID,
+        "worker_id": UUID,
+        "job_id": UUID,
+        "lease_acquired_at": datetime,
+        "lease_expires_at": datetime,
+        "reclaimed_at": datetime,
+        "recovered_by": str,
+    },
+    PublicLeaseRefusalRecord: {
+        "id": UUID,
+        "lease_id": UUID,
+        "worker_id": UUID,
+        "job_id": UUID,
+        "operation": str,
+        "reason": str,
+        "refused_at": datetime,
+    },
 }
 
 METHODS: dict[str, type] = {
@@ -83,6 +104,8 @@ METHODS: dict[str, type] = {
     "list_workers": PublicWorkerRecord,
     "list_leases": PublicLeaseRecord,
     "list_events": PublicEventRecord,
+    "list_lease_reclaims": PublicLeaseReclaimRecord,
+    "list_lease_refusals": PublicLeaseRefusalRecord,
 }
 
 PRIVATE_COLUMNS = {

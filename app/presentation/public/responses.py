@@ -1,5 +1,6 @@
 """
-The response models of the public app (ADR 0102, decisions 5 and 9).
+The response models of the public app (ADR 0102, decisions 5 and 9, and
+ADR 0109, decision 7).
 
 Each model has the fields of its port record, in the same order, so a field
 is public only when it is written here on purpose (ADR 0094, decision 3).
@@ -19,7 +20,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.application.public_read_port import (
     PublicEventRecord,
     PublicJobRecord,
+    PublicLeaseReclaimRecord,
     PublicLeaseRecord,
+    PublicLeaseRefusalRecord,
     PublicNodeRecord,
     PublicWorkerRecord,
 )
@@ -148,4 +151,54 @@ class PublicEventResponse(_PublicResponse):
             aggregate_type=record.aggregate_type,
             event_type=record.event_type,
             occurred_at=record.occurred_at,
+        )
+
+
+class PublicLeaseReclaimResponse(_PublicResponse):
+    id: UUID
+    lease_id: UUID
+    worker_id: UUID
+    job_id: UUID
+    lease_acquired_at: datetime
+    lease_expires_at: datetime
+    reclaimed_at: datetime
+    recovered_by: str
+
+    @classmethod
+    def from_record(
+        cls, record: PublicLeaseReclaimRecord
+    ) -> PublicLeaseReclaimResponse:
+        return cls(
+            id=record.id,
+            lease_id=record.lease_id,
+            worker_id=record.worker_id,
+            job_id=record.job_id,
+            lease_acquired_at=record.lease_acquired_at,
+            lease_expires_at=record.lease_expires_at,
+            reclaimed_at=record.reclaimed_at,
+            recovered_by=record.recovered_by,
+        )
+
+
+class PublicLeaseRefusalResponse(_PublicResponse):
+    id: UUID
+    lease_id: UUID
+    worker_id: UUID
+    job_id: UUID
+    operation: str
+    reason: str
+    refused_at: datetime
+
+    @classmethod
+    def from_record(
+        cls, record: PublicLeaseRefusalRecord
+    ) -> PublicLeaseRefusalResponse:
+        return cls(
+            id=record.id,
+            lease_id=record.lease_id,
+            worker_id=record.worker_id,
+            job_id=record.job_id,
+            operation=record.operation,
+            reason=record.reason,
+            refused_at=record.refused_at,
         )
