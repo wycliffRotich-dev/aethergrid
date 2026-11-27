@@ -1,7 +1,8 @@
 """
-The Postgres reader of the five public views (ADR 0102, decision 2).
+The Postgres reader of the seven public views (ADR 0102, decision 2, and
+ADR 0109, decision 6).
 
-It implements the read port of the public demo and selects from the five
+It implements the read port of the public demo and selects from the seven
 public views and from nothing else. Each query is a fixed string with a
 named column list, a fixed order that ends with the id, and a bound limit.
 Nothing is built from text and nothing writes. A test reads the source of
@@ -27,7 +28,9 @@ from psycopg_pool import ConnectionPool
 from app.application.public_read_port import (
     PublicEventRecord,
     PublicJobRecord,
+    PublicLeaseReclaimRecord,
     PublicLeaseRecord,
+    PublicLeaseRefusalRecord,
     PublicNodeRecord,
     PublicWorkerRecord,
 )
@@ -75,6 +78,22 @@ _EVENTS = (
     "LIMIT %s"
 )
 
+_LEASE_RECLAIMS = (
+    "SELECT id, lease_id, worker_id, job_id, lease_acquired_at, "
+    "lease_expires_at, reclaimed_at, recovered_by "
+    "FROM public_lease_reclaims "
+    "ORDER BY reclaimed_at DESC, id "
+    "LIMIT %s"
+)
+
+_LEASE_REFUSALS = (
+    "SELECT id, lease_id, worker_id, job_id, operation, reason, "
+    "refused_at "
+    "FROM public_lease_refusals "
+    "ORDER BY refused_at DESC, id "
+    "LIMIT %s"
+)
+
 
 def _bounded(limit: object) -> int:
     if isinstance(limit, bool) or not isinstance(limit, int):
@@ -104,6 +123,16 @@ class PostgresPublicReader:
 
     def list_events(self, limit: int) -> Sequence[PublicEventRecord]:
         return self._read(_EVENTS, PublicEventRecord, limit)
+
+    def list_lease_reclaims(
+        self, limit: int
+    ) -> Sequence[PublicLeaseReclaimRecord]:
+        return self._read(_LEASE_RECLAIMS, PublicLeaseReclaimRecord, limit)
+
+    def list_lease_refusals(
+        self, limit: int
+    ) -> Sequence[PublicLeaseRefusalRecord]:
+        return self._read(_LEASE_REFUSALS, PublicLeaseRefusalRecord, limit)
 
     def _read(
         self, query: str, record: type[_Record], limit: object

@@ -2,7 +2,8 @@
 The read port of the public demo (ADR 0102, decision 1).
 
 A read-only protocol with one method per public view, and one frozen record
-per view with exactly the columns of that view (ADR 0098, migration 0007).
+per view with exactly the columns of that view (ADR 0098, migration 0007,
+and ADR 0109, migration 0010).
 No method takes a tenant: the tenant lives in the database and a caller can
 never choose it. Nothing here writes.
 
@@ -81,6 +82,29 @@ class PublicEventRecord:
     occurred_at: datetime
 
 
+@dataclass(frozen=True, slots=True)
+class PublicLeaseReclaimRecord:
+    id: UUID
+    lease_id: UUID
+    worker_id: UUID
+    job_id: UUID
+    lease_acquired_at: datetime
+    lease_expires_at: datetime
+    reclaimed_at: datetime
+    recovered_by: str
+
+
+@dataclass(frozen=True, slots=True)
+class PublicLeaseRefusalRecord:
+    id: UUID
+    lease_id: UUID
+    worker_id: UUID
+    job_id: UUID
+    operation: str
+    reason: str
+    refused_at: datetime
+
+
 class PublicReadPort(Protocol):
     def list_nodes(self, limit: int) -> Sequence[PublicNodeRecord]: ...
 
@@ -91,3 +115,11 @@ class PublicReadPort(Protocol):
     def list_leases(self, limit: int) -> Sequence[PublicLeaseRecord]: ...
 
     def list_events(self, limit: int) -> Sequence[PublicEventRecord]: ...
+
+    def list_lease_reclaims(
+        self, limit: int
+    ) -> Sequence[PublicLeaseReclaimRecord]: ...
+
+    def list_lease_refusals(
+        self, limit: int
+    ) -> Sequence[PublicLeaseRefusalRecord]: ...

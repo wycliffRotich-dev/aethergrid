@@ -150,3 +150,57 @@ is now compared with its exact text. One test still said five views in its
 name while it checked seven, and it was renamed.
 
 Not claimed: safe to expose.
+
+2026-11-27. The port, the reader, the routes and the response models for the
+two views are built.
+
+What is built. The read port gains PublicLeaseReclaimRecord and
+PublicLeaseRefusalRecord, each frozen, with slots and exactly the columns of
+its view in the same order, and two methods, list_lease_reclaims and
+list_lease_refusals, each taking a limit. The reader runs one fixed query
+for each view, with named columns, newest first and then id ascending, and a
+bound limit that is cut to MAX_LIMIT like the others. The public app serves
+GET /public/lease-reclaims and GET /public/lease-refusals behind the same
+gate, ROW_LIMIT and fixed 503 body as the other five routes. Each route has
+a response model of its own in the public package,
+PublicLeaseReclaimResponse and PublicLeaseRefusalResponse, which are frozen,
+refuse an extra field and carry the fields of their record in order. The
+list of allowed paths in the tests names the two new paths, and the
+docstrings of the port and the reader now say seven views.
+
+How it is tested. 117 new tests: the port test 20, the SQL rules test 4, the
+route test 28, the response test 10, the real database test 2 and a new test
+file for the reader 53. The port test pins the fields, the types, the frozen
+records and the two methods, each with a limit and a sequence of its own
+record. The SQL rules test now accepts the two views and requires exactly
+one query for each of the seven. The 53 reader tests run as the real read
+role in a schema migrated to 0010 and check that only the scoped tenant
+shows, that no scope shows nothing, that every field equals its column, that
+a limit above the maximum is cut, that a limit below it is honoured, that a
+limit that is not an integer or is below one is refused before the database
+is used, that the order is newest first with ties settled by the id, and
+that a missing grant breaks the read and the connection goes back to the
+pool. The route tests run for the two new routes the checks of the other
+five: the body, the one call with the row limit, an empty list, a query
+string that changes nothing, a fixed 503 for four kinds of failure, the log
+for the operator and a stop signal that is not turned into a 503. The real
+database tests read both routes through the login of aethergrid_public_app
+and compare the body with the scoped rows of the reader, with a row of a
+second tenant present and no private key in the body.
+
+What each deliberate break turned red, in the real tests. Each number is the
+count of tests that failed.
+
+Reader, 4 breaks. The order of the reclaims query without DESC (1 test). The
+tie break of the refusals query changed to id descending (2). The refusals
+query without the reason column (16). The reclaims query reading from the
+refusals view (17). Port, 2 breaks. A method of the protocol renamed (5).
+recovered_by made optional (1). Responses, 2 breaks. Two fields of the
+refusal response swapped (1). A time of the reclaim response copied from the
+wrong field (1). Routes, 2 breaks. The refusals route reading the reclaims
+method (6). The reclaims route asking for 10 rows instead of the row limit
+(4).
+
+No break survived.
+
+Not claimed: safe to expose.

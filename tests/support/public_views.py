@@ -155,3 +155,85 @@ def seed_chain(
         (chain.event, chain.job, str(chain.job), occurred, tenant_id),
     )
     return chain
+
+
+# The two views of migration 0010 (ADR 0109). They have names of their own.
+# The tests of the first five views build a schema at version 7, where a
+# grant on these two would fail, so VIEWS and VIEWS_MIGRATION stay as they are.
+LEASE_RECORD_VIEWS_MIGRATION = 10
+LEASE_RECORD_VIEWS = (
+    "public_lease_reclaims",
+    "public_lease_refusals",
+)
+
+
+@dataclass(frozen=True)
+class LeaseRecordIds:
+    """The ids of one reclaim record and the refusal of the same lease."""
+
+    reclaim: uuid.UUID
+    refusal: uuid.UUID
+    lease: uuid.UUID
+    job: uuid.UUID
+
+    def of(self, table: str) -> uuid.UUID:
+        return {
+            "lease_reclaims": self.reclaim,
+            "lease_refusals": self.refusal,
+        }[table]
+
+
+def allow_lease_record_views(conn: psycopg.Connection[Any], schema: str) -> None:
+    """Test only. This is what the operator script will do on the demo database."""
+    conn.execute(f'GRANT USAGE ON SCHEMA "{schema}" TO {ROLE}')
+    for view in LEASE_RECORD_VIEWS:
+        conn.execute(f"GRANT SELECT ON {view} TO {ROLE}")
+
+
+def seed_lease_record(
+    conn: psycopg.Connection[Any],
+    tenant_id: uuid.UUID,
+    *,
+    reclaim_id: uuid.UUID | None = None,
+    refusal_id: uuid.UUID | None = None,
+    reclaimed_at: datetime | None = None,
+    refused_at: datetime | None = None,
+) -> LeaseRecordIds:
+    """
+    One job for the tenant, a reclaim record of a lease of that job and one
+    refusal of the same lease. The job comes from seed_chain, so the keys of
+    both tables are met. Values that a view exposes differ from each other,
+    so a test that compares fields notices two columns that were swapped.
+    """
+    job = seed_chain(conn, tenant_id).job
+    now = datetime.now(UTC)
+    reclaimed = now - timedelta(seconds=2) if reclaimed_at is None else reclaimed_at
+    refused = now if refused_at is None else refused_at
+    reclaim = uuid.uuid4() if reclaim_id is None else reclaim_id
+    refusal = uuid.uuid4() if refusal_id is None else refusal_id
+    lease_id = uuid.uuid4()
+    worker_id = uuid.uuid4()
+
+    conn.execute(
+        "INSERT INTO lease_reclaims (id, tenant_id, lease_id, worker_id, "
+        "job_id, lease_acquired_at, lease_expires_at, reclaimed_at, "
+        "recovered_by) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'offline_node')",
+        (
+            reclaim,
+            tenant_id,
+            lease_id,
+            worker_id,
+            job,
+            reclaimed - timedelta(seconds=61),
+            reclaimed - timedelta(seconds=31),
+            reclaimed,
+        ),
+    )
+    conn.execute(
+        "INSERT INTO lease_refusals (id, tenant_id, lease_id, worker_id, "
+        "job_id, operation, reason, refused_at) "
+        "VALUES (%s, %s, %s, %s, %s, 'release', 'lease_not_current', %s)",
+        (refusal, tenant_id, lease_id, worker_id, job, refused),
+    )
+    return LeaseRecordIds(reclaim=reclaim, refusal=refusal, lease=lease_id, job=job)

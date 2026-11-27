@@ -101,7 +101,7 @@ def test_the_pool_is_closed_once_and_only_when_the_app_stops(
     assert opened.pool.closed == 1
 
 
-def test_the_composed_app_serves_the_health_route_and_the_five_public_routes(
+def test_the_composed_app_serves_the_health_route_and_the_seven_public_routes(
     opened: FakeOpen,
 ) -> None:
     app = composition.create_app(ENVIRONMENT)

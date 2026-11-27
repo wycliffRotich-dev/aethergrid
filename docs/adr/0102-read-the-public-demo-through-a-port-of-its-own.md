@@ -311,6 +311,17 @@ decision 5 and decisions 6, 7 and 9 not built, and the entry that says
 decision 6 is built except the reader, are out of date. Those lines are
 left as written.
 
+2026-11-27. Correction. ADR 0109 added two views and two routes, so the
+lines of this ADR that say five views or five routes are out of date. The
+reader selects from seven public views, the port has seven methods, and
+create_public_app serves seven GET routes next to /healthz: the five named
+in the entry of 2026-11-21, /public/lease-reclaims and
+/public/lease-refusals. Each of the two new routes asks the port for
+ROW_LIMIT rows through the same gate and the same fixed 503 body. Those
+lines are left as written.
+
+Not claimed: safe to expose.
+
 ## How to Verify
 
     pytest -q tests/architecture tests/presentation/public

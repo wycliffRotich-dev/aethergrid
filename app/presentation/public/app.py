@@ -26,6 +26,8 @@ from app.presentation.public.rate_limit_middleware import (
 from app.presentation.public.responses import (
     PublicEventResponse,
     PublicJobResponse,
+    PublicLeaseReclaimResponse,
+    PublicLeaseRefusalResponse,
     PublicLeaseResponse,
     PublicNodeResponse,
     PublicWorkerResponse,
@@ -156,6 +158,32 @@ def create_public_app(
             lambda: [
                 PublicEventResponse.from_record(row)
                 for row in reader.list_events(ROW_LIMIT)
+            ]
+        )
+
+    @app.get(
+        "/public/lease-reclaims",
+        response_model=list[PublicLeaseReclaimResponse],
+    )
+    def list_lease_reclaims() -> list[PublicLeaseReclaimResponse] | Response:
+        return _respond(
+            gate,
+            lambda: [
+                PublicLeaseReclaimResponse.from_record(row)
+                for row in reader.list_lease_reclaims(ROW_LIMIT)
+            ]
+        )
+
+    @app.get(
+        "/public/lease-refusals",
+        response_model=list[PublicLeaseRefusalResponse],
+    )
+    def list_lease_refusals() -> list[PublicLeaseRefusalResponse] | Response:
+        return _respond(
+            gate,
+            lambda: [
+                PublicLeaseRefusalResponse.from_record(row)
+                for row in reader.list_lease_refusals(ROW_LIMIT)
             ]
         )
 

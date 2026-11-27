@@ -16,7 +16,9 @@ from uuid import uuid4
 from app.application.public_read_port import (
     PublicEventRecord,
     PublicJobRecord,
+    PublicLeaseReclaimRecord,
     PublicLeaseRecord,
+    PublicLeaseRefusalRecord,
     PublicNodeRecord,
     PublicWorkerRecord,
 )
@@ -31,6 +33,8 @@ PUBLIC_PATHS = {
     "/healthz",
     "/public/events",
     "/public/jobs",
+    "/public/lease-reclaims",
+    "/public/lease-refusals",
     "/public/leases",
     "/public/nodes",
     "/public/workers",
@@ -61,6 +65,8 @@ class FakePublicReader:
         workers: Sequence[PublicWorkerRecord] = (),
         leases: Sequence[PublicLeaseRecord] = (),
         events: Sequence[PublicEventRecord] = (),
+        lease_reclaims: Sequence[PublicLeaseReclaimRecord] = (),
+        lease_refusals: Sequence[PublicLeaseRefusalRecord] = (),
         error: BaseException | None = None,
     ) -> None:
         self.nodes = nodes
@@ -68,6 +74,8 @@ class FakePublicReader:
         self.workers = workers
         self.leases = leases
         self.events = events
+        self.lease_reclaims = lease_reclaims
+        self.lease_refusals = lease_refusals
         self.error = error
         self.calls: list[tuple[str, int]] = []
 
@@ -93,6 +101,16 @@ class FakePublicReader:
 
     def list_events(self, limit: int) -> Sequence[PublicEventRecord]:
         return self._answer("list_events", limit, self.events)
+
+    def list_lease_reclaims(
+        self, limit: int
+    ) -> Sequence[PublicLeaseReclaimRecord]:
+        return self._answer("list_lease_reclaims", limit, self.lease_reclaims)
+
+    def list_lease_refusals(
+        self, limit: int
+    ) -> Sequence[PublicLeaseRefusalRecord]:
+        return self._answer("list_lease_refusals", limit, self.lease_refusals)
 
 
 def node(**changes: Any) -> PublicNodeRecord:
@@ -158,4 +176,29 @@ def event() -> PublicEventRecord:
         aggregate_type="job",
         event_type="JOB_STARTED",
         occurred_at=LATER,
+    )
+
+
+def lease_reclaim() -> PublicLeaseReclaimRecord:
+    return PublicLeaseReclaimRecord(
+        id=uuid4(),
+        lease_id=uuid4(),
+        worker_id=uuid4(),
+        job_id=uuid4(),
+        lease_acquired_at=NOW,
+        lease_expires_at=LATER,
+        reclaimed_at=LATER,
+        recovered_by="expired_lease",
+    )
+
+
+def lease_refusal() -> PublicLeaseRefusalRecord:
+    return PublicLeaseRefusalRecord(
+        id=uuid4(),
+        lease_id=uuid4(),
+        worker_id=uuid4(),
+        job_id=uuid4(),
+        operation="renew",
+        reason="no_active_lease",
+        refused_at=LATER,
     )

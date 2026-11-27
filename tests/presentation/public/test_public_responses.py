@@ -25,13 +25,17 @@ from pydantic import BaseModel, ValidationError
 from app.application.public_read_port import (
     PublicEventRecord,
     PublicJobRecord,
+    PublicLeaseReclaimRecord,
     PublicLeaseRecord,
+    PublicLeaseRefusalRecord,
     PublicNodeRecord,
     PublicWorkerRecord,
 )
 from app.presentation.public.responses import (
     PublicEventResponse,
     PublicJobResponse,
+    PublicLeaseReclaimResponse,
+    PublicLeaseRefusalResponse,
     PublicLeaseResponse,
     PublicNodeResponse,
     PublicWorkerResponse,
@@ -111,6 +115,31 @@ def event() -> PublicEventRecord:
     )
 
 
+def lease_reclaim() -> PublicLeaseReclaimRecord:
+    return PublicLeaseReclaimRecord(
+        id=uuid4(),
+        lease_id=uuid4(),
+        worker_id=uuid4(),
+        job_id=uuid4(),
+        lease_acquired_at=NOW,
+        lease_expires_at=LATER,
+        reclaimed_at=LATER,
+        recovered_by="offline_node",
+    )
+
+
+def lease_refusal() -> PublicLeaseRefusalRecord:
+    return PublicLeaseRefusalRecord(
+        id=uuid4(),
+        lease_id=uuid4(),
+        worker_id=uuid4(),
+        job_id=uuid4(),
+        operation="release",
+        reason="lease_not_current",
+        refused_at=LATER,
+    )
+
+
 PENDING = {
     "status": "PENDING",
     "assigned_node_id": None,
@@ -133,6 +162,12 @@ PAIRS = [
     ),
     pytest.param(lease(), PublicLeaseResponse, [], id="lease"),
     pytest.param(event(), PublicEventResponse, [], id="event"),
+    pytest.param(
+        lease_reclaim(), PublicLeaseReclaimResponse, [], id="lease-reclaim"
+    ),
+    pytest.param(
+        lease_refusal(), PublicLeaseRefusalResponse, [], id="lease-refusal"
+    ),
 ]
 
 RESPONSES = [
@@ -143,6 +178,8 @@ RESPONSES = [
         PublicWorkerResponse,
         PublicLeaseResponse,
         PublicEventResponse,
+        PublicLeaseReclaimResponse,
+        PublicLeaseRefusalResponse,
     )
 ]
 
