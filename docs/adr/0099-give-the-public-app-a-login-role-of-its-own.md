@@ -114,6 +114,24 @@ closed by removal instead. ADR 0102, decision 8, removed the setting, so
 the app has one source for its tenant. The text above is left as it was
 written.
 
+2026-11-27. Decision 6 now reads seven views, because ADR 0109 adds
+public_lease_reclaims and public_lease_refusals in migration 0010. The role
+holds USAGE on the schema and SELECT on the seven views, and nothing else.
+It still has no privilege on lease_reclaims, on lease_refusals or on any
+other base table. Decision 7 stands: the test that compares the two roles
+now runs with all seven views. The text above is left as it was written.
+
+scripts/create_public_app_role.sql names the seven views, asks for
+migrations up to 0010 and says so in its hint. The tests of the script run
+on a schema migrated to 0010. One new test shows that at version 7 the
+script refuses, names public_lease_reclaims and public_lease_refusals, and
+gives the hint to run the migrations up to 0010. Three deliberate breaks
+each turned tests red: the refusals view left out of the list of the script
+(2 tests), the hint that says 0010 changed to 0007 (1), and the hint that
+says seven views changed to five (1).
+
+Not claimed: safe to expose.
+
 ## How to Verify
 
     NEUROMESH_TEST_DATABASE_URL=postgresql://neuromesh@127.0.0.1:5433/neuromesh_test \

@@ -89,6 +89,12 @@ VIEW_COLUMNS = {
 }
 VIEWS = sorted(VIEW_COLUMNS)
 
+# The views the grant script names since ADR 0109: the five of migration 0007
+# and the two of migration 0010.
+LEASE_RECORD_VIEWS = ["public_lease_reclaims", "public_lease_refusals"]
+GRANTED_VIEWS = sorted([*VIEWS, *LEASE_RECORD_VIEWS])
+LEASE_RECORD_VIEWS_MIGRATION = 10
+
 PRIVATE_COLUMNS = {
     "tenant_id",
     "command",
@@ -149,6 +155,16 @@ def db(test_database_url: str) -> Iterator[Db]:
 def _migrated(db: Db) -> str:
     applied = db.run_up_to(VERSION)
     assert VERSION in applied, f"migration {VERSION:04d} does not exist yet"
+    row = db.conn.execute("SELECT current_schema()").fetchone()
+    assert row is not None
+    return str(row[0])
+
+
+def _migrated_with_lease_record_views(db: Db) -> str:
+    applied = db.run_up_to(LEASE_RECORD_VIEWS_MIGRATION)
+    assert LEASE_RECORD_VIEWS_MIGRATION in applied, (
+        f"migration {LEASE_RECORD_VIEWS_MIGRATION:04d} does not exist yet"
+    )
     row = db.conn.execute("SELECT current_schema()").fetchone()
     assert row is not None
     return str(row[0])
@@ -371,14 +387,16 @@ def _held_by_the_role(db: Db, schema: str) -> list[tuple[str, str]]:
     return [(row[0], row[1]) for row in rows]
 
 
-def test_the_grant_script_gives_the_role_the_five_views_and_nothing_else(
+def test_the_grant_script_gives_the_role_the_seven_views_and_nothing_else(
     db: Db,
 ) -> None:
-    schema = _migrated(db)
+    schema = _migrated_with_lease_record_views(db)
 
     _run_grant_script(db)
 
-    assert _held_by_the_role(db, schema) == [(view, "SELECT") for view in VIEWS]
+    assert _held_by_the_role(db, schema) == [
+        (view, "SELECT") for view in GRANTED_VIEWS
+    ]
     row = db.conn.execute(
         "SELECT has_schema_privilege(%s::name, %s::text, 'USAGE'), "
         "has_schema_privilege(%s::name, %s::text, 'CREATE')",
@@ -388,7 +406,7 @@ def test_the_grant_script_gives_the_role_the_five_views_and_nothing_else(
 
 
 def test_running_the_grant_script_twice_changes_nothing(db: Db) -> None:
-    schema = _migrated(db)
+    schema = _migrated_with_lease_record_views(db)
     _run_grant_script(db)
     first = _held_by_the_role(db, schema)
 
@@ -400,7 +418,7 @@ def test_running_the_grant_script_twice_changes_nothing(db: Db) -> None:
 def test_the_grant_script_refuses_when_a_view_is_missing_and_grants_nothing(
     db: Db,
 ) -> None:
-    schema = _migrated(db)
+    schema = _migrated_with_lease_record_views(db)
     db.conn.execute("DROP VIEW public_jobs")
 
     with pytest.raises(psycopg.Error) as refused:
@@ -417,18 +435,40 @@ def test_the_grant_script_refuses_when_a_view_is_missing_and_grants_nothing(
 def test_the_grant_script_refuses_when_the_role_holds_another_privilege(
     db: Db,
 ) -> None:
-    schema = _migrated(db)
+    schema = _migrated_with_lease_record_views(db)
     db.conn.execute(f"GRANT SELECT ON tenants TO {ROLE}")
 
     with pytest.raises(psycopg.Error) as refused:
         _run_grant_script(db)
 
     assert "tenants" in str(refused.value)
+    assert refused.value.diag.message_hint == (
+        "The role may hold SELECT on the seven public views only. "
+        "Revoke the others, then run this again."
+    )
     assert _held_by_the_role(db, schema) == [("tenants", "SELECT")]
     row = db.conn.execute(
         "SELECT has_schema_privilege(%s::name, %s::text, 'USAGE')", (ROLE, schema)
     ).fetchone()
     assert row == (False,)
+
+
+def test_the_grant_script_refuses_at_version_seven_and_names_the_new_views(
+    db: Db,
+) -> None:
+    schema = _migrated(db)
+
+    with pytest.raises(psycopg.Error) as refused:
+        _run_grant_script(db)
+
+    assert (
+        "missing view(s) public_lease_reclaims, public_lease_refusals"
+        in str(refused.value)
+    )
+    assert refused.value.diag.message_hint == (
+        "Run the migrations up to 0010 first."
+    )
+    assert _held_by_the_role(db, schema) == []
 
 
 SCOPE_SCRIPT = (

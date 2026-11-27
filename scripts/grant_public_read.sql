@@ -7,7 +7,7 @@
 -- next schema of every database that migrates.
 --
 -- It gives aethergrid_public_read USAGE on the current schema and SELECT on
--- the five public views, and nothing else. It stops without granting
+-- the seven public views, and nothing else. It stops without granting
 -- anything if a view is missing, or if the role already holds a privilege
 -- on any other relation of the schema. Running it again changes nothing.
 --
@@ -18,6 +18,8 @@ DECLARE
     views constant text[] := ARRAY[
         'public_events',
         'public_jobs',
+        'public_lease_reclaims',
+        'public_lease_refusals',
         'public_leases',
         'public_nodes',
         'public_workers'
@@ -32,7 +34,7 @@ BEGIN
 
     IF missing IS NOT NULL THEN
         RAISE EXCEPTION 'cannot grant: missing view(s) %', missing
-            USING HINT = 'Run the migrations up to 0007 first.';
+            USING HINT = 'Run the migrations up to 0010 first.';
     END IF;
 
     SELECT string_agg(DISTINCT c.relname, ', ' ORDER BY c.relname) INTO other
@@ -46,7 +48,7 @@ BEGIN
 
     IF other IS NOT NULL THEN
         RAISE EXCEPTION 'cannot grant: aethergrid_public_read already holds a privilege on %', other
-            USING HINT = 'The role may hold SELECT on the five public views only. Revoke the others, then run this again.';
+            USING HINT = 'The role may hold SELECT on the seven public views only. Revoke the others, then run this again.';
     END IF;
 
     EXECUTE format(

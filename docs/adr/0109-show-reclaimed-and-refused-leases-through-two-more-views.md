@@ -94,3 +94,59 @@ ADR 0098 gives for views.
 Not claimed: safe to expose.
 
 ## Progress
+
+2026-11-27. The two views and the changes to the scripts are built. The
+port, the reader, the routes and the response models are not part of this
+slice.
+
+What is built. Migration 0010 creates public_lease_reclaims (id, lease_id,
+worker_id, job_id, lease_acquired_at, lease_expires_at, reclaimed_at,
+recovered_by) and public_lease_refusals (id, lease_id, worker_id, job_id,
+operation, reason, refused_at). Each view names its columns, is created with
+security_barrier on, runs with the rights of its owner, joins
+public_demo_scope on tenant_id and has no tenant column. The migration
+grants nothing, and migration 0007 is unchanged.
+scripts/grant_public_read.sql and scripts/create_public_app_role.sql name
+seven views and ask for migrations up to 0010. The checksum of 0010 is in
+the frozen list.
+
+How it is tested. 25 new tests in
+test_public_lease_record_views_migration.py check the seven views that
+exist, the columns of each new view, that no private column is shown,
+security_barrier and no security_invoker, that the migration grants nothing
+on a view or a table, that an empty scope shows nothing, that only the
+scoped tenant shows, that each view row equals the row of its base table,
+that the role cannot read lease_reclaims or lease_refusals even with the
+views granted (each denial is paired with a grant that makes the same read
+succeed), and that the role cannot write through either view. The grant
+script tests of the views migration test now run on a schema migrated to
+0010 and compare with seven views, and one new test shows that at version 7
+the script refuses and names the two missing views. The tests of the role
+script run at 0010 and compare with seven views, and one new test shows the
+same refusal for that script.
+
+What each deliberate break turned red, in the real tests. Each number is the
+count of tests that failed.
+
+Migration 0010, 12 breaks. The scope join removed from the reclaims view (2
+tests) and from the refusals view (2). security_barrier dropped from the
+reclaims view (1) and from the refusals view (1). tenant_id shown by the
+reclaims view (2) and by the refusals view (2). The two times swapped in the
+reclaims view (1). Operation and reason swapped in the refusals view (1).
+lease_id read from the id column in the reclaims view (1). job_id read from
+the id column in the refusals view (1). A grant to the role inside the
+migration (1). security_invoker set on the reclaims view (4).
+
+Scripts, 6 breaks. The refusals view left out of the grant script (2 tests)
+and out of the role script (2). The hint that says 0010 changed to 0007 in
+the grant script (1) and in the role script (1). The hint that says seven
+views changed to five in the grant script (1) and in the role script (1).
+
+No break survived.
+
+Two flaws in the tests were found and fixed. The hints of the two scripts
+were not compared with any text, so reverting them would have passed. Each
+is now compared with its exact text. One test still said five views in its
+name while it checked seven, and it was renamed.
+
+Not claimed: safe to expose.

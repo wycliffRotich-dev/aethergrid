@@ -26,7 +26,9 @@ import pytest
 
 from app.infrastructure.migrations.runner import MIGRATIONS_DIR, load_migrations
 from tests.infrastructure.test_baseline_migration import Db
-from tests.infrastructure.test_public_read_views_migration import VIEWS
+from tests.infrastructure.test_public_read_views_migration import (
+    GRANTED_VIEWS as VIEWS,
+)
 
 APP_ROLE = "aethergrid_public_app"
 GROUP_ROLE = "aethergrid_public_read"
@@ -74,7 +76,7 @@ def db(test_database_url: str) -> Iterator[Db]:
 
 
 def _migrated(db: Db) -> str:
-    versions = [m for m in load_migrations(MIGRATIONS_DIR) if m.version <= 7]
+    versions = [m for m in load_migrations(MIGRATIONS_DIR) if m.version <= 10]
     from app.infrastructure.migrations.runner import apply_migrations
 
     apply_migrations(
@@ -186,7 +188,7 @@ def test_the_script_sets_the_connection_limit_and_the_statement_timeout(
     assert f"statement_timeout={STATEMENT_TIMEOUT}" in settings[0]
 
 
-def test_the_script_gives_the_role_the_five_views_and_schema_usage_only(
+def test_the_script_gives_the_role_the_seven_views_and_schema_usage_only(
     db: Db, tmp_path: Path
 ) -> None:
     schema = _migrated(db)
@@ -285,6 +287,24 @@ def test_running_the_script_twice_leaves_the_same_privileges(
     assert _held(db, schema, APP_ROLE) == first
 
 
+def test_the_script_refuses_at_version_seven_and_names_the_new_views(
+    db: Db, tmp_path: Path
+) -> None:
+    db.run_up_to(7)
+    row = db.conn.execute("SELECT current_schema()").fetchone()
+    assert row is not None
+    schema = str(row[0])
+
+    done = _run_script(db, schema, tmp_path)
+
+    assert done.returncode != 0
+    assert (
+        "missing view(s) public_lease_reclaims, public_lease_refusals"
+        in done.stderr
+    )
+    assert "Run the migrations up to 0010 first." in done.stderr
+
+
 @pytest.mark.parametrize(("power", "column"), POWERS)
 def test_the_script_refuses_an_existing_role_with_a_power(
     db: Db, tmp_path: Path, power: str, column: str
@@ -318,6 +338,11 @@ def test_the_script_refuses_an_existing_role_with_a_privilege_on_another_table(
 
     assert done.returncode != 0
     assert "tenants" in done.stderr
+    assert (
+        "The role may hold SELECT on the seven public views only. "
+        "Revoke the others, then run this again."
+        in done.stderr
+    )
     assert ("tenants", "SELECT") in _held(db, schema, APP_ROLE)
 
 

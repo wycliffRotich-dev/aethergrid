@@ -19,8 +19,8 @@
 -- It creates aethergrid_public_app, or updates its password and limits if
 -- the role exists. It stops without changing anything if the role has a
 -- power attribute, a member, a membership, or a privilege on any relation of
--- the schema other than the five public views. It gives the role USAGE on
--- the schema and SELECT on the five views, and nothing else.
+-- the schema other than the seven public views. It gives the role USAGE on
+-- the schema and SELECT on the seven views, and nothing else.
 
 \set QUIET on
 \set password `cat "$AETHERGRID_PUBLIC_APP_PASSWORD_FILE"`
@@ -46,6 +46,8 @@ DECLARE
     views constant text[] := ARRAY[
         'public_events',
         'public_jobs',
+        'public_lease_reclaims',
+        'public_lease_refusals',
         'public_leases',
         'public_nodes',
         'public_workers'
@@ -64,7 +66,7 @@ BEGIN
 
     IF missing IS NOT NULL THEN
         RAISE EXCEPTION 'cannot create the public app role: missing view(s) %', missing
-            USING HINT = 'Run the migrations up to 0007 first.';
+            USING HINT = 'Run the migrations up to 0010 first.';
     END IF;
 
     SELECT * INTO existing FROM pg_roles WHERE rolname = 'aethergrid_public_app';
@@ -102,7 +104,7 @@ BEGIN
 
         IF other IS NOT NULL THEN
             RAISE EXCEPTION 'aethergrid_public_app already holds a privilege on %', other
-                USING HINT = 'The role may hold SELECT on the five public views only. Revoke the others, then run this again.';
+                USING HINT = 'The role may hold SELECT on the seven public views only. Revoke the others, then run this again.';
         END IF;
     ELSE
         CREATE ROLE aethergrid_public_app

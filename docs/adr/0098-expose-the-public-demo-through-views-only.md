@@ -99,6 +99,11 @@ of migration 0007 failed the exact columns test for that view and the
 private column test. The migration was restored and its hash compared.
 Decisions 4 and 5 were not broken the same way.
 
+2026-11-27. Decision 1 now allows seven views. ADR 0109 adds
+public_lease_reclaims and public_lease_refusals in migration 0010, and
+scripts/grant_public_read.sql grants SELECT on all seven. Decisions 2 to 7
+apply to the two new views. The lines above are left as written.
+
 ## How to Verify
 
     NEUROMESH_TEST_DATABASE_URL=postgresql://neuromesh@127.0.0.1:5433/neuromesh_test \
