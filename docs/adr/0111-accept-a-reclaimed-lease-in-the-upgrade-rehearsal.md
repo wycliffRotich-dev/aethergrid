@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed. The upgrade rehearsal accepts a worker that holds nothing after
+Accepted. The upgrade rehearsal accepts a worker that holds nothing after
 the new API starts when the database holds a reclaim record for the seeded
 job and the seeded worker. It still fails on every other worker body.
 
@@ -211,5 +211,19 @@ cases were:
 
 That is 33 failing cases in all. No break survived. The script was
 restored byte for byte after the run.
+
+Not claimed: safe to expose.
+
+2026-11-28. Status changed to Accepted. The real upgrade rehearsal ran
+from v0.7.0 to efaf3d6 with the script from 8894fb4 and passed in 95
+seconds. It read the seeded worker 35 seconds after the seed, against a
+lease of 30 seconds, and printed "the seeded worker held nothing and its
+reclaim record was found".
+
+So the pass came by the reclaim path: the worker held nothing and the
+database held a reclaim record for the seeded job and the seeded worker.
+The new API then served the seeded node, worker and job, and no container,
+volume or network was left behind. The first rerun on efaf3d6, before the
+outcome line existed, also passed, and its output did not say which way.
 
 Not claimed: safe to expose.

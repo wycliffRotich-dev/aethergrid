@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed. The upgrade rehearsal accepts a table that the upgrade creates
+Accepted. The upgrade rehearsal accepts a table that the upgrade creates
 when the table is empty, prints its name, and still fails on a table that
 arrives with rows, on a dropped table and on every change it named before.
 
@@ -124,5 +124,19 @@ failing cases were:
 
 That is 35 failing cases in all. No break survived. The script was restored
 byte for byte after the run.
+
+Not claimed: safe to expose.
+
+2026-11-28. Status changed to Accepted. The real upgrade rehearsal ran
+from v0.7.0 to efaf3d6 with the script from 8894fb4 and passed in 95
+seconds. It seeded a node, a worker and a job through the v0.7.0 API and
+applied migrations 6 to 10.
+
+The upgrade changed nothing in the 7 exported tables. It created the
+tables public.lease_reclaims, public.lease_refusals and
+public.public_demo_scope. Each was accepted because it held no rows, and
+the rehearsal printed one line for each, in that order. The upgraded
+schema matched a fresh one (695 lines), and the new API served the seeded
+node, worker and job. No container, volume or network was left behind.
 
 Not claimed: safe to expose.
