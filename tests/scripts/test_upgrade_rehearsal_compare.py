@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from scripts import upgrade_rehearsal
 from scripts.upgrade_rehearsal import Snapshot, compare_snapshots
 
 WORKERS = "id,node_id,tenant_id\nw1,n1,t1\nw2,n1,t1\n"
@@ -44,13 +45,76 @@ def test_a_changed_column_list_is_named() -> None:
     ]
 
 
-def test_a_table_missing_from_either_side_is_named() -> None:
+def test_a_table_missing_from_the_after_snapshot_is_named() -> None:
     assert compare_snapshots(snapshot(), {"nodes": NODES}) == [
         "workers: missing from the after snapshot"
     ]
-    assert compare_snapshots({"nodes": NODES}, snapshot()) == [
-        "workers: missing from the before snapshot"
+
+
+def test_an_empty_table_created_by_the_upgrade_is_not_a_difference() -> None:
+    after = {**snapshot(), "public.lease_reclaims": "id,tenant_id\n"}
+
+    assert compare_snapshots(snapshot(), after) == []
+
+
+def test_a_created_table_with_rows_is_named_with_its_row_count() -> None:
+    after = {
+        **snapshot(),
+        "public.lease_refusals": "id,tenant_id\nr1,t1\n",
+        "public.lease_reclaims": "id,tenant_id\nc1,t1\nc2,t1\n",
+        "public.public_demo_scope": "tenant_id\n",
+    }
+
+    assert compare_snapshots(snapshot(), after) == [
+        "public.lease_reclaims: created by the upgrade, rows: 2",
+        "public.lease_refusals: created by the upgrade, rows: 1",
     ]
+
+
+def test_a_created_table_with_no_header_is_an_error() -> None:
+    after = {**snapshot(), "public.lease_reclaims": ""}
+
+    with pytest.raises(ValueError, match="lease_reclaims: the export has no"):
+        compare_snapshots(snapshot(), after)
+
+
+def test_a_created_table_with_a_repeated_id_is_an_error() -> None:
+    reclaims = "id,tenant_id\nc1,t1\nc1,t2\n"
+    after = {**snapshot(), "public.lease_reclaims": reclaims}
+
+    with pytest.raises(ValueError, match="c1 appears twice"):
+        compare_snapshots(snapshot(), after)
+
+
+def test_a_dropped_table_is_still_named_when_another_is_created() -> None:
+    after = {"nodes": NODES, "public.lease_reclaims": "id,tenant_id\n"}
+
+    assert compare_snapshots(snapshot(), after) == [
+        "workers: missing from the after snapshot"
+    ]
+
+
+def test_the_tables_created_by_the_upgrade_are_listed_in_order() -> None:
+    after = {
+        **snapshot(),
+        "public.lease_refusals": "id,tenant_id\n",
+        "public.lease_reclaims": "id,tenant_id\nc1,t1\n",
+    }
+
+    assert upgrade_rehearsal.created_tables(snapshot(), after) == [
+        "public.lease_reclaims",
+        "public.lease_refusals",
+    ]
+
+
+def test_no_created_table_gives_an_empty_list() -> None:
+    assert upgrade_rehearsal.created_tables(snapshot(), snapshot()) == []
+
+
+def test_a_dropped_table_is_not_listed_as_created() -> None:
+    after = {"nodes": NODES}
+
+    assert upgrade_rehearsal.created_tables(snapshot(), after) == []
 
 
 def test_a_quoted_comma_is_one_value_not_two() -> None:

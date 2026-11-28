@@ -103,12 +103,20 @@ def compare_snapshots(before: Snapshot, after: Snapshot) -> list[str]:
     Compare two sets of table exports, each a table name mapped to CSV
     text with a header whose first column is the id. Return one line
     per difference, or an empty list when nothing changed.
+
+    A table that is only in the second export was created by the
+    upgrade. It is skipped when it holds no rows and named with its
+    row count when it holds some (ADR 0110).
     """
     differences: list[str] = []
 
     for table in sorted(set(before) | set(after)):
         if table not in before:
-            differences.append(f"{table}: missing from the before snapshot")
+            _, created = _read(table, after[table])
+            if created:
+                differences.append(
+                    f"{table}: created by the upgrade, rows: {len(created)}"
+                )
             continue
         if table not in after:
             differences.append(f"{table}: missing from the after snapshot")
@@ -139,6 +147,15 @@ def compare_snapshots(before: Snapshot, after: Snapshot) -> list[str]:
                     )
 
     return differences
+
+
+def created_tables(before: Snapshot, after: Snapshot) -> list[str]:
+    """
+    The names of the tables that are in the export after the upgrade
+    and not in the export before it, in order. These are the tables
+    the upgrade created (ADR 0110).
+    """
+    return sorted(set(after) - set(before))
 
 
 # The tables the seed creates rows in, which migration 0005 reads or
@@ -1252,7 +1269,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "the upgrade changed the database: "
                 + "; ".join(differences)
             )
-        print(f"the upgrade changed nothing in {len(after)} tables")
+        print(f"the upgrade changed nothing in {len(before)} tables")
+        for created in created_tables(before, after):
+            print(f"the upgrade created the table {created}")
 
         def new_compose(
             arguments: Sequence[str],
