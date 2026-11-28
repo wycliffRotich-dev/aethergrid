@@ -58,41 +58,45 @@ class SchedulerLoopService:
         )
 
         for job in queued_jobs:
-            node = self._scheduler.select_node(
-                job,
-                nodes,
-            )
-
-            if node is None:
-                continue
-
-            node.allocate(
-                job.resources,
-            )
-
-            job.assign_to(
-                node.id,
-            )
-
-            self._node_repository.save(
-                node,
-            )
-
-            self._job_repository.save(
-                job,
-            )
-
-            if self._record_job_events_service is not None:
-                self._record_job_events_service.record_for_job(
+            while True:
+                node = self._scheduler.select_node(
                     job,
-                    event_type="JobScheduled",
+                    nodes,
                 )
 
-            if self._assign_worker_service is not None:
+                if node is None:
+                    break
+
+                node.allocate(
+                    job.resources,
+                )
+
+                job.assign_to(
+                    node.id,
+                )
+
+                self._node_repository.save(
+                    node,
+                )
+
+                self._job_repository.save(
+                    job,
+                )
+
+                if self._record_job_events_service is not None:
+                    self._record_job_events_service.record_for_job(
+                        job,
+                        event_type="JobScheduled",
+                    )
+
+                if self._assign_worker_service is None:
+                    break
+
                 try:
                     self._assign_worker_service.execute(
                         job,
                     )
+                    break
                 except NoAvailableNodeError:
                     # The node had capacity, but no idle worker was
                     # registered on it yet (e.g. an agent hadn't
@@ -120,3 +124,19 @@ class SchedulerLoopService:
                             job,
                             event_type="JobUnscheduled",
                         )
+
+                    # A node has one worker (ADR 0030), and best fit
+                    # (ADR 0043) prefers the node with the least room
+                    # left, which is often the node whose worker is
+                    # busy. If the loop gave up here, the job would
+                    # go back to that same node on every tick while
+                    # another node sat idle. The node has no idle
+                    # worker for the rest of this tick, so remove it
+                    # and let the Scheduler choose again from the
+                    # nodes that are left (ADR 0018). Each pass
+                    # removes one node, so the loop ends.
+                    nodes = [
+                        candidate
+                        for candidate in nodes
+                        if candidate.id != node.id
+                    ]
