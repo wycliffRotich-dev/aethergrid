@@ -405,7 +405,7 @@ def wire(
     monkeypatch: pytest.MonkeyPatch,
     *,
     recorder: Recorder | None = None,
-    read: Callable[..., None] | None = None,
+    read: Callable[..., str] | None = None,
 ) -> Recorder:
     recorder = recorder or Recorder()
     events = recorder.events
@@ -422,9 +422,10 @@ def wire(
 
     def fake_read(
         get: object, ids: SimpleNamespace, **extra: object
-    ) -> None:
+    ) -> str:
         events.append("read_back")
         recorder.ids.append(ids)
+        return "held"
 
     def fake_get(base_url: str, key: str) -> str:
         recorder.gets.append((base_url, key))
@@ -534,7 +535,7 @@ def test_a_failed_read_ends_the_run_with_its_message(
 ) -> None:
     def failing_read(
         get: object, ids: SimpleNamespace, **extra: object
-    ) -> None:
+    ) -> str:
         raise RuntimeError(PREFIX + "GET /jobs/j returned 404, expected 200")
 
     wire(monkeypatch, read=failing_read)
@@ -595,9 +596,10 @@ def test_the_reclaim_record_is_read_through_the_old_side(
         ids: SimpleNamespace,
         *,
         reclaimed: Callable[[], bool] | None = None,
-    ) -> None:
+    ) -> str:
         captured.append(reclaimed)
         captured.append(ids)
+        return "held"
 
     def recorded(compose: Compose, ids: SimpleNamespace) -> bool:
         asked.append((compose, ids))
@@ -617,3 +619,72 @@ def test_the_reclaim_record_is_read_through_the_old_side(
     assert ids is captured[1]
     compose(["probe"])
     assert "compose old probe" in recorder.events
+
+
+OUTCOME_LINES = {
+    "held": "the seeded worker still held the job with the seeded command",
+    "reclaimed": (
+        "the seeded worker held nothing and its reclaim record was found"
+    ),
+}
+SUCCESS_LINE = "the new API served the seeded node, worker and job"
+
+
+def read_returning(
+    outcome: str,
+) -> Callable[..., str]:
+    def read(get: object, ids: SimpleNamespace, **extra: object) -> str:
+        return outcome
+
+    return read
+
+
+@pytest.mark.parametrize("outcome", ["held", "reclaimed"])
+def test_the_outcome_of_the_read_is_printed(
+    outcome: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    wire(monkeypatch, read=read_returning(outcome))
+
+    assert upgrade_rehearsal.main(["--old", "v0.6.0"]) == 0
+
+    printed = capsys.readouterr().out.splitlines()
+    other = "reclaimed" if outcome == "held" else "held"
+    assert OUTCOME_LINES[outcome] in printed
+    assert OUTCOME_LINES[other] not in printed
+
+
+@pytest.mark.parametrize("outcome", ["held", "reclaimed"])
+def test_the_outcome_line_comes_before_the_success_line(
+    outcome: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    wire(monkeypatch, read=read_returning(outcome))
+
+    assert upgrade_rehearsal.main(["--old", "v0.6.0"]) == 0
+
+    printed = capsys.readouterr().out.splitlines()
+    assert OUTCOME_LINES[outcome] in printed
+    assert SUCCESS_LINE in printed
+    assert printed.index(OUTCOME_LINES[outcome]) < printed.index(SUCCESS_LINE)
+
+
+def test_a_failed_read_prints_no_outcome_line(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def failing_read(
+        get: object, ids: SimpleNamespace, **extra: object
+    ) -> str:
+        raise RuntimeError(PREFIX + "GET /jobs/j returned 404, expected 200")
+
+    wire(monkeypatch, read=failing_read)
+
+    with pytest.raises(RuntimeError, match="returned 404, expected 200"):
+        upgrade_rehearsal.main(["--old", "v0.6.0"])
+
+    printed = capsys.readouterr().out
+    for line in OUTCOME_LINES.values():
+        assert line not in printed
