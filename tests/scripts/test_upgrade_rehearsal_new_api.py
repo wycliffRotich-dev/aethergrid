@@ -405,7 +405,7 @@ def wire(
     monkeypatch: pytest.MonkeyPatch,
     *,
     recorder: Recorder | None = None,
-    read: Callable[[object, SimpleNamespace], None] | None = None,
+    read: Callable[..., None] | None = None,
 ) -> Recorder:
     recorder = recorder or Recorder()
     events = recorder.events
@@ -420,7 +420,9 @@ def wire(
         events.append("snapshot")
         return next(snapshots)
 
-    def fake_read(get: object, ids: SimpleNamespace) -> None:
+    def fake_read(
+        get: object, ids: SimpleNamespace, **extra: object
+    ) -> None:
         events.append("read_back")
         recorder.ids.append(ids)
 
@@ -530,7 +532,9 @@ def test_a_success_prints_what_was_served(
 def test_a_failed_read_ends_the_run_with_its_message(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def failing_read(get: object, ids: SimpleNamespace) -> None:
+    def failing_read(
+        get: object, ids: SimpleNamespace, **extra: object
+    ) -> None:
         raise RuntimeError(PREFIX + "GET /jobs/j returned 404, expected 200")
 
     wire(monkeypatch, read=failing_read)
@@ -578,3 +582,38 @@ def test_a_malformed_port_is_refused_with_the_same_message(
         upgrade_rehearsal.http_post(url, "k")
     with pytest.raises(ValueError, match="only sent to the loopback address"):
         upgrade_rehearsal.http_get(url, "k")
+
+
+def test_the_reclaim_record_is_read_through_the_old_side(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[object] = []
+    asked: list[tuple[Compose, SimpleNamespace]] = []
+
+    def read(
+        get: object,
+        ids: SimpleNamespace,
+        *,
+        reclaimed: Callable[[], bool] | None = None,
+    ) -> None:
+        captured.append(reclaimed)
+        captured.append(ids)
+
+    def recorded(compose: Compose, ids: SimpleNamespace) -> bool:
+        asked.append((compose, ids))
+        return True
+
+    monkeypatch.setattr(upgrade_rehearsal, "reclaim_recorded", recorded)
+    recorder = wire(monkeypatch, read=read)
+
+    assert upgrade_rehearsal.main(["--old", "v0.6.0"]) == 0
+
+    reclaimed = captured[0]
+    assert callable(reclaimed)
+    assert asked == []
+    assert reclaimed() is True
+    assert len(asked) == 1
+    compose, ids = asked[0]
+    assert ids is captured[1]
+    compose(["probe"])
+    assert "compose old probe" in recorder.events

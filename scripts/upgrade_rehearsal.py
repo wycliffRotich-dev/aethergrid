@@ -794,30 +794,111 @@ def fresh_schema(old: Compose, new: Compose) -> str:
     return schema_dump(old, FRESH_DATABASE)
 
 
+# ADR 0111: the new API may reclaim the lease of the seeded job before
+# the read. The worker then holds nothing, and the reclaim record in the
+# database is the evidence. The new API recovers the worker before it
+# records the reclaim, so the record is waited for.
+RECLAIM_TIMEOUT = 10.0
+RECLAIM_INTERVAL = 0.5
+
+
+def _canonical_id(value: str, what: str) -> str:
+    try:
+        return str(uuid.UUID(value))
+    except ValueError:
+        raise ValueError(f"the seeded {what} id is not a UUID") from None
+
+
+def reclaim_sql(ids: SeedIds) -> str:
+    """
+    The statement that counts the reclaim records of the seeded job and
+    worker. Each id is parsed as a UUID and written in its canonical
+    form, so a value that is not a UUID never reaches the database.
+    """
+    job = _canonical_id(ids.job, "job")
+    worker = _canonical_id(ids.worker, "worker")
+    return (
+        "SELECT count(*) FROM lease_reclaims "
+        f"WHERE job_id = '{job}' AND worker_id = '{worker}'"
+    )
+
+
+def parse_reclaim_count(output: str) -> bool:
+    """
+    True when the count from psql is above zero. Anything that is not one
+    count is an error, not false, so a broken query ends the wait at once.
+    """
+    text = output.strip()
+    if not (text.isascii() and text.isdecimal()):
+        raise ValueError("unexpected reclaim count from the database")
+    return int(text) > 0
+
+
+def reclaim_recorded(compose: Compose, ids: SeedIds) -> bool:
+    """
+    True when the database holds a reclaim record for the seeded job and
+    worker (ADR 0111).
+    """
+    return parse_reclaim_count(
+        _psql(compose, reclaim_sql(ids), "the reclaim record query")
+    )
+
+
 def _worker_command_problem(
     path: str,
     found: Mapping[str, object],
+    *,
+    reclaimed: Callable[[], bool] | None = None,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> str | None:
     """
     What is wrong with the job a worker body says it holds, or None. The
     command is compared with the seeded one and never repeated, because
-    a command may hold data (ADR 0089).
+    a command may hold data (ADR 0089). A worker that holds nothing is
+    accepted only when reclaimed says the database holds a reclaim
+    record for the seeded job and worker (ADR 0111). Without reclaimed
+    it is reported, as before.
     """
     running = found.get("running_job")
     if not isinstance(running, dict):
-        return f"GET {path} returned no running job"
+        if reclaimed is None:
+            return f"GET {path} returned no running job"
+        try:
+            wait_until(
+                reclaimed,
+                timeout=RECLAIM_TIMEOUT,
+                interval=RECLAIM_INTERVAL,
+                describe="the reclaim record of the seeded job",
+                clock=clock,
+                sleep=sleep,
+            )
+        except TimeoutError:
+            return (
+                f"GET {path} returned no running job and no reclaim record"
+            )
+        return None
     if running.get("command") != list(JOB_COMMAND):
         return f"GET {path} returned a running job with a different command"
     return None
 
 
-def read_back(get: Get, ids: SeedIds) -> None:
+def read_back(
+    get: Get,
+    ids: SeedIds,
+    *,
+    reclaimed: Callable[[], bool] | None = None,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
     """
     Read the seeded node, worker and job through the new API. Each must
     answer 200 with its own id. The worker must still hold the job with
-    the seeded command (ADR 0089), and a worker that does not is
-    reported, not accepted. No other state is asserted, because the new
-    API may reclaim a lease on startup (ADR 0088). Every problem is
+    the seeded command (ADR 0089), or hold nothing while reclaimed says
+    the database holds a reclaim record for the seeded job and worker
+    (ADR 0111). Any other worker is reported, not accepted. No other
+    state is asserted, because the new API may reclaim a lease on
+    startup (ADR 0088). Every problem is
     reported, and a body or a command is never repeated, because either
     may hold data.
     """
@@ -829,7 +910,17 @@ def read_back(get: Get, ids: SeedIds) -> None:
         ]
     ] = [
         (f"/nodes/{ids.node}", ids.node, None),
-        (f"/workers/{ids.worker}", ids.worker, _worker_command_problem),
+        (
+            f"/workers/{ids.worker}",
+            ids.worker,
+            lambda path, found: _worker_command_problem(
+                path,
+                found,
+                reclaimed=reclaimed,
+                clock=clock,
+                sleep=sleep,
+            ),
+        ),
         (f"/jobs/{ids.job}", ids.job, None),
     ]
     problems: list[str] = []
@@ -1300,7 +1391,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         stage("starting the new API on the upgraded database")
         new_api_port = start_new_api(new_api_compose)
         stage("reading back the seeded rows through the new API")
-        read_back(http_get(f"http://127.0.0.1:{new_api_port}", key), ids)
+        read_back(
+            http_get(f"http://127.0.0.1:{new_api_port}", key),
+            ids,
+            reclaimed=lambda: reclaim_recorded(old_compose, ids),
+        )
         print("the new API served the seeded node, worker and job")
         stage("stopping the new API")
         stop_new_api(new_api_compose, docker_inspect)
