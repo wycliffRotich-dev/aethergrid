@@ -171,3 +171,45 @@ That is 85 failing cases in all. No break survived. The script was
 restored byte for byte after the run.
 
 Not claimed: safe to expose.
+
+2026-11-28. The rehearsal now says which way the worker check passed. The
+first real rerun on efaf3d6 passed. It read the worker about 35 seconds
+after the seed, against a lease of 30 seconds, and its output did not say
+whether the worker still held the job or held nothing and the reclaim
+record was found.
+
+read_back returns held when the worker still holds the job with the seeded
+command, and reclaimed when it held nothing and the record was found. main
+prints one line before the success line: "the seeded worker still held the
+job with the seeded command" or "the seeded worker held nothing and its
+reclaim record was found". A run that fails prints neither.
+
+Tests. 9 tests were added: 4 in the reclaim file, for the value read_back
+returns, and 5 in the new_api file, for the lines main prints, their order
+against the success line, and a failed read that prints no outcome line. 8
+of them failed before the code. The ninth passed on the old code and is
+covered by a break below. The fakes of read_back in tests/scripts return
+an outcome and changed in the same commit as the code. tests/scripts
+passed with 350 tests.
+
+Mutation check. 12 breaks of scripts/upgrade_rehearsal.py were run against
+all of tests/scripts, and each turned tests red as predicted. The failing
+cases were:
+
+- held line reworded: 2
+- reclaimed line reworded: 2
+- main always prints the held line: 2
+- outcome line not printed: 4
+- outcome line printed after the success line: 2
+- held line printed before the read: 2
+- read_back always returns held: 2
+- read_back always returns reclaimed: 2
+- held test inverted: 4
+- held always true: 2
+- held always false: 2
+- worker_check drops reclaimed: 7
+
+That is 33 failing cases in all. No break survived. The script was
+restored byte for byte after the run.
+
+Not claimed: safe to expose.

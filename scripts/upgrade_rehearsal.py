@@ -801,6 +801,15 @@ def fresh_schema(old: Compose, new: Compose) -> str:
 RECLAIM_TIMEOUT = 10.0
 RECLAIM_INTERVAL = 0.5
 
+# What the rehearsal prints about the seeded worker once read_back
+# has accepted it (ADR 0111), so a run shows which way it passed.
+OUTCOME_LINES: Mapping[str, str] = {
+    "held": "the seeded worker still held the job with the seeded "
+    "command",
+    "reclaimed": "the seeded worker held nothing and its reclaim "
+    "record was found",
+}
+
 
 def _canonical_id(value: str, what: str) -> str:
     try:
@@ -890,7 +899,7 @@ def read_back(
     reclaimed: Callable[[], bool] | None = None,
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
-) -> None:
+) -> str:
     """
     Read the seeded node, worker and job through the new API. Each must
     answer 200 with its own id. The worker must still hold the job with
@@ -898,10 +907,28 @@ def read_back(
     the database holds a reclaim record for the seeded job and worker
     (ADR 0111). Any other worker is reported, not accepted. No other
     state is asserted, because the new API may reclaim a lease on
-    startup (ADR 0088). Every problem is
-    reported, and a body or a command is never repeated, because either
-    may hold data.
+    startup (ADR 0088). Every problem is reported, and a body or a
+    command is never repeated, because either may hold data. It
+    returns held when the worker still holds the job, and reclaimed
+    when it held nothing and the record was found.
     """
+    outcomes: list[str] = []
+
+    def worker_check(
+        path: str, found: Mapping[str, object]
+    ) -> str | None:
+        problem = _worker_command_problem(
+            path,
+            found,
+            reclaimed=reclaimed,
+            clock=clock,
+            sleep=sleep,
+        )
+        if problem is None:
+            held = isinstance(found.get("running_job"), dict)
+            outcomes.append("held" if held else "reclaimed")
+        return problem
+
     routes: list[
         tuple[
             str,
@@ -913,13 +940,7 @@ def read_back(
         (
             f"/workers/{ids.worker}",
             ids.worker,
-            lambda path, found: _worker_command_problem(
-                path,
-                found,
-                reclaimed=reclaimed,
-                clock=clock,
-                sleep=sleep,
-            ),
+            worker_check,
         ),
         (f"/jobs/{ids.job}", ids.job, None),
     ]
@@ -945,6 +966,7 @@ def read_back(
             "the new API did not serve the seeded rows: "
             + "; ".join(problems)
         )
+    return outcomes[0]
 
 
 NEW_API_WAIT = 90
@@ -1391,11 +1413,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         stage("starting the new API on the upgraded database")
         new_api_port = start_new_api(new_api_compose)
         stage("reading back the seeded rows through the new API")
-        read_back(
+        outcome = read_back(
             http_get(f"http://127.0.0.1:{new_api_port}", key),
             ids,
             reclaimed=lambda: reclaim_recorded(old_compose, ids),
         )
+        print(OUTCOME_LINES[outcome])
         print("the new API served the seeded node, worker and job")
         stage("stopping the new API")
         stop_new_api(new_api_compose, docker_inspect)

@@ -265,3 +265,53 @@ def test_the_missing_record_is_reported_with_the_other_problems() -> None:
         + f"GET {NODE} returned 404, expected 200; "
         + NO_RECORD
     )
+
+
+def outcome_of(
+    responses: Mapping[str, tuple[int, str]],
+    reclaimed: Callable[[], bool],
+    fake: FakeTime,
+) -> str:
+    return upgrade_rehearsal.read_back(
+        getter(responses),
+        SEED,
+        reclaimed=reclaimed,
+        clock=fake.clock,
+        sleep=fake.sleep,
+    )
+
+
+def test_a_worker_holding_the_job_is_reported_as_held() -> None:
+    command = list(upgrade_rehearsal.JOB_COMMAND)
+
+    outcome = outcome_of(served(worker_holding(command)), never, FakeTime())
+
+    assert outcome == "held"
+
+
+def test_a_worker_with_no_job_and_a_record_is_reported_as_reclaimed() -> None:
+    outcome = outcome_of(served(idle_worker()), lambda: True, FakeTime())
+
+    assert outcome == "reclaimed"
+
+
+def test_a_record_found_after_a_wait_is_reported_as_reclaimed() -> None:
+    answers = iter([False, False, True])
+
+    outcome = outcome_of(
+        served(idle_worker()), lambda: next(answers), FakeTime()
+    )
+
+    assert outcome == "reclaimed"
+
+
+def test_a_held_job_is_reported_as_held_without_the_reclaimed_argument() -> (
+    None
+):
+    command = list(upgrade_rehearsal.JOB_COMMAND)
+
+    result = upgrade_rehearsal.read_back(
+        getter(served(worker_holding(command))), SEED
+    )
+
+    assert result == "held"
