@@ -32,6 +32,9 @@ from app.domain.exceptions.invalid_job_transition import (
 from app.domain.exceptions.job_not_found_error import (
     JobNotFoundError,
 )
+from app.domain.exceptions.job_status_conflict_error import (
+    JobStatusConflictError,
+)
 from app.domain.exceptions.scope_denied_error import ScopeDeniedError
 from app.domain.services.job_authorization import (
     authorize_job_creation,
@@ -360,7 +363,7 @@ def cancel_job(
 
     try:
         job = service.execute(job_uuid, caller.tenant_id)
-    except InvalidJobTransition as exc:
+    except (InvalidJobTransition, JobStatusConflictError) as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
