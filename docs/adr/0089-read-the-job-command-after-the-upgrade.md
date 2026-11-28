@@ -121,3 +121,19 @@ nothing in 7 tables, matched the fresh schema (452 lines) and read
 all three rows back with the worker still holding the job. The
 success line of the run does not mention the command, and it is
 unchanged.
+
+2026-11-28. Decision 4 revisited, as it says. A real run from v0.7.0 to
+efaf3d6, the commit that carries migrations 0006 to 0010, passed the
+migrations, the table comparison and the schema comparison, and ended at
+the read back: GET /workers/{id} returned no running job. The seed was
+written at 10:38:39 and the new API was started at 10:40:10, a gap of 91
+seconds against a lease of 30 seconds, because the new release is built
+between the two. The worker no longer held the job, which is the state a
+reclaim leaves. The check is not dropped. A worker body with a running_job
+is still checked for the seeded command. A worker body with none is now
+accepted only when lease_reclaims holds a record for the seeded job and
+worker, and every other worker body still ends the run. The rehearsal no
+longer depends on the lease surviving startup. The new decision and its
+tests are in ADR 0111.
+
+Not claimed: safe to expose.
