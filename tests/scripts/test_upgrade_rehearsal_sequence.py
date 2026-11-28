@@ -46,11 +46,13 @@ def wire(
     monkeypatch: pytest.MonkeyPatch,
     *,
     snapshot: dict[str, str],
+    after: dict[str, str] | None = None,
     stop: Callable[[object, object], None] | None = None,
 ) -> Recorder:
     recorder = Recorder()
     events = recorder.events
     reads = iter([VERSIONS, UPGRADED])
+    exports = iter([snapshot, snapshot if after is None else after])
 
     @contextlib.contextmanager
     def fake_environment(old_ref: str, new_ref: str) -> Iterator[Recorder]:
@@ -61,7 +63,7 @@ def wire(
 
     def fake_snapshot(compose: object) -> dict[str, str]:
         events.append("snapshot")
-        return snapshot
+        return next(exports)
 
     patches: dict[str, object] = {
         "rehearsal_environment": fake_environment,
@@ -174,3 +176,68 @@ def test_docker_inspect_asks_for_the_status_and_the_exit_code(
             "abc123",
         ]
     ]
+
+
+CREATED = {
+    "public.public_demo_scope": "tenant_id\n",
+    "public.lease_reclaims": "id,tenant_id\n",
+    "public.lease_refusals": "id,tenant_id\n",
+}
+SUCCESS = "the upgrade changed nothing in 4 tables"
+
+
+def test_the_success_line_counts_the_tables_of_the_export_before(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    wire(monkeypatch, snapshot=SEEDED, after={**SEEDED, **CREATED})
+
+    assert upgrade_rehearsal.main(["--old", "v0.7.0"]) == 0
+
+    lines = capsys.readouterr().out.splitlines()
+    assert SUCCESS in lines
+    assert "the upgrade changed nothing in 7 tables" not in lines
+
+
+def test_each_created_table_is_printed_after_the_success_line(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    wire(monkeypatch, snapshot=SEEDED, after={**SEEDED, **CREATED})
+
+    assert upgrade_rehearsal.main(["--old", "v0.7.0"]) == 0
+
+    lines = capsys.readouterr().out.splitlines()
+    start = lines.index(SUCCESS)
+    assert lines[start + 1 : start + 4] == [
+        "the upgrade created the table public.lease_reclaims",
+        "the upgrade created the table public.lease_refusals",
+        "the upgrade created the table public.public_demo_scope",
+    ]
+
+
+def test_a_created_table_with_rows_ends_the_run_at_the_comparison(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    filled = {**SEEDED, "public.lease_reclaims": "id,tenant_id\nc1,t1\n"}
+    recorder = wire(monkeypatch, snapshot=SEEDED, after=filled)
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"public\.lease_reclaims: created by the upgrade, rows: 1",
+    ):
+        upgrade_rehearsal.main(["--old", "v0.7.0"])
+
+    assert recorder.events[-1] == (
+        "stage: comparing the tables before and after the upgrade"
+    )
+
+
+def test_a_run_with_no_created_table_prints_no_created_line(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    wire(monkeypatch, snapshot=SEEDED)
+
+    assert upgrade_rehearsal.main(["--old", "v0.7.0"]) == 0
+
+    out = capsys.readouterr().out
+    assert "the upgrade created the table" not in out
+    assert SUCCESS in out.splitlines()
